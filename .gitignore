@@ -1,0 +1,6 @@
+.env
+fantasy_khl.db
+__pycache__/
+TELEGRAM_TOKEN=8423882353:AAFNWeG86cV8dZFOLiUSmG_docp5iyZuOfs
+   ADMIN_ID=265485424
+images/ 
