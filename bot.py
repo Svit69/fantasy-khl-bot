@@ -138,10 +138,7 @@ async def set_commands(app: Application):
 async def main():
     db.init_db()
 
-    # Создание кастомного httpx клиента (по желанию)
-    client = httpx.AsyncClient(timeout=httpx.Timeout(20.0, connect=20.0))
-
-    app = Application.builder().token(TELEGRAM_TOKEN).client(client).build()
+    app = Application.builder().token(TELEGRAM_TOKEN).build()
 
     app.add_handler(CommandHandler('start', start))
     app.add_handler(CommandHandler('tour', tour))
