@@ -135,7 +135,7 @@ async def set_commands(app: Application):
 
 
 # Основной запуск
-async def main():
+def main():
     db.init_db()
 
     app = Application.builder().token(TELEGRAM_TOKEN).build()
@@ -147,14 +147,13 @@ async def main():
     app.add_handler(CommandHandler('addhc', addhc))
     app.add_handler(CommandHandler('send_results', send_results))
 
-    await set_commands(app)
+    app.post_init(set_commands)  # команды после старта
 
-    await app.run_polling()
+    app.run_polling()
 
 
-# Точка входа
 if __name__ == '__main__':
     os.makedirs(IMAGES_DIR, exist_ok=True)
-    asyncio.run(main())
+    main()
 
 
