@@ -151,7 +151,8 @@ async def main():
     await app.run_polling()
 
 if __name__ == '__main__':
-    os.makedirs(IMAGES_DIR, exist_ok=True)
+    import nest_asyncio
+    nest_asyncio.apply()
     asyncio.run(main())
 
 
