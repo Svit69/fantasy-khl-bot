@@ -1,4 +1,4 @@
-from telegram import Update, InputFile
+from telegram import Update, InputFile, ReplyKeyboardMarkup
 from telegram.ext import ContextTypes
 from config import ADMIN_ID
 import db
@@ -9,10 +9,18 @@ IMAGES_DIR = 'images'
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     registered = db.register_user(user.id, user.username, user.full_name)
-    if registered:
-        await update.message.reply_text(f'Привет, {user.full_name}! Ты зарегистрирован в Fantasy KHL.')
+    is_admin = user.id == ADMIN_ID
+    if is_admin:
+        keyboard = [["/tour", "/hc"], ["/send_tour_image", "/addhc", "/send_results"]]
+        msg = f'Привет, {user.full_name}! Ты зарегистрирован как администратор Fantasy KHL.\n\nДоступные команды:\n/tour — показать состав на тур\n/hc — баланс HC\n/send_tour_image — загрузить и разослать изображение тура\n/addhc — начислить HC пользователю\n/send_results — разослать результаты тура'
     else:
-        await update.message.reply_text('Ты уже зарегистрирован!')
+        keyboard = [["/tour", "/hc"]]
+        msg = f'Привет, {user.full_name}! Ты зарегистрирован в Fantasy KHL.\n\nДоступные команды:\n/tour — показать состав на тур\n/hc — баланс HC'
+    markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    if registered:
+        await update.message.reply_text(msg, reply_markup=markup)
+    else:
+        await update.message.reply_text('Ты уже зарегистрирован!', reply_markup=markup)
 
 async def tour(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
