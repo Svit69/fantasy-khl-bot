@@ -20,14 +20,12 @@ logging.basicConfig(level=logging.INFO)
 
 IMAGES_DIR = 'images'
 
-
 # Проверка прав администратора
 async def admin_only(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text('Нет доступа')
         return False
     return True
-
 
 # Отправка изображения тура
 async def send_tour_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -52,7 +50,6 @@ async def send_tour_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logging.warning(f"Ошибка при отправке фото пользователю {user[0]}: {e}")
 
     await update.message.reply_text('Изображение тура разослано всем пользователям.')
-
 
 # Начисление HC пользователю
 async def addhc(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -79,7 +76,6 @@ async def addhc(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text=f'🎉 Тебе начислено {amount} HC!\n💰 Новый баланс: {new_balance} HC'
     )
     await update.message.reply_text(f'Пользователю @{username} начислено {amount} HC.')
-
 
 # Отправка результатов тура (текст или изображение)
 async def send_results(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -116,7 +112,6 @@ async def send_results(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text('Пришлите изображение или текст после команды.')
 
-
 # Установка команд
 async def set_commands(app: Application):
     user_commands = [
@@ -133,10 +128,10 @@ async def set_commands(app: Application):
     ]
     await app.bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=ADMIN_ID))
 
-
 # Основной запуск
 async def main():
     db.init_db()
+    os.makedirs(IMAGES_DIR, exist_ok=True)
 
     app = Application.builder().token(TELEGRAM_TOKEN).build()
 
