@@ -138,12 +138,11 @@ async def set_commands(app: Application):
 async def main():
     db.init_db()
 
-    # Установка timeout (чтобы избежать ошибок подключения)
-    app = Application.builder().token(TELEGRAM_TOKEN).httpx_client_kwargs({
-        "timeout": httpx.Timeout(20.0, connect=20.0)
-    }).build()
+    # Создание кастомного httpx клиента (по желанию)
+    client = httpx.AsyncClient(timeout=httpx.Timeout(20.0, connect=20.0))
 
-    # Обработчики
+    app = Application.builder().token(TELEGRAM_TOKEN).client(client).build()
+
     app.add_handler(CommandHandler('start', start))
     app.add_handler(CommandHandler('tour', tour))
     app.add_handler(CommandHandler('hc', hc))
@@ -151,10 +150,8 @@ async def main():
     app.add_handler(CommandHandler('addhc', addhc))
     app.add_handler(CommandHandler('send_results', send_results))
 
-    # Команды
     await set_commands(app)
 
-    # Запуск бота
     await app.run_polling()
 
 
@@ -162,4 +159,5 @@ async def main():
 if __name__ == '__main__':
     os.makedirs(IMAGES_DIR, exist_ok=True)
     asyncio.run(main())
+
 
