@@ -108,10 +108,14 @@ def main():
     app.add_handler(CommandHandler('addhc', addhc))
     app.add_handler(CommandHandler('send_results', send_results))
 
-    # Установка команд — запускаем асинхронно
+    # Установка команд (создаём и запускаем event loop для async функции)
     asyncio.run(set_commands(app))
 
-    # Запуск бота (блокирующий вызов)
+    # Создаём и устанавливаем новый event loop для run_polling
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    # Запускаем бота (блокирующий вызов)
     app.run_polling()
 
 if __name__ == '__main__':
