@@ -4,8 +4,9 @@ from config import TELEGRAM_TOKEN, ADMIN_ID
 import db
 from handlers import start, tour, hc
 import os
-from telegram import Update, InputFile
+from telegram import Update, InputFile, BotCommand, BotCommandScopeDefault, BotCommandScopeChat
 from telegram.ext import ContextTypes
+import asyncio
 
 logging.basicConfig(level=logging.INFO)
 
@@ -82,6 +83,23 @@ async def send_results(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text('Пришлите изображение или текст после команды.')
 
+async def set_commands(app):
+    # Меню для всех пользователей
+    user_commands = [
+        BotCommand("start", "Регистрация и приветствие"),
+        BotCommand("tour", "Показать состав игроков на тур"),
+        BotCommand("hc", "Показать баланс Hockey Coin")
+    ]
+    await app.bot.set_my_commands(user_commands, scope=BotCommandScopeDefault())
+
+    # Меню для админа
+    admin_commands = user_commands + [
+        BotCommand("send_tour_image", "Загрузить и разослать изображение тура (админ)"),
+        BotCommand("addhc", "Начислить HC пользователю (админ)"),
+        BotCommand("send_results", "Разослать результаты тура (админ)")
+    ]
+    await app.bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=ADMIN_ID))
+
 def main():
     db.init_db()
     app = Application.builder().token(TELEGRAM_TOKEN).build()
@@ -93,7 +111,9 @@ def main():
     app.add_handler(CommandHandler('addhc', addhc))
     app.add_handler(CommandHandler('send_results', send_results))
 
-    # TODO: добавить админские команды
+    # Установить команды до запуска polling
+    import asyncio
+    asyncio.run(set_commands(app))
 
     app.run_polling()
 
