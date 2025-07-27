@@ -29,7 +29,6 @@ async def send_tour_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     filename = f"tour_{photo.file_unique_id}.jpg"
     path = os.path.join(IMAGES_DIR, filename)
     await file.download_to_drive(path)
-    # Рассылка всем пользователям
     users = db.get_all_users()
     for user in users:
         try:
@@ -84,7 +83,6 @@ async def send_results(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text('Пришлите изображение или текст после команды.')
 
 async def set_commands(app):
-    # Меню для всех пользователей
     user_commands = [
         BotCommand("start", "Регистрация и приветствие"),
         BotCommand("tour", "Показать состав игроков на тур"),
@@ -92,7 +90,6 @@ async def set_commands(app):
     ]
     await app.bot.set_my_commands(user_commands, scope=BotCommandScopeDefault())
 
-    # Меню для админа
     admin_commands = user_commands + [
         BotCommand("send_tour_image", "Загрузить и разослать изображение тура (админ)"),
         BotCommand("addhc", "Начислить HC пользователю (админ)"),
@@ -111,15 +108,11 @@ async def main():
     app.add_handler(CommandHandler('addhc', addhc))
     app.add_handler(CommandHandler('send_results', send_results))
 
-    await app.initialize()
     await set_commands(app)
-    await app.start()
-    await app.updater.start_polling()
-    await app.updater.idle()
-    await app.stop()
-    await app.shutdown()
+
+    await app.run_polling()
 
 if __name__ == '__main__':
-    if not os.path.exists('images'):
-        os.makedirs('images')
-    asyncio.run(main()) 
+    if not os.path.exists(IMAGES_DIR):
+        os.makedirs(IMAGES_DIR)
+    asyncio.run(main())
