@@ -111,8 +111,13 @@ async def main():
     app.add_handler(CommandHandler('addhc', addhc))
     app.add_handler(CommandHandler('send_results', send_results))
 
+    await app.initialize()
     await set_commands(app)
-    await app.run_polling()
+    await app.start()
+    await app.updater.start_polling()
+    await app.updater.idle()
+    await app.stop()
+    await app.shutdown()
 
 if __name__ == '__main__':
     if not os.path.exists('images'):
