@@ -100,7 +100,7 @@ async def set_commands(app):
     ]
     await app.bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=ADMIN_ID))
 
-def main():
+async def main():
     db.init_db()
     app = Application.builder().token(TELEGRAM_TOKEN).build()
 
@@ -111,13 +111,10 @@ def main():
     app.add_handler(CommandHandler('addhc', addhc))
     app.add_handler(CommandHandler('send_results', send_results))
 
-    # Установить команды до запуска polling
-    import asyncio
-    asyncio.run(set_commands(app))
-
-    app.run_polling()
+    await set_commands(app)
+    await app.run_polling()
 
 if __name__ == '__main__':
     if not os.path.exists('images'):
         os.makedirs('images')
-    main() 
+    asyncio.run(main()) 
