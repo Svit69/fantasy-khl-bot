@@ -35,12 +35,14 @@ async def main():
     WAIT_IMAGE = 1
 
     async def send_tour_image_start(update, context):
+        context.chat_data['awaiting_tour_image'] = True
         await update.message.reply_text('Пожалуйста, прикрепите картинку следующим сообщением.')
         return WAIT_IMAGE
 
     async def send_tour_image_photo(update, context):
         from handlers.admin_handlers import send_tour_image
         await send_tour_image(update, context)
+        context.chat_data['awaiting_tour_image'] = False
         return ConversationHandler.END
 
     async def send_tour_image_cancel(update, context):
@@ -66,12 +68,11 @@ async def main():
         user_id = update.effective_user.id if update.effective_user else None
         debug_info = f"[DEBUG] chat_id: {chat_id}, user_id: {user_id}, chat_data: {context.chat_data}, user_data: {context.user_data}"
         await update.message.reply_text(debug_info)
-        # Всегда проверяем флаг ожидания картинки
+        # Проверяем флаг ожидания картинки в chat_data
         if context.chat_data.get('awaiting_tour_image'):
             from handlers.admin_handlers import send_tour_image
             await send_tour_image(update, context)
-            # Отклик уже отправляется внутри send_tour_image
-            # Сброс флага происходит только после успешной обработки
+            context.chat_data['awaiting_tour_image'] = False
         else:
             await update.message.reply_text('Сначала отправьте команду /send_tour_image, затем фото.')
     # Регистрируем обработчик фото для всех
