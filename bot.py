@@ -13,7 +13,6 @@ import httpx
 
 from config import TELEGRAM_TOKEN, ADMIN_ID
 import db
-from handlers import start, tour, hc
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -27,6 +26,23 @@ async def admin_only(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text('Нет доступа')
         return False
     return True
+
+# Команда /tour — отправляет последнее загруженное изображение тура
+async def tour(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not os.path.exists(TOUR_IMAGE_PATH_FILE):
+        await update.message.reply_text("Изображение тура пока не загружено.")
+        return
+
+    with open(TOUR_IMAGE_PATH_FILE, 'r') as f:
+        filename = f.read().strip()
+
+    path = os.path.join(IMAGES_DIR, filename)
+
+    if not os.path.exists(path):
+        await update.message.reply_text("Изображение тура пока не загружено.")
+        return
+
+    await update.message.reply_photo(photo=InputFile(path), caption='🏒 Состав игроков на сегодня:')
 
 # Отправка изображения тура
 async def send_tour_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -42,6 +58,7 @@ async def send_tour_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     filename = f"tour_{photo.file_unique_id}.jpg"
     path = os.path.join(IMAGES_DIR, filename)
     await file.download_to_drive(path)
+    logging.info(f"Фото тура сохранено: {path}")
 
     # Сохраняем путь к изображению для команды /tour
     with open(TOUR_IMAGE_PATH_FILE, 'w') as f:
@@ -155,6 +172,7 @@ async def main():
 
     app = Application.builder().token(TELEGRAM_TOKEN).build()
 
+    # Хендлеры команд
     app.add_handler(CommandHandler('start', start))
     app.add_handler(CommandHandler('tour', tour))
     app.add_handler(CommandHandler('hc', hc))
@@ -169,7 +187,3 @@ if __name__ == '__main__':
     import nest_asyncio
     nest_asyncio.apply()
     asyncio.run(main())
-
-
-
-
