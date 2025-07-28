@@ -12,7 +12,7 @@ from telegram.ext import (
 import httpx
 
 from config import TELEGRAM_TOKEN, ADMIN_ID
-from db import db
+import db
 from handlers.handlers import start, tour, hc, send_tour_image, addhc, send_results, IMAGES_DIR
 
 # Настройка логирования
