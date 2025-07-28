@@ -13,21 +13,26 @@ import httpx
 
 from config import TELEGRAM_TOKEN, ADMIN_ID
 import db
+from handlers import start, tour, hc  # если есть
 
 # Настройка логирования
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
 IMAGES_DIR = 'images'
 TOUR_IMAGE_PATH_FILE = 'latest_tour.txt'
 
-# Проверка прав администратора
 async def admin_only(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
+    user_id = update.effective_user.id if update.effective_user else None
+    logger.info(f'Проверка прав пользователя {user_id}')
+    if user_id != ADMIN_ID:
         await update.message.reply_text('Нет доступа')
         return False
     return True
 
-# Команда /tour — отправляет последнее загруженное изображение тура
 async def tour(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not os.path.exists(TOUR_IMAGE_PATH_FILE):
         await update.message.reply_text("Изображение тура пока не загружено.")
@@ -44,51 +49,56 @@ async def tour(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_photo(photo=InputFile(path), caption='🏒 Состав игроков на сегодня:')
 
-# Отправка изображения тура
 async def send_tour_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info('Вызов команды /send_tour_image')
+
     if not await admin_only(update, context):
         return
 
     if not update.message.photo:
         await update.message.reply_text('Пожалуйста, прикрепите фото вместе с командой.')
+        logger.info('Фото не прикреплено к сообщению')
         return
 
-    photo = update.message.photo[-1]
-    file = await photo.get_file()
-    filename = f"tour_{photo.file_unique_id}.jpg"
-    path = os.path.join(IMAGES_DIR, filename)
-    await file.download_to_drive(path)
-    logging.info(f"Фото тура сохранено: {path}")
+    try:
+        photo = update.message.photo[-1]
+        file = await photo.get_file()
+        filename = f"tour_{photo.file_unique_id}.jpg"
+        path = os.path.join(IMAGES_DIR, filename)
+        await file.download_to_drive(path)
+        logger.info(f"Фото тура сохранено: {path}")
 
-    # Сохраняем путь к изображению для команды /tour
-    with open(TOUR_IMAGE_PATH_FILE, 'w') as f:
-        f.write(filename)
+        with open(TOUR_IMAGE_PATH_FILE, 'w') as f:
+            f.write(filename)
 
-    users = db.get_all_users()
-    success = 0
-    failed = 0
+        users = db.get_all_users()
+        success = 0
+        failed = 0
 
-    for user in users:
-        try:
-            await context.bot.send_photo(
-                chat_id=user[0],
-                photo=InputFile(path),
-                caption='🏒 Новый тур! Состав игроков на сегодня:'
-            )
-            success += 1
-        except Exception as e:
-            logging.warning(f"Ошибка при отправке фото пользователю {user[0]}: {e}")
-            failed += 1
+        for user in users:
+            try:
+                await context.bot.send_photo(
+                    chat_id=user[0],
+                    photo=InputFile(path),
+                    caption='🏒 Новый тур! Состав игроков на сегодня:'
+                )
+                success += 1
+            except Exception as e:
+                logger.warning(f"Ошибка при отправке фото пользователю {user[0]}: {e}")
+                failed += 1
 
-    msg = (
-        f'✅ Изображение успешно получено и сохранено как `{filename}`.\n'
-        f'📤 Успешно отправлено {success} пользователям.'
-    )
-    if failed:
-        msg += f'\n⚠️ Ошибки у {failed} пользователей.'
-    await update.message.reply_text(msg)
+        msg = (
+            f'✅ Изображение успешно получено и сохранено как `{filename}`.\n'
+            f'📤 Успешно отправлено {success} пользователям.'
+        )
+        if failed:
+            msg += f'\n⚠️ Ошибки у {failed} пользователей.'
+        await update.message.reply_text(msg)
 
-# Начисление HC пользователю
+    except Exception as e:
+        logger.error(f'Ошибка в send_tour_image: {e}', exc_info=True)
+        await update.message.reply_text(f'Произошла ошибка при обработке фото: {e}')
+
 async def addhc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await admin_only(update, context):
         return
@@ -114,7 +124,6 @@ async def addhc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(f'Пользователю @{username} начислено {amount} HC.')
 
-# Отправка результатов тура (текст или изображение)
 async def send_results(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await admin_only(update, context):
         return
@@ -132,7 +141,7 @@ async def send_results(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 await context.bot.send_photo(chat_id=user[0], photo=InputFile(path), caption='📊 Результаты тура:')
             except Exception as e:
-                logging.warning(f"Ошибка при отправке результата пользователю {user[0]}: {e}")
+                logger.warning(f"Ошибка при отправке результата пользователю {user[0]}: {e}")
 
         await update.message.reply_text('Результаты (фото) разосланы.')
 
@@ -143,13 +152,12 @@ async def send_results(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 await context.bot.send_message(chat_id=user[0], text=f'📊 Результаты тура:\n{text}')
             except Exception as e:
-                logging.warning(f"Ошибка при отправке текста результата {user[0]}: {e}")
+                logger.warning(f"Ошибка при отправке текста результата {user[0]}: {e}")
 
         await update.message.reply_text('Результаты (текст) разосланы.')
     else:
         await update.message.reply_text('Пришлите изображение или текст после команды.')
 
-# Установка команд
 async def set_commands(app: Application):
     user_commands = [
         BotCommand("start", "Регистрация и приветствие"),
@@ -165,14 +173,12 @@ async def set_commands(app: Application):
     ]
     await app.bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=ADMIN_ID))
 
-# Основной запуск
 async def main():
     db.init_db()
     os.makedirs(IMAGES_DIR, exist_ok=True)
 
     app = Application.builder().token(TELEGRAM_TOKEN).build()
 
-    # Хендлеры команд
     app.add_handler(CommandHandler('start', start))
     app.add_handler(CommandHandler('tour', tour))
     app.add_handler(CommandHandler('hc', hc))
@@ -187,3 +193,4 @@ if __name__ == '__main__':
     import nest_asyncio
     nest_asyncio.apply()
     asyncio.run(main())
+
