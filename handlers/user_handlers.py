@@ -3,7 +3,7 @@ from telegram.ext import ContextTypes
 from config import ADMIN_ID
 import db
 import os
-from utils.utils import is_admin, IMAGES_DIR, logger
+from utils import is_admin, IMAGES_DIR, logger
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
