@@ -24,16 +24,22 @@ async def send_tour_image(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     # Если команда вызвана без фото, запрашиваем фото
 
+
     if not update.message.photo:
         context.chat_data['awaiting_tour_image'] = True
+        context.user_data['awaiting_tour_image'] = True  # для гарантии
+        chat_id = update.effective_chat.id
+        debug_info = f"[DEBUG] /send_tour_image chat_id: {chat_id}, chat_data: {context.chat_data}, user_data: {context.user_data}"
         await update.message.reply_text('Пожалуйста, прикрепите картинку следующим сообщением.')
-        logger.info(f"[DEBUG] Ожидание картинки от админа {update.effective_user.id}, chat_data: {context.chat_data}")
+        await update.message.reply_text(debug_info)
+        logger.info(f"[DEBUG] Ожидание картинки от админа {update.effective_user.id}, chat_data: {context.chat_data}, user_data: {context.user_data}")
         return
 
     # Если фото пришло после запроса
 
-    if context.chat_data.get('awaiting_tour_image'):
-        logger.info(f"[DEBUG] Получено фото, chat_data: {context.chat_data}")
+
+    if context.chat_data.get('awaiting_tour_image') or context.user_data.get('awaiting_tour_image'):
+        logger.info(f"[DEBUG] Получено фото, chat_data: {context.chat_data}, user_data: {context.user_data}")
         try:
             photo = update.message.photo[-1]
             file = await photo.get_file()
@@ -43,6 +49,7 @@ async def send_tour_image(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             with open(TOUR_IMAGE_PATH_FILE, 'w') as f:
                 f.write(filename)
             context.chat_data['awaiting_tour_image'] = False
+            context.user_data['awaiting_tour_image'] = False
             await update.message.reply_text(f'✅ Картинка принята и сохранена как `{filename}`. Она будет разослана пользователям при команде /tour.')
             await context.bot.send_message(chat_id=update.effective_chat.id, text=f'[DEBUG] Фото обработано, сохранено как {filename}')
             logger.info(f"Картинка тура сохранена: {path} (от {update.effective_user.id})")
