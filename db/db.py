@@ -42,4 +42,4 @@ def update_hc_balance(telegram_id, amount):
 
 def get_all_users():
     with closing(sqlite3.connect(DB_NAME)) as conn:
-        return conn.execute('SELECT telegram_id FROM users').fetchall() 
+        return conn.execute('SELECT telegram_id FROM users').fetchall()
