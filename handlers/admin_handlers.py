@@ -41,6 +41,7 @@ async def send_tour_image(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 f.write(filename)
             context.user_data['awaiting_tour_image'] = False
             await update.message.reply_text(f'✅ Картинка принята и сохранена как `{filename}`. Она будет разослана пользователям при команде /tour.')
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=f'[DEBUG] Фото обработано, сохранено как {filename}')
             logger.info(f"Картинка тура сохранена: {path} (от {update.effective_user.id})")
         except Exception as e:
             logger.error(f'Ошибка при сохранении картинки тура: {e}')
