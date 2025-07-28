@@ -41,16 +41,20 @@ async def main():
     # Обработчик для фото-сообщений от админа (для сценария send_tour_image)
     from telegram.ext import MessageHandler, filters
     async def admin_photo_handler(update, context):
+        chat_id = update.effective_chat.id
+        user_id = update.effective_user.id if update.effective_user else None
+        debug_info = f"[DEBUG] chat_id: {chat_id}, user_id: {user_id}, chat_data: {context.chat_data}, user_data: {context.user_data}"
+        await update.message.reply_text(debug_info)
         # Всегда проверяем флаг ожидания картинки
-        if context.user_data.get('awaiting_tour_image'):
+        if context.chat_data.get('awaiting_tour_image'):
             from handlers.admin_handlers import send_tour_image
             await send_tour_image(update, context)
             # Отклик уже отправляется внутри send_tour_image
             # Сброс флага происходит только после успешной обработки
         else:
             await update.message.reply_text('Сначала отправьте команду /send_tour_image, затем фото.')
-    # Регистрируем обработчик фото для админа
-    app.add_handler(MessageHandler(filters.PHOTO & filters.User(ADMIN_ID), admin_photo_handler))
+    # Регистрируем обработчик фото для всех
+    app.add_handler(MessageHandler(filters.PHOTO, admin_photo_handler))
 
     # Установка команд для пользователей и админа
     from telegram import BotCommand, BotCommandScopeDefault, BotCommandScopeChat
