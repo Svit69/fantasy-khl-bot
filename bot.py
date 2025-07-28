@@ -19,6 +19,7 @@ from handlers import start, tour, hc
 logging.basicConfig(level=logging.INFO)
 
 IMAGES_DIR = 'images'
+TOUR_IMAGE_PATH_FILE = 'latest_tour.txt'
 
 # Проверка прав администратора
 async def admin_only(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -42,6 +43,10 @@ async def send_tour_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     path = os.path.join(IMAGES_DIR, filename)
     await file.download_to_drive(path)
 
+    # Сохраняем путь к изображению для команды /tour
+    with open(TOUR_IMAGE_PATH_FILE, 'w') as f:
+        f.write(filename)
+
     users = db.get_all_users()
     success = 0
     failed = 0
@@ -58,11 +63,13 @@ async def send_tour_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logging.warning(f"Ошибка при отправке фото пользователю {user[0]}: {e}")
             failed += 1
 
-    await update.message.reply_text(
+    msg = (
         f'✅ Изображение успешно получено и сохранено как `{filename}`.\n'
-        f'📤 Успешно отправлено {success} пользователям.\n'
-        f'⚠️ Ошибки у {failed} пользователей.' if failed else ''
+        f'📤 Успешно отправлено {success} пользователям.'
     )
+    if failed:
+        msg += f'\n⚠️ Ошибки у {failed} пользователей.'
+    await update.message.reply_text(msg)
 
 # Начисление HC пользователю
 async def addhc(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -160,11 +167,8 @@ async def main():
 
 if __name__ == '__main__':
     import nest_asyncio
-    import asyncio
-
     nest_asyncio.apply()
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(main())
+    asyncio.run(main())
 
 
 
