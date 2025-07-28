@@ -23,14 +23,17 @@ async def send_tour_image(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
 
     # Если команда вызвана без фото, запрашиваем фото
+
     if not update.message.photo:
-        context.user_data['awaiting_tour_image'] = True
+        context.chat_data['awaiting_tour_image'] = True
         await update.message.reply_text('Пожалуйста, прикрепите картинку следующим сообщением.')
-        logger.info(f"Ожидание картинки от админа {update.effective_user.id}")
+        logger.info(f"[DEBUG] Ожидание картинки от админа {update.effective_user.id}, chat_data: {context.chat_data}")
         return
 
     # Если фото пришло после запроса
-    if context.user_data.get('awaiting_tour_image'):
+
+    if context.chat_data.get('awaiting_tour_image'):
+        logger.info(f"[DEBUG] Получено фото, chat_data: {context.chat_data}")
         try:
             photo = update.message.photo[-1]
             file = await photo.get_file()
@@ -39,7 +42,7 @@ async def send_tour_image(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await file.download_to_drive(path)
             with open(TOUR_IMAGE_PATH_FILE, 'w') as f:
                 f.write(filename)
-            context.user_data['awaiting_tour_image'] = False
+            context.chat_data['awaiting_tour_image'] = False
             await update.message.reply_text(f'✅ Картинка принята и сохранена как `{filename}`. Она будет разослана пользователям при команде /tour.')
             await context.bot.send_message(chat_id=update.effective_chat.id, text=f'[DEBUG] Фото обработано, сохранено как {filename}')
             logger.info(f"Картинка тура сохранена: {path} (от {update.effective_user.id})")
