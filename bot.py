@@ -38,6 +38,21 @@ async def main():
     app.add_handler(CommandHandler('addhc', addhc))
     app.add_handler(CommandHandler('send_results', send_results))
 
+    # Обработчик для фото-сообщений от админа (для сценария send_tour_image)
+    from telegram.ext import MessageHandler, filters
+    def is_admin_photo(update):
+        user = update.effective_user
+        return user and user.id == ADMIN_ID and update.message.photo
+
+    async def admin_photo_handler(update, context):
+        # Проверяем, ожидает ли бот картинку для тура
+        if context.user_data.get('awaiting_tour_image'):
+            from handlers.admin_handlers import send_tour_image
+            await send_tour_image(update, context)
+        # Можно добавить обработку других фото от админа, если потребуется
+
+    app.add_handler(MessageHandler(filters.PHOTO & filters.User(ADMIN_ID), admin_photo_handler))
+
     # Установка команд для пользователей и админа
     from telegram import BotCommand, BotCommandScopeDefault, BotCommandScopeChat
     user_commands = [
