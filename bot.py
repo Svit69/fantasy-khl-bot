@@ -43,13 +43,26 @@ async def send_tour_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await file.download_to_drive(path)
 
     users = db.get_all_users()
+    success = 0
+    failed = 0
+
     for user in users:
         try:
-            await context.bot.send_photo(chat_id=user[0], photo=InputFile(path), caption='🏒 Новый тур! Состав игроков на сегодня:')
+            await context.bot.send_photo(
+                chat_id=user[0],
+                photo=InputFile(path),
+                caption='🏒 Новый тур! Состав игроков на сегодня:'
+            )
+            success += 1
         except Exception as e:
             logging.warning(f"Ошибка при отправке фото пользователю {user[0]}: {e}")
+            failed += 1
 
-    await update.message.reply_text('Изображение тура разослано всем пользователям.')
+    await update.message.reply_text(
+        f'✅ Изображение успешно получено и сохранено как `{filename}`.\n'
+        f'📤 Успешно отправлено {success} пользователям.\n'
+        f'⚠️ Ошибки у {failed} пользователей.' if failed else ''
+    )
 
 # Начисление HC пользователю
 async def addhc(update: Update, context: ContextTypes.DEFAULT_TYPE):
