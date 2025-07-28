@@ -34,7 +34,33 @@ async def main():
     app.add_handler(CommandHandler('start', start))
     app.add_handler(CommandHandler('tour', tour))
     app.add_handler(CommandHandler('hc', hc))
-    app.add_handler(CommandHandler('send_tour_image', send_tour_image))
+    from telegram.ext import ConversationHandler, MessageHandler, filters
+
+    # Состояния для ConversationHandler
+    WAIT_IMAGE = 1
+
+    async def send_tour_image_start(update, context):
+        await update.message.reply_text('Пожалуйста, прикрепите картинку следующим сообщением.')
+        return WAIT_IMAGE
+
+    async def send_tour_image_photo(update, context):
+        from handlers.admin_handlers import send_tour_image
+        await send_tour_image(update, context)
+        return ConversationHandler.END
+
+    async def send_tour_image_cancel(update, context):
+        await update.message.reply_text('Отменено.')
+        return ConversationHandler.END
+
+    send_tour_image_conv = ConversationHandler(
+        entry_points=[CommandHandler('send_tour_image', send_tour_image_start)],
+        states={
+            WAIT_IMAGE: [MessageHandler(filters.PHOTO, send_tour_image_photo)]
+        },
+        fallbacks=[CommandHandler('cancel', send_tour_image_cancel)],
+        allow_reentry=True
+    )
+    app.add_handler(send_tour_image_conv)
     app.add_handler(CommandHandler('addhc', addhc))
     app.add_handler(CommandHandler('send_results', send_results))
 
