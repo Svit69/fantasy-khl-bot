@@ -3,7 +3,7 @@
 from telegram import Update, InputFile
 from telegram.ext import ContextTypes
 import os
-import db.db as db
+import db
 from config import ADMIN_ID
 from utils.utils import IMAGES_DIR
 from .user_handlers import start, tour, hc

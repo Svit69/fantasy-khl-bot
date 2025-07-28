@@ -2,18 +2,13 @@ import os
 import logging
 import asyncio
 
-from telegram import (
-    Update, InputFile, BotCommand,
-    BotCommandScopeDefault, BotCommandScopeChat
-)
-from telegram.ext import (
-    Application, CommandHandler, ContextTypes
-)
+from telegram import Update, InputFile, BotCommand, BotCommandScopeDefault, BotCommandScopeChat
+from telegram.ext import Application, CommandHandler, ContextTypes, ConversationHandler, MessageHandler, filters
 import httpx
 
 from config import TELEGRAM_TOKEN, ADMIN_ID
 import db
-from handlers.handlers import start, tour, hc, send_tour_image, addhc, send_results, IMAGES_DIR
+from handlers.handlers import start, tour, hc, addhc, send_results, IMAGES_DIR
 
 # Настройка логирования
 logging.basicConfig(

@@ -1,7 +1,7 @@
 from telegram import Update, InputFile
 from telegram.ext import ContextTypes
 from config import ADMIN_ID
-import db.db as db
+import db
 import os
 from utils.utils import is_admin, send_message_to_users, IMAGES_DIR, TOUR_IMAGE_PATH_FILE, logger
 
