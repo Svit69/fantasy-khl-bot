@@ -27,14 +27,9 @@ logger.addHandler(file_handler)
 logger.addHandler(console_handler)
 
 
-async def main():
-    db.init_db()
-    os.makedirs(IMAGES_DIR, exist_ok=True)
-
-    app = Application.builder().token(TELEGRAM_TOKEN).build()
-    app.add_handler(CommandHandler('start', start))
-    app.add_handler(CommandHandler('tour', tour))
-    app.add_handler(CommandHandler('hc', hc))
+# Инициализация базы данных и создание директорий
+db.init_db()
+os.makedirs(IMAGES_DIR, exist_ok=True)
 
     # --- ConversationHandler для send_tour_image ---
     from telegram.ext import ConversationHandler, MessageHandler, filters
@@ -97,10 +92,18 @@ async def main():
     ]
     await app.bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=ADMIN_ID))
 
-    # Простой запуск приложения
-    await app.run_polling(drop_pending_updates=True)
+
 
 if __name__ == '__main__':
+    import platform
+    import sys
     import asyncio
-    asyncio.run(main())
+    
+    if sys.version_info >= (3, 12) and platform.system() == 'Linux':
+        # Специальный патч для Python 3.12+ на Linux
+        import asyncio.events
+        asyncio.events._get_event_loop = asyncio.get_event_loop
+        
+    app = Application.builder().token(TELEGRAM_TOKEN).build()
+    app.run_polling()
 
