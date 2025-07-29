@@ -46,8 +46,8 @@ async def send_tour_image_start(update, context):
 async def send_tour_image_photo(update, context):
     logger.info(f"[send_tour_image_photo] user_id={update.effective_user.id if update.effective_user else None}, has_photo={bool(update.message.photo)}")
     try:
-        from handlers.admin_handlers import send_tour_image
-        await send_tour_image(update, context)
+        from handlers.admin_handlers import process_tour_image_photo
+        await process_tour_image_photo(update, context)
         logger.info("[send_tour_image_photo] Фото успешно обработано и разослано.")
     except Exception as e:
         logger.error(f"Ошибка при обработке фото: {e}")

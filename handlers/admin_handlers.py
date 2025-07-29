@@ -60,6 +60,21 @@ async def send_tour_image(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await update.message.reply_text('Сначала отправьте команду /send_tour_image, затем фото.')
     logger.info(f"Фото получено без запроса от {update.effective_user.id}")
 
+async def process_tour_image_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    try:
+        photo = update.message.photo[-1]
+        file = await photo.get_file()
+        filename = f"tour_{photo.file_unique_id}.jpg"
+        path = os.path.join(IMAGES_DIR, filename)
+        await file.download_to_drive(path)
+        with open(TOUR_IMAGE_PATH_FILE, 'w') as f:
+            f.write(filename)
+        await update.message.reply_text(f'✅ Картинка принята и сохранена как `{filename}`. Она будет разослана пользователям при команде /tour.')
+        logger.info(f"Картинка тура сохранена: {path} (от {update.effective_user.id})")
+    except Exception as e:
+        logger.error(f'Ошибка при сохранении картинки тура: {e}')
+        await update.message.reply_text(f'Ошибка при сохранении картинки: {e}')
+
 async def addhc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await admin_only(update, context):
         return
