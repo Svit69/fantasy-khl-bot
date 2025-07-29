@@ -1,9 +1,71 @@
 from telegram import Update, InputFile
-from telegram.ext import ContextTypes
+from telegram.ext import ContextTypes, ConversationHandler
 from config import ADMIN_ID
 import db
 import os
 from utils import is_admin, send_message_to_users, IMAGES_DIR, TOUR_IMAGE_PATH_FILE, logger
+
+# --- Добавление игрока ---
+ADD_NAME, ADD_POSITION, ADD_CLUB, ADD_NATION, ADD_AGE, ADD_PRICE = range(6)
+
+async def add_player_start(update, context):
+    if not await admin_only(update, context):
+        return ConversationHandler.END
+    await update.message.reply_text("Введите имя и фамилию игрока:")
+    return ADD_NAME
+
+async def add_player_name(update, context):
+    context.user_data['name'] = update.message.text
+    await update.message.reply_text("Введите позицию (нападающий/защитник/вратарь):")
+    return ADD_POSITION
+
+async def add_player_position(update, context):
+    context.user_data['position'] = update.message.text
+    await update.message.reply_text("Введите клуб:")
+    return ADD_CLUB
+
+async def add_player_club(update, context):
+    context.user_data['club'] = update.message.text
+    await update.message.reply_text("Введите нацию:")
+    return ADD_NATION
+
+async def add_player_nation(update, context):
+    context.user_data['nation'] = update.message.text
+    await update.message.reply_text("Введите возраст:")
+    return ADD_AGE
+
+async def add_player_age(update, context):
+    context.user_data['age'] = update.message.text
+    await update.message.reply_text("Введите стоимость:")
+    return ADD_PRICE
+
+async def add_player_price(update, context):
+    context.user_data['price'] = update.message.text
+    db.add_player(
+        context.user_data['name'],
+        context.user_data['position'],
+        context.user_data['club'],
+        context.user_data['nation'],
+        int(context.user_data['age']),
+        int(context.user_data['price'])
+    )
+    await update.message.reply_text("Игрок добавлен!")
+    return ConversationHandler.END
+
+async def add_player_cancel(update, context):
+    await update.message.reply_text("Добавление отменено.")
+    return ConversationHandler.END
+
+# --- Список игроков ---
+async def list_players(update, context):
+    if not await admin_only(update, context):
+        return
+    players = db.get_all_players()
+    if not players:
+        await update.message.reply_text("Список игроков пуст.")
+        return
+    msg = "\n".join([f"{p[0]}. {p[1]} | {p[2]} | {p[3]} | {p[4]} | {p[5]} лет | {p[6]} HC" for p in players])
+    await update.message.reply_text(msg)
 
 async def admin_only(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     user_id = update.effective_user.id if update.effective_user else None

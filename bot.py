@@ -10,7 +10,12 @@ from config import TELEGRAM_TOKEN, ADMIN_ID
 
 import db
 from handlers.handlers import start, tour, hc, addhc, send_results, IMAGES_DIR
+from handlers.admin_handlers import (
+    add_player_start, add_player_name, add_player_position, add_player_club,
+    add_player_nation, add_player_age, add_player_price, add_player_cancel, list_players
+)
 
+ADD_NAME, ADD_POSITION, ADD_CLUB, ADD_NATION, ADD_AGE, ADD_PRICE = range(6)
 
 # Настройка логирования: в файл и в консоль
 import sys
@@ -92,6 +97,21 @@ if __name__ == '__main__':
     app.add_handler(send_tour_image_conv)
     app.add_handler(CommandHandler('addhc', addhc))
     app.add_handler(CommandHandler('send_results', send_results))
+
+    add_player_conv = ConversationHandler(
+        entry_points=[CommandHandler('add_player', add_player_start)],
+        states={
+            ADD_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_player_name)],
+            ADD_POSITION: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_player_position)],
+            ADD_CLUB: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_player_club)],
+            ADD_NATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_player_nation)],
+            ADD_AGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_player_age)],
+            ADD_PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_player_price)],
+        },
+        fallbacks=[CommandHandler('cancel', add_player_cancel)],
+    )
+    app.add_handler(add_player_conv)
+    app.add_handler(CommandHandler('list_players', list_players))
 
     # Установка команд для пользователей и админа
     user_commands = [

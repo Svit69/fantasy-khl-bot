@@ -14,6 +14,18 @@ def init_db():
                     hc_balance INTEGER DEFAULT 0
                 )
             ''')
+            # Таблица игроков
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS players (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    position TEXT NOT NULL,
+                    club TEXT,
+                    nation TEXT,
+                    age INTEGER,
+                    price INTEGER NOT NULL
+                )
+            ''')
 
 def register_user(telegram_id, username, name):
     with closing(sqlite3.connect(DB_NAME)) as conn:
@@ -43,3 +55,16 @@ def update_hc_balance(telegram_id, amount):
 def get_all_users():
     with closing(sqlite3.connect(DB_NAME)) as conn:
         return conn.execute('SELECT telegram_id FROM users').fetchall()
+
+# --- Игроки ---
+def add_player(name, position, club, nation, age, price):
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            conn.execute(
+                'INSERT INTO players (name, position, club, nation, age, price) VALUES (?, ?, ?, ?, ?, ?)',
+                (name, position, club, nation, age, price)
+            )
+
+def get_all_players():
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        return conn.execute('SELECT id, name, position, club, nation, age, price FROM players').fetchall()
