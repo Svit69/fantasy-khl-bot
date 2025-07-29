@@ -31,40 +31,56 @@ logger.addHandler(console_handler)
 db.init_db()
 os.makedirs(IMAGES_DIR, exist_ok=True)
 
-    # --- ConversationHandler для send_tour_image ---
-    from telegram.ext import ConversationHandler, MessageHandler, filters
-    WAIT_IMAGE = 1
+# --- ConversationHandler для send_tour_image ---
+WAIT_IMAGE = 1
 
+async def send_tour_image_start(update, context):
+    logger.info(f"[send_tour_image_start] user_id={update.effective_user.id if update.effective_user else None}")
+    try:
+        await update.message.reply_text('Пожалуйста, прикрепите картинку следующим сообщением.')
+    except Exception as e:
+        logger.error(f"Ошибка при отправке приглашения на фото: {e}")
+        await update.message.reply_text(f"Ошибка: {e}")
+    return WAIT_IMAGE
 
-    async def send_tour_image_start(update, context):
-        logger.info(f"[send_tour_image_start] user_id={update.effective_user.id if update.effective_user else None}")
-        try:
-            await update.message.reply_text('Пожалуйста, прикрепите картинку следующим сообщением.')
-        except Exception as e:
-            logger.error(f"Ошибка при отправке приглашения на фото: {e}")
-            await update.message.reply_text(f"Ошибка: {e}")
-        return WAIT_IMAGE
+async def send_tour_image_photo(update, context):
+    logger.info(f"[send_tour_image_photo] user_id={update.effective_user.id if update.effective_user else None}, has_photo={bool(update.message.photo)}")
+    try:
+        from handlers.admin_handlers import send_tour_image
+        await send_tour_image(update, context)
+        logger.info("[send_tour_image_photo] Фото успешно обработано и разослано.")
+    except Exception as e:
+        logger.error(f"Ошибка при обработке фото: {e}")
+        await update.message.reply_text(f"Ошибка при обработке фото: {e}")
+    return ConversationHandler.END
 
-    async def send_tour_image_photo(update, context):
-        logger.info(f"[send_tour_image_photo] user_id={update.effective_user.id if update.effective_user else None}, has_photo={bool(update.message.photo)}")
-        try:
-            from handlers.admin_handlers import send_tour_image
-            await send_tour_image(update, context)
-            logger.info("[send_tour_image_photo] Фото успешно обработано и разослано.")
-        except Exception as e:
-            logger.error(f"Ошибка при обработке фото: {e}")
-            await update.message.reply_text(f"Ошибка при обработке фото: {e}")
-        return ConversationHandler.END
+async def send_tour_image_cancel(update, context):
+    logger.info(f"[send_tour_image_cancel] user_id={update.effective_user.id if update.effective_user else None}")
+    try:
+        await update.message.reply_text('Отменено.')
+    except Exception as e:
+        logger.error(f"Ошибка при отмене: {e}")
+        await update.message.reply_text(f"Ошибка: {e}")
+    return ConversationHandler.END
 
-    async def send_tour_image_cancel(update, context):
-        logger.info(f"[send_tour_image_cancel] user_id={update.effective_user.id if update.effective_user else None}")
-        try:
-            await update.message.reply_text('Отменено.')
-        except Exception as e:
-            logger.error(f"Ошибка при отмене: {e}")
-            await update.message.reply_text(f"Ошибка: {e}")
-        return ConversationHandler.END
+if __name__ == '__main__':
+    import platform
+    import sys
+    import asyncio
+    
+    if sys.version_info >= (3, 12) and platform.system() == 'Linux':
+        # Специальный патч для Python 3.12+ на Linux
+        import asyncio.events
+        asyncio.events._get_event_loop = asyncio.get_event_loop
 
+    # Создание и настройка приложения    
+    app = Application.builder().token(TELEGRAM_TOKEN).build()
+    
+    # Регистрация обработчиков
+    app.add_handler(CommandHandler('start', start))
+    app.add_handler(CommandHandler('tour', tour))
+    app.add_handler(CommandHandler('hc', hc))
+    
     send_tour_image_conv = ConversationHandler(
         entry_points=[CommandHandler('send_tour_image', send_tour_image_start)],
         states={
@@ -78,19 +94,23 @@ os.makedirs(IMAGES_DIR, exist_ok=True)
     app.add_handler(CommandHandler('send_results', send_results))
 
     # Установка команд для пользователей и админа
-    from telegram import BotCommand, BotCommandScopeDefault, BotCommandScopeChat, Update
     user_commands = [
         BotCommand("start", "Регистрация и приветствие"),
         BotCommand("tour", "Показать состав игроков на тур"),
         BotCommand("hc", "Показать баланс HC"),
     ]
-    await app.bot.set_my_commands(user_commands, scope=BotCommandScopeDefault())
+    
     admin_commands = user_commands + [
         BotCommand("send_tour_image", "Разослать изображение тура (админ)"),
         BotCommand("addhc", "Начислить HC пользователю (админ)"),
         BotCommand("send_results", "Разослать результаты тура (админ)"),
     ]
-    await app.bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=ADMIN_ID))
+
+    # Запуск приложения
+    app.add_handler(CommandHandler('start', start))
+    app.add_handler(CommandHandler('tour', tour))
+    app.add_handler(CommandHandler('hc', hc))
+    app.run_polling()
 
 
 
