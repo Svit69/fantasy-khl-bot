@@ -68,3 +68,7 @@ def add_player(name, position, club, nation, age, price):
 def get_all_players():
     with closing(sqlite3.connect(DB_NAME)) as conn:
         return conn.execute('SELECT id, name, position, club, nation, age, price FROM players').fetchall()
+
+def get_player_by_id(player_id):
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        return conn.execute('SELECT id, name, position, club, nation, age, price FROM players WHERE id = ?', (player_id,)).fetchone()

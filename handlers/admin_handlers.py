@@ -67,6 +67,20 @@ async def list_players(update, context):
     msg = "\n".join([f"{p[0]}. {p[1]} | {p[2]} | {p[3]} | {p[4]} | {p[5]} лет | {p[6]} HC" for p in players])
     await update.message.reply_text(msg)
 
+async def find_player(update, context):
+    if not await admin_only(update, context):
+        return
+    if not context.args or not context.args[0].isdigit():
+        await update.message.reply_text("Использование: /find_player <id>")
+        return
+    player_id = int(context.args[0])
+    player = db.get_player_by_id(player_id)
+    if not player:
+        await update.message.reply_text("Игрок не найден.")
+        return
+    msg = f"{player[0]}. {player[1]} | {player[2]} | {player[3]} | {player[4]} | {player[5]} лет | {player[6]} HC"
+    await update.message.reply_text(msg)
+
 async def admin_only(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     user_id = update.effective_user.id if update.effective_user else None
     if not is_admin(user_id):

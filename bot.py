@@ -12,7 +12,7 @@ import db
 from handlers.handlers import start, tour, hc, addhc, send_results, IMAGES_DIR
 from handlers.admin_handlers import (
     add_player_start, add_player_name, add_player_position, add_player_club,
-    add_player_nation, add_player_age, add_player_price, add_player_cancel, list_players
+    add_player_nation, add_player_age, add_player_price, add_player_cancel, list_players, find_player
 )
 
 ADD_NAME, ADD_POSITION, ADD_CLUB, ADD_NATION, ADD_AGE, ADD_PRICE = range(6)
@@ -112,6 +112,7 @@ if __name__ == '__main__':
     )
     app.add_handler(add_player_conv)
     app.add_handler(CommandHandler('list_players', list_players))
+    app.add_handler(CommandHandler('find_player', find_player))
 
     # Установка команд для пользователей и админа
     user_commands = [
