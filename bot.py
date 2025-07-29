@@ -83,7 +83,7 @@ async def main():
     app.add_handler(CommandHandler('send_results', send_results))
 
     # Установка команд для пользователей и админа
-    from telegram import BotCommand, BotCommandScopeDefault, BotCommandScopeChat
+    from telegram import BotCommand, BotCommandScopeDefault, BotCommandScopeChat, Update
     user_commands = [
         BotCommand("start", "Регистрация и приветствие"),
         BotCommand("tour", "Показать состав игроков на тур"),
@@ -96,7 +96,15 @@ async def main():
         BotCommand("send_results", "Разослать результаты тура (админ)"),
     ]
     await app.bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=ADMIN_ID))
-    await app.run_polling()
+    
+    # Запуск с правильной обработкой event loop
+    await app.initialize()
+    try:
+        await app.start()
+        await app.run_polling(allowed_updates=Update.ALL_TYPES, close_loop=False)
+    finally:
+        await app.stop()
+        await app.shutdown()
 
 if __name__ == '__main__':
     import asyncio
