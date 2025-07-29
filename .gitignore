@@ -1,4 +1,5 @@
 .env
 fantasy_khl.db
 __pycache__/
-images/ 
+images/
+!images/.gitkeep 
