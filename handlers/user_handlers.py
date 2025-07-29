@@ -8,11 +8,12 @@ from utils import is_admin, IMAGES_DIR, logger
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     registered = db.register_user(user.id, user.username, user.full_name)
+    msg_id = f"Ваш Telegram ID: {user.id}\n"
     if is_admin(user.id):
-        keyboard = [["/tour", "/hc"], ["/send_tour_image", "/addhc", "/send_results"]]
+        keyboard = [["/tour", "/hc"], ["/send_tour_image", "/addhc", "/send_results", "/add_player", "/list_players"]]
         msg = (
             f'Привет, {user.full_name}! Ты зарегистрирован как администратор Fantasy KHL.\n\n'
-            'Доступные команды:\n/tour — показать состав на тур\n/hc — баланс HC\n/send_tour_image — загрузить и разослать изображение тура\n/addhc — начислить HC пользователю\n/send_results — разослать результаты тура'
+            'Доступные команды:\n/tour — показать состав на тур\n/hc — баланс HC\n/send_tour_image — загрузить и разослать изображение тура\n/addhc — начислить HC пользователю\n/send_results — разослать результаты тура\n/add_player — добавить игрока\n/list_players — список игроков'
         )
     else:
         keyboard = [["/tour", "/hc"]]
@@ -22,9 +23,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
     markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     if registered:
-        await update.message.reply_text(msg, reply_markup=markup)
+        await update.message.reply_text(msg_id + msg, reply_markup=markup)
     else:
-        await update.message.reply_text('Ты уже зарегистрирован!', reply_markup=markup)
+        await update.message.reply_text(msg_id + 'Ты уже зарегистрирован!', reply_markup=markup)
 
 async def tour(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
