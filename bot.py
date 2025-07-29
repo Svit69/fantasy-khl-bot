@@ -7,6 +7,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes, Conversation
 import httpx
 
 from config import TELEGRAM_TOKEN, ADMIN_ID
+
 import db
 from handlers.handlers import start, tour, hc, addhc, send_results, IMAGES_DIR
 
@@ -31,9 +32,6 @@ async def main():
     os.makedirs(IMAGES_DIR, exist_ok=True)
 
     app = Application.builder().token(TELEGRAM_TOKEN).build()
-
-
-    from handlers.handlers import start, tour, hc, addhc, send_results, IMAGES_DIR
     app.add_handler(CommandHandler('start', start))
     app.add_handler(CommandHandler('tour', tour))
     app.add_handler(CommandHandler('hc', hc))
