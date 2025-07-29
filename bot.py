@@ -96,15 +96,9 @@ async def main():
         BotCommand("send_results", "Разослать результаты тура (админ)"),
     ]
     await app.bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=ADMIN_ID))
-    
-    # Запуск с правильной обработкой event loop
-    await app.initialize()
-    try:
-        await app.start()
-        await app.run_polling(allowed_updates=Update.ALL_TYPES, close_loop=False)
-    finally:
-        await app.stop()
-        await app.shutdown()
+
+    # Простой запуск приложения
+    await app.run_polling(drop_pending_updates=True)
 
 if __name__ == '__main__':
     import asyncio
