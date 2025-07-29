@@ -28,7 +28,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def tour(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
-        files = os.listdir(IMAGES_DIR)
+        files = [f for f in os.listdir(IMAGES_DIR) if f.lower().endswith((".jpg", ".jpeg", ".png"))]
         if not files:
             await update.message.reply_text('Изображение тура пока не загружено.')
             return
