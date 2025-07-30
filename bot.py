@@ -3,7 +3,7 @@ import logging
 import asyncio
 
 from telegram import Update, InputFile, BotCommand, BotCommandScopeDefault, BotCommandScopeChat
-from telegram.ext import Application, CommandHandler, ContextTypes, ConversationHandler, MessageHandler, filters
+from telegram.ext import Application, CommandHandler, ContextTypes, ConversationHandler, MessageHandler, CallbackQueryHandler, filters
 import httpx
 
 from config import TELEGRAM_TOKEN, ADMIN_ID
