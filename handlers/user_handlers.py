@@ -71,9 +71,30 @@ async def tour_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Переходим к выбору первого нападающего
     return TOUR_FORWARD_1
 
+from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+
+async def send_player_choice(update, context, position, exclude_ids, next_state, budget):
+    # Получаем актуальный ростер
+    roster = context.user_data['tour_roster']
+    # Фильтруем по позиции и исключениям
+    players = [p for p in roster if p[3].lower() == position and p[0] not in exclude_ids and p[6] <= budget]
+    if not players:
+        await update.effective_message.reply_text(f'Нет доступных игроков позиции {position} в рамках бюджета {budget} HC.')
+        return next_state
+    keyboard = []
+    for p in players:
+        btn_text = f"{p[1]} ({p[6]} HC)"
+        keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"pick_{p[0]}_{position}")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    text = f"Выберите {position} (осталось HC: {budget})"
+    await update.effective_message.reply_text(text, reply_markup=reply_markup)
+    return next_state
+
 async def tour_forward_1(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # TODO: показать кнопки с нападающими, обработать выбор
-    pass
+    budget = context.user_data['tour_budget']
+    picked = context.user_data['tour_selected']['forwards']
+    return await send_player_choice(update, context, 'нападающий', picked, TOUR_FORWARD_2, budget)
+
 
 async def tour_forward_2(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # TODO: показать кнопки с нападающими (без уже выбранных), обработать выбор
