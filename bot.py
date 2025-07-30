@@ -14,7 +14,8 @@ from handlers.admin_handlers import (
     add_player_start, add_player_name, add_player_position, add_player_club,
     add_player_nation, add_player_age, add_player_price, add_player_cancel, list_players, find_player,
     remove_player, edit_player_start, edit_player_name, edit_player_position, edit_player_club,
-    edit_player_nation, edit_player_age, edit_player_price, edit_player_cancel
+    edit_player_nation, edit_player_age, edit_player_price, edit_player_cancel,
+    set_tour_roster, get_tour_roster
 )
 
 ADD_NAME, ADD_POSITION, ADD_CLUB, ADD_NATION, ADD_AGE, ADD_PRICE = range(6)
