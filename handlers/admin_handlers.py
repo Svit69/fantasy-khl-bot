@@ -8,6 +8,9 @@ from utils import is_admin, send_message_to_users, IMAGES_DIR, TOUR_IMAGE_PATH_F
 # --- Добавление игрока ---
 ADD_NAME, ADD_POSITION, ADD_CLUB, ADD_NATION, ADD_AGE, ADD_PRICE = range(6)
 
+# --- Редактирование игрока ---
+EDIT_NAME, EDIT_POSITION, EDIT_CLUB, EDIT_NATION, EDIT_AGE, EDIT_PRICE = range(6, 12)
+
 async def add_player_start(update, context):
     if not await admin_only(update, context):
         return ConversationHandler.END
@@ -80,6 +83,92 @@ async def find_player(update, context):
         return
     msg = f"{player[0]}. {player[1]} | {player[2]} | {player[3]} | {player[4]} | {player[5]} лет | {player[6]} HC"
     await update.message.reply_text(msg)
+
+async def remove_player(update, context):
+    if not await admin_only(update, context):
+        return
+    if not context.args or not context.args[0].isdigit():
+        await update.message.reply_text("Использование: /remove_player <id>")
+        return
+    player_id = int(context.args[0])
+    player = db.get_player_by_id(player_id)
+    if not player:
+        await update.message.reply_text("Игрок не найден.")
+        return
+    
+    if db.remove_player(player_id):
+        await update.message.reply_text(f"Игрок {player[1]} (ID: {player_id}) удален.")
+    else:
+        await update.message.reply_text("Ошибка при удалении игрока.")
+
+# --- Редактирование игрока ---
+async def edit_player_start(update, context):
+    if not await admin_only(update, context):
+        return ConversationHandler.END
+    if not context.args or not context.args[0].isdigit():
+        await update.message.reply_text("Использование: /edit_player <id>")
+        return ConversationHandler.END
+    
+    player_id = int(context.args[0])
+    player = db.get_player_by_id(player_id)
+    if not player:
+        await update.message.reply_text("Игрок не найден.")
+        return ConversationHandler.END
+    
+    context.user_data['edit_player_id'] = player_id
+    context.user_data['current_player'] = player
+    
+    msg = f"Редактирование игрока:\n{player[0]}. {player[1]} | {player[2]} | {player[3]} | {player[4]} | {player[5]} лет | {player[6]} HC\n\nВведите новое имя и фамилию игрока:"
+    await update.message.reply_text(msg)
+    return EDIT_NAME
+
+async def edit_player_name(update, context):
+    context.user_data['edit_name'] = update.message.text
+    await update.message.reply_text("Введите новую позицию (нападающий/защитник/вратарь):")
+    return EDIT_POSITION
+
+async def edit_player_position(update, context):
+    context.user_data['edit_position'] = update.message.text
+    await update.message.reply_text("Введите новый клуб:")
+    return EDIT_CLUB
+
+async def edit_player_club(update, context):
+    context.user_data['edit_club'] = update.message.text
+    await update.message.reply_text("Введите новую нацию:")
+    return EDIT_NATION
+
+async def edit_player_nation(update, context):
+    context.user_data['edit_nation'] = update.message.text
+    await update.message.reply_text("Введите новый возраст:")
+    return EDIT_AGE
+
+async def edit_player_age(update, context):
+    context.user_data['edit_age'] = update.message.text
+    await update.message.reply_text("Введите новую стоимость:")
+    return EDIT_PRICE
+
+async def edit_player_price(update, context):
+    context.user_data['edit_price'] = update.message.text
+    
+    player_id = context.user_data['edit_player_id']
+    if db.update_player(
+        player_id,
+        context.user_data['edit_name'],
+        context.user_data['edit_position'],
+        context.user_data['edit_club'],
+        context.user_data['edit_nation'],
+        int(context.user_data['edit_age']),
+        int(context.user_data['edit_price'])
+    ):
+        await update.message.reply_text("Игрок успешно обновлен!")
+    else:
+        await update.message.reply_text("Ошибка при обновлении игрока.")
+    
+    return ConversationHandler.END
+
+async def edit_player_cancel(update, context):
+    await update.message.reply_text("Редактирование отменено.")
+    return ConversationHandler.END
 
 async def admin_only(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     user_id = update.effective_user.id if update.effective_user else None
