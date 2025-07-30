@@ -76,14 +76,14 @@ def get_player_by_id(player_id):
 def remove_player(player_id):
     with closing(sqlite3.connect(DB_NAME)) as conn:
         with conn:
-            conn.execute('DELETE FROM players WHERE id = ?', (player_id,))
-            return conn.rowcount > 0
+            cursor = conn.execute('DELETE FROM players WHERE id = ?', (player_id,))
+            return cursor.rowcount > 0
 
 def update_player(player_id, name, position, club, nation, age, price):
     with closing(sqlite3.connect(DB_NAME)) as conn:
         with conn:
-            conn.execute(
+            cursor = conn.execute(
                 'UPDATE players SET name = ?, position = ?, club = ?, nation = ?, age = ?, price = ? WHERE id = ?',
                 (name, position, club, nation, age, price, player_id)
             )
-            return conn.rowcount > 0
+            return cursor.rowcount > 0
