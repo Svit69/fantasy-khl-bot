@@ -83,7 +83,7 @@ async def send_player_choice(update, context, position, exclude_ids, next_state,
         return next_state
     keyboard = []
     for p in players:
-        btn_text = f"{p[1]} ({p[6]} HC)"
+        btn_text = f"{p[1]} — {p[6]} HC"
         keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"pick_{p[0]}_{position}")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     text = f"Выберите {position} (осталось HC: {budget})"
