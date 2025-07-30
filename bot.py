@@ -194,16 +194,3 @@ if __name__ == '__main__':
 
 
 
-if __name__ == '__main__':
-    import platform
-    import sys
-    import asyncio
-    
-    if sys.version_info >= (3, 12) and platform.system() == 'Linux':
-        # Специальный патч для Python 3.12+ на Linux
-        import asyncio.events
-        asyncio.events._get_event_loop = asyncio.get_event_loop
-        
-    app = Application.builder().token(TELEGRAM_TOKEN).build()
-    app.run_polling()
-
