@@ -36,6 +36,13 @@ def init_db():
                     FOREIGN KEY(player_id) REFERENCES players(id)
                 )
             ''')
+            # Таблица для хранения бюджета
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS budget (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    value INTEGER NOT NULL
+                )
+            ''')
 
 def register_user(telegram_id, username, name):
     with closing(sqlite3.connect(DB_NAME)) as conn:
@@ -96,6 +103,16 @@ def add_tour_roster_entry(player_id, cost, tour_num=1):
 def get_tour_roster(tour_num=1):
     with closing(sqlite3.connect(DB_NAME)) as conn:
         return conn.execute('SELECT cost, player_id FROM tour_roster WHERE tour_num = ? ORDER BY cost DESC, id ASC', (tour_num,)).fetchall()
+
+def set_budget(value):
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            conn.execute('INSERT OR REPLACE INTO budget (id, value) VALUES (1, ?)', (value,))
+
+def get_budget():
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        row = conn.execute('SELECT value FROM budget WHERE id = 1').fetchone()
+        return row[0] if row else None
 
 def get_tour_roster_with_player_info(tour_num=1):
     with closing(sqlite3.connect(DB_NAME)) as conn:
