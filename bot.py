@@ -100,6 +100,8 @@ if __name__ == '__main__':
     app.add_handler(send_tour_image_conv)
     app.add_handler(CommandHandler('addhc', addhc))
     app.add_handler(CommandHandler('send_results', send_results))
+    app.add_handler(CommandHandler('get_tour_roster', get_tour_roster))
+    app.add_handler(MessageHandler(filters.TEXT & filters.Regex(r'^(\d{2}: )?\d'), set_tour_roster))  # для удобного ввода через текстовое сообщение
 
     add_player_conv = ConversationHandler(
         entry_points=[CommandHandler('add_player', add_player_start)],

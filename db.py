@@ -26,6 +26,16 @@ def init_db():
                     price INTEGER NOT NULL
                 )
             ''')
+            # Таблица состава на тур
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS tour_roster (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tour_num INTEGER DEFAULT 1,
+                    cost INTEGER NOT NULL,
+                    player_id INTEGER NOT NULL,
+                    FOREIGN KEY(player_id) REFERENCES players(id)
+                )
+            ''')
 
 def register_user(telegram_id, username, name):
     with closing(sqlite3.connect(DB_NAME)) as conn:
@@ -72,6 +82,30 @@ def get_all_players():
 def get_player_by_id(player_id):
     with closing(sqlite3.connect(DB_NAME)) as conn:
         return conn.execute('SELECT id, name, position, club, nation, age, price FROM players WHERE id = ?', (player_id,)).fetchone()
+
+def clear_tour_roster(tour_num=1):
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            conn.execute('DELETE FROM tour_roster WHERE tour_num = ?', (tour_num,))
+
+def add_tour_roster_entry(player_id, cost, tour_num=1):
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            conn.execute('INSERT INTO tour_roster (tour_num, cost, player_id) VALUES (?, ?, ?)', (tour_num, cost, player_id))
+
+def get_tour_roster(tour_num=1):
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        return conn.execute('SELECT cost, player_id FROM tour_roster WHERE tour_num = ? ORDER BY cost DESC, id ASC', (tour_num,)).fetchall()
+
+def get_tour_roster_with_player_info(tour_num=1):
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        return conn.execute('''
+            SELECT tr.cost, p.id, p.name, p.position, p.club, p.nation, p.age, p.price
+            FROM tour_roster tr
+            JOIN players p ON tr.player_id = p.id
+            WHERE tr.tour_num = ?
+            ORDER BY tr.cost DESC, tr.id ASC
+        ''', (tour_num,)).fetchall()
 
 def remove_player(player_id):
     with closing(sqlite3.connect(DB_NAME)) as conn:

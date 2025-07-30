@@ -170,6 +170,52 @@ async def edit_player_cancel(update, context):
     await update.message.reply_text("Редактирование отменено.")
     return ConversationHandler.END
 
+# --- Тур: добавить и вывести состав ---
+async def set_tour_roster(update, context):
+    if not await admin_only(update, context):
+        return
+    text = update.message.text
+    lines = [line.strip() for line in text.split('\n') if line.strip()]
+    ids = []
+    try:
+        for line in lines:
+            if ':' not in line:
+                await update.message.reply_text(f"Неверный формат строки: {line}")
+                return
+            cost_str, ids_str = line.split(':', 1)
+            cost = int(cost_str.strip())
+            id_list = [int(x.strip()) for x in ids_str.split(',') if x.strip()]
+            for player_id in id_list:
+                ids.append((cost, player_id))
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка разбора: {e}")
+        return
+    if len(ids) != 20:
+        await update.message.reply_text(f"Ошибка: должно быть ровно 20 игроков, а не {len(ids)}")
+        return
+    # Проверка, что все игроки существуют
+    for cost, player_id in ids:
+        player = db.get_player_by_id(player_id)
+        if not player:
+            await update.message.reply_text(f"Игрок с id {player_id} не найден!")
+            return
+    db.clear_tour_roster()
+    for cost, player_id in ids:
+        db.add_tour_roster_entry(player_id, cost)
+    await update.message.reply_text("Состав на тур успешно сохранён!")
+
+async def get_tour_roster(update, context):
+    if not await admin_only(update, context):
+        return
+    roster = db.get_tour_roster_with_player_info()
+    if not roster:
+        await update.message.reply_text("Состав на тур не задан.")
+        return
+    msg = "Состав на тур:\n"
+    for cost, pid, name, pos, club, nation, age, price in roster:
+        msg += f"{cost}: {pid}. {name} | {pos} | {club} | {nation} | {age} лет | {price} HC\n"
+    await update.message.reply_text(msg)
+
 async def admin_only(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     user_id = update.effective_user.id if update.effective_user else None
     if not is_admin(user_id):
