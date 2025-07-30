@@ -11,7 +11,8 @@ from config import TELEGRAM_TOKEN, ADMIN_ID
 import db
 from handlers.user_handlers import start, hc, IMAGES_DIR, \
     tour_start, tour_forward_1, tour_forward_2, tour_forward_3, \
-    tour_defender_1, tour_defender_2, tour_goalie, tour_captain
+    tour_defender_1, tour_defender_2, tour_goalie, tour_captain, \
+    tour_forward_callback, tour_defender_callback, tour_goalie_callback
 from handlers.admin_handlers import addhc, send_results
 from handlers.admin_handlers import (
     add_player_start, add_player_name, add_player_position, add_player_club,
