@@ -15,7 +15,7 @@ from handlers.admin_handlers import (
     add_player_nation, add_player_age, add_player_price, add_player_cancel, list_players, find_player,
     remove_player, edit_player_start, edit_player_name, edit_player_position, edit_player_club,
     edit_player_nation, edit_player_age, edit_player_price, edit_player_cancel,
-    set_tour_roster, get_tour_roster
+    set_tour_roster_start, set_tour_roster_process, get_tour_roster
 )
 
 ADD_NAME, ADD_POSITION, ADD_CLUB, ADD_NATION, ADD_AGE, ADD_PRICE = range(6)
@@ -102,7 +102,14 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('addhc', addhc))
     app.add_handler(CommandHandler('send_results', send_results))
     app.add_handler(CommandHandler('get_tour_roster', get_tour_roster))
-    app.add_handler(MessageHandler(filters.TEXT & filters.Regex(r'^(\d{2}: )?\d'), set_tour_roster))  # для удобного ввода через текстовое сообщение
+    set_tour_roster_conv = ConversationHandler(
+        entry_points=[CommandHandler('set_tour_roster', set_tour_roster_start)],
+        states={
+            20: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_tour_roster_process)],
+        },
+        fallbacks=[],
+    )
+    app.add_handler(set_tour_roster_conv)
 
     add_player_conv = ConversationHandler(
         entry_points=[CommandHandler('add_player', add_player_start)],

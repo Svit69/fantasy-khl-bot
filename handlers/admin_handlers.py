@@ -171,9 +171,17 @@ async def edit_player_cancel(update, context):
     return ConversationHandler.END
 
 # --- Тур: добавить и вывести состав ---
-async def set_tour_roster(update, context):
+SET_TOUR_ROSTER_WAIT = 20
+
+async def set_tour_roster_start(update, context):
     if not await admin_only(update, context):
-        return
+        return ConversationHandler.END
+    await update.message.reply_text(
+        "Пожалуйста, отправьте список игроков на тур в формате:\n50: 28, 1, ...\n40: ... и т.д. (ровно 20 игроков)"
+    )
+    return SET_TOUR_ROSTER_WAIT
+
+async def set_tour_roster_process(update, context):
     text = update.message.text
     lines = [line.strip() for line in text.split('\n') if line.strip()]
     ids = []
@@ -181,7 +189,7 @@ async def set_tour_roster(update, context):
         for line in lines:
             if ':' not in line:
                 await update.message.reply_text(f"Неверный формат строки: {line}")
-                return
+                return ConversationHandler.END
             cost_str, ids_str = line.split(':', 1)
             cost = int(cost_str.strip())
             id_list = [int(x.strip()) for x in ids_str.split(',') if x.strip()]
@@ -189,20 +197,21 @@ async def set_tour_roster(update, context):
                 ids.append((cost, player_id))
     except Exception as e:
         await update.message.reply_text(f"Ошибка разбора: {e}")
-        return
+        return ConversationHandler.END
     if len(ids) != 20:
         await update.message.reply_text(f"Ошибка: должно быть ровно 20 игроков, а не {len(ids)}")
-        return
+        return ConversationHandler.END
     # Проверка, что все игроки существуют
     for cost, player_id in ids:
         player = db.get_player_by_id(player_id)
         if not player:
             await update.message.reply_text(f"Игрок с id {player_id} не найден!")
-            return
+            return ConversationHandler.END
     db.clear_tour_roster()
     for cost, player_id in ids:
         db.add_tour_roster_entry(player_id, cost)
     await update.message.reply_text("Состав на тур успешно сохранён!")
+    return ConversationHandler.END
 
 async def get_tour_roster(update, context):
     if not await admin_only(update, context):
