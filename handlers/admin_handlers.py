@@ -173,23 +173,23 @@ async def edit_player_cancel(update, context):
 # --- Тур: добавить и вывести состав ---
 SET_BUDGET_WAIT = 21
 
-async def установить_бюджет_start(update, context):
+async def set_budget_start(update, context):
     if not await admin_only(update, context):
         return ConversationHandler.END
-    await update.message.reply_text("Пожалуйста, отправьте число — новый бюджет (например, 180):")
+    await update.message.reply_text("Please send the new budget as a positive integer (e.g., 180):")
     return SET_BUDGET_WAIT
 
-async def установить_бюджет_process(update, context):
+async def set_budget_process(update, context):
     text = update.message.text.strip()
     try:
         value = int(text)
         if value <= 0:
-            await update.message.reply_text("Бюджет должен быть положительным числом!")
+            await update.message.reply_text("Budget must be a positive integer!")
             return ConversationHandler.END
         db.set_budget(value)
-        await update.message.reply_text(f"Бюджет успешно установлен: {value}")
+        await update.message.reply_text(f"Budget set successfully: {value}")
     except Exception:
-        await update.message.reply_text("Ошибка! Введите целое положительное число.")
+        await update.message.reply_text("Error! Please send a positive integer.")
     return ConversationHandler.END
 
 SET_TOUR_ROSTER_WAIT = 20
