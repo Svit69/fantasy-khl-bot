@@ -68,8 +68,8 @@ async def tour_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"💰 Ваш бюджет: {budget} HC"
     )
     await update.message.reply_text(intro)
-    # Переходим к выбору первого нападающего
-    return TOUR_FORWARD_1
+    # Сразу показываем выбор первого нападающего!
+    return await tour_forward_1(update, context)
 
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton
 
