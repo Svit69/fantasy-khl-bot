@@ -9,7 +9,9 @@ import httpx
 from config import TELEGRAM_TOKEN, ADMIN_ID
 
 import db
-from handlers.handlers import start, tour, hc, addhc, send_results, IMAGES_DIR
+from handlers.user_handlers import start, hc, addhc, send_results, IMAGES_DIR, \
+    tour_start, tour_forward_1, tour_forward_2, tour_forward_3, \
+    tour_defender_1, tour_defender_2, tour_goalie, tour_captain
 from handlers.admin_handlers import (
     add_player_start, add_player_name, add_player_position, add_player_club,
     add_player_nation, add_player_age, add_player_price, add_player_cancel, list_players, find_player,
@@ -103,6 +105,22 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('addhc', addhc))
     app.add_handler(CommandHandler('send_results', send_results))
     app.add_handler(CommandHandler('get_tour_roster', get_tour_roster))
+
+    # --- ConversationHandler для /tour ---
+    tour_conv = ConversationHandler(
+        entry_points=[CommandHandler('tour', tour_start)],
+        states={
+            0: [MessageHandler(filters.TEXT & ~filters.COMMAND, tour_forward_1)],
+            1: [MessageHandler(filters.TEXT & ~filters.COMMAND, tour_forward_2)],
+            2: [MessageHandler(filters.TEXT & ~filters.COMMAND, tour_forward_3)],
+            3: [MessageHandler(filters.TEXT & ~filters.COMMAND, tour_defender_1)],
+            4: [MessageHandler(filters.TEXT & ~filters.COMMAND, tour_defender_2)],
+            5: [MessageHandler(filters.TEXT & ~filters.COMMAND, tour_goalie)],
+            6: [MessageHandler(filters.TEXT & ~filters.COMMAND, tour_captain)],
+        },
+        fallbacks=[],
+    )
+    app.add_handler(tour_conv)
 
     # ConversationHandler для установки бюджета
     set_budget_conv = ConversationHandler(

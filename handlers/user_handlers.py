@@ -27,18 +27,78 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     else:
         await update.message.reply_text(msg_id + 'Ты уже зарегистрирован!', reply_markup=markup)
 
-async def tour(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+# --- TOUR ConversationHandler states ---
+TOUR_START, TOUR_FORWARD_1, TOUR_FORWARD_2, TOUR_FORWARD_3, TOUR_DEFENDER_1, TOUR_DEFENDER_2, TOUR_GOALIE, TOUR_CAPTAIN = range(8)
+
+async def tour_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # 1. Отправить картинку тура и вводный текст с бюджетом
+    budget = db.get_budget() or 0
+    roster = db.get_tour_roster_with_player_info()
+    forwards = [p for p in roster if p[3].lower() == 'нападающий']
+    defenders = [p for p in roster if p[3].lower() == 'защитник']
+    goalies = [p for p in roster if p[3].lower() == 'вратарь']
+    context.user_data['tour_budget'] = budget
+    context.user_data['tour_roster'] = roster
+    context.user_data['tour_selected'] = {'forwards': [], 'defenders': [], 'goalie': None, 'captain': None, 'spent': 0}
+    # Отправить картинку (если есть)
     try:
-        files = [f for f in os.listdir(IMAGES_DIR) if f.lower().endswith((".jpg", ".jpeg", ".png"))]
-        if not files:
-            await update.message.reply_text('Изображение тура пока не загружено.')
-            return
-        latest = sorted(files)[-1]
-        with open(os.path.join(IMAGES_DIR, latest), 'rb') as img:
-            await update.message.reply_photo(photo=InputFile(img), caption='Состав игроков на тур:')
+        tour_img_path = None
+        tour_img_txt = os.path.join(os.getcwd(), 'latest_tour.txt')
+        if os.path.exists(tour_img_txt):
+            with open(tour_img_txt, 'r') as f:
+                fname = f.read().strip()
+                if fname:
+                    fpath = os.path.join(IMAGES_DIR, fname)
+                    if os.path.exists(fpath):
+                        tour_img_path = fpath
+        if not tour_img_path:
+            # fallback: last by name
+            files = [f for f in os.listdir(IMAGES_DIR) if f.lower().endswith((".jpg", ".jpeg", ".png"))]
+            if files:
+                tour_img_path = os.path.join(IMAGES_DIR, sorted(files)[-1])
+        if tour_img_path:
+            with open(tour_img_path, 'rb') as img:
+                await update.message.reply_photo(photo=InputFile(img))
     except Exception as e:
         logger.error(f'Ошибка при отправке изображения тура: {e}')
-        await update.message.reply_text('Ошибка при отправке изображения.')
+    # Вводный текст
+    intro = (
+        "Вот список игроков на тур. Выберите состав:\n"
+        "3 нападающих\n2 защитников\n1 вратаря\n\n1 капитан (из выбранных)\n\n"
+        f"💰 Ваш бюджет: {budget} HC"
+    )
+    await update.message.reply_text(intro)
+    # Переходим к выбору первого нападающего
+    return TOUR_FORWARD_1
+
+async def tour_forward_1(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # TODO: показать кнопки с нападающими, обработать выбор
+    pass
+
+async def tour_forward_2(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # TODO: показать кнопки с нападающими (без уже выбранных), обработать выбор
+    pass
+
+async def tour_forward_3(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # TODO: показать кнопки с нападающими (без уже выбранных), обработать выбор
+    pass
+
+async def tour_defender_1(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # TODO: показать кнопки с защитниками, обработать выбор
+    pass
+
+async def tour_defender_2(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # TODO: показать кнопки с защитниками (без уже выбранных), обработать выбор
+    pass
+
+async def tour_goalie(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # TODO: показать кнопки с вратарями, обработать выбор
+    pass
+
+async def tour_captain(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # TODO: показать кнопки с выбранными нападающими и защитниками, обработать выбор капитана
+    pass
+
 
 async def hc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
