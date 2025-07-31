@@ -84,7 +84,7 @@ async def send_player_choice(update, context, position, exclude_ids, next_state,
     # Получаем актуальный ростер
     roster = context.user_data['tour_roster']
     # Фильтруем по позиции и исключениям
-    players = [p for p in roster if p[3].lower() == position and p[0] not in exclude_ids and p[6] <= budget]
+    players = [p for p in roster if p[3].lower() == position and p[1] not in exclude_ids and p[7] <= budget]
     if not players:
         await update.effective_message.reply_text(f'Нет доступных игроков позиции {position} в рамках бюджета {budget} HC.')
         # Если next_state — функция, вызываем её, иначе возвращаем как есть
