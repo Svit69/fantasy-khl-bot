@@ -195,8 +195,8 @@ async def tour_defender_2(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return await send_player_choice(update, context, 'защитник', picked, TOUR_GOALIE, left)
 
 async def tour_goalie_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("tour_goalie_callback TRIGGERED", flush=True)
     try:
-        logger.info("tour_goalie_callback triggered")
         query = update.callback_query
         await query.answer()
         data = query.data
