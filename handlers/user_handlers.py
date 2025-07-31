@@ -104,6 +104,7 @@ async def tour_forward_1(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def tour_forward_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("tour_forward_callback TRIGGERED", flush=True)
     query = update.callback_query
     await query.answer()
     data = query.data
@@ -153,6 +154,7 @@ async def tour_forward_3(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return await send_player_choice(update, context, 'нападающий', picked, TOUR_DEFENDER_1, left)
 
 async def tour_defender_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("tour_defender_callback TRIGGERED", flush=True)
     query = update.callback_query
     await query.answer()
     data = query.data
