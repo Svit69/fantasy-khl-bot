@@ -138,7 +138,7 @@ async def tour_forward_callback(update: Update, context: ContextTypes.DEFAULT_TY
         elif len(context.user_data['tour_selected']['forwards']) == 2:
             print("tour_forward_callback SUCCESS: переход к tour_forward_3", flush=True)
             return await tour_forward_3(update, context)
-        else:
+        elif len(context.user_data['tour_selected']['forwards']) == 3:
             print("tour_forward_callback SUCCESS: переход к tour_defender_1", flush=True)
             return await tour_defender_1(update, context)
     except Exception as e:
