@@ -307,11 +307,9 @@ async def tour_captain(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def restart_tour_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    # Сброс и запуск процедуры сбора состава заново
-    # Передаем update.callback_query, чтобы корректно работал tour_start
-    await tour_start(query, context)
-    from .user_handlers import TOUR_FORWARD_1
-    return TOUR_FORWARD_1
+    # Запускаем процесс выбора состава заново через /tour (ConversationHandler entry_point)
+    await context.bot.send_message(chat_id=query.message.chat_id, text="/tour")
+    return ConversationHandler.END
 
 async def hc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
