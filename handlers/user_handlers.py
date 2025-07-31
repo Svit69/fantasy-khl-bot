@@ -300,7 +300,53 @@ async def tour_goalie(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def tour_captain(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await message.reply_text("Выбор капитана в разработке. Спасибо за участие!")
+    from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+    # Универсально получаем message для reply_text
+    message = getattr(update, "effective_message", None)
+    if message is None and hasattr(update, "message"):
+        message = update.message
+    elif message is None and hasattr(update, "callback_query"):
+        message = update.callback_query.message
+
+    selected = context.user_data['tour_selected']
+    roster = context.user_data['tour_roster']
+    # Собираем id полевых игроков
+    field_ids = selected['forwards'] + selected['defenders']
+    # Получаем инфу по игрокам
+    candidates = [p for p in roster if p[1] in field_ids]
+    keyboard = [
+        [InlineKeyboardButton(f"{p[2]} ({p[3]})", callback_data=f"pick_captain_{p[1]}")]
+        for p in candidates
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    text = "Назначь одного полевого игрока из состава капитаном. Его итоговые очки умножим на 1.5"
+    await message.reply_text(text, reply_markup=reply_markup)
+    return TOUR_CAPTAIN
+
+# --- Обработчик выбора капитана ---
+async def tour_captain_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    if not data.startswith('pick_captain_'):
+        await query.edit_message_text('Некорректный выбор капитана.')
+        return TOUR_CAPTAIN
+    captain_id = int(data.replace('pick_captain_', ''))
+    context.user_data['tour_selected']['captain'] = captain_id
+    # Получаем финальный состав
+    selected = context.user_data['tour_selected']
+    roster = context.user_data['tour_roster']
+    def get_name(pid):
+        p = next((x for x in roster if x[1]==pid), None)
+        return f"{p[2]} ({p[3]})" if p else str(pid)
+    text = "\n".join([
+        "Ваш итоговый состав:",
+        f"Нападающие: {', '.join(get_name(pid) for pid in selected['forwards'])}",
+        f"Защитники: {', '.join(get_name(pid) for pid in selected['defenders'])}",
+        f"Вратарь: {get_name(selected['goalie'])}",
+        f"\nКапитан: {get_name(captain_id)} (очки x1.5)"
+    ])
+    await query.edit_message_text(text)
     return ConversationHandler.END
 
 

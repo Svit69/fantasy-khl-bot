@@ -137,7 +137,11 @@ if __name__ == '__main__':
                 CallbackQueryHandler(tour_goalie_callback, pattern=r"^pick_\d+_вратарь$"),
                 CallbackQueryHandler(restart_tour_callback, pattern=r"^restart_tour$")
             ],
-            TOUR_CAPTAIN: [MessageHandler(filters.ALL, tour_captain)],
+            TOUR_CAPTAIN: [
+                CallbackQueryHandler(tour_captain_callback, pattern=r"^pick_captain_\d+$"),
+                CallbackQueryHandler(restart_tour_callback, pattern=r"^restart_tour$"),
+                MessageHandler(filters.ALL, tour_captain)
+            ],
         },
         fallbacks=[],
     )
