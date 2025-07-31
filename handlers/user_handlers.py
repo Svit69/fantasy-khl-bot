@@ -195,30 +195,37 @@ async def tour_defender_2(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return await send_player_choice(update, context, 'защитник', picked, TOUR_GOALIE, left)
 
 async def tour_goalie_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    data = query.data
-    # Ожидается формат pick_<player_id>_вратарь
-    if not data.startswith('pick_') or '_вратарь' not in data:
-        await query.edit_message_text('Некорректный выбор.')
+    try:
+        logger.info("tour_goalie_callback triggered")
+        query = update.callback_query
+        await query.answer()
+        data = query.data
+        logger.info(f"Callback data: {data}")
+        # Ожидается формат pick_<player_id>_вратарь
+        if not data.startswith('pick_') or '_вратарь' not in data:
+            await query.edit_message_text('Некорректный выбор.')
+            return TOUR_GOALIE
+        pid = int(data.split('_')[1])
+        roster = context.user_data['tour_roster']
+        player = next((p for p in roster if p[1] == pid), None)
+        if not player:
+            await query.edit_message_text('Игрок не найден.')
+            return TOUR_GOALIE
+        budget = context.user_data['tour_budget']
+        spent = context.user_data['tour_selected']['spent']
+        if spent + player[6] > budget:
+            await query.edit_message_text(f'Недостаточно HC для выбора {player[1]}!')
+            return TOUR_GOALIE
+        context.user_data['tour_selected']['goalie'] = pid
+        context.user_data['tour_selected']['spent'] += player[6]
+        left = budget - context.user_data['tour_selected']['spent']
+        await query.edit_message_text(f'Вы выбрали: {player[1]} ({player[6]} HC)\nОсталось HC: {left}')
+        # Дальше — выбор капитана
+        return TOUR_CAPTAIN
+    except Exception as e:
+        logger.exception("Exception in tour_goalie_callback")
+        await query.edit_message_text(f"Ошибка: {e}")
         return TOUR_GOALIE
-    pid = int(data.split('_')[1])
-    roster = context.user_data['tour_roster']
-    player = next((p for p in roster if p[1] == pid), None)
-    if not player:
-        await query.edit_message_text('Игрок не найден.')
-        return TOUR_GOALIE
-    budget = context.user_data['tour_budget']
-    spent = context.user_data['tour_selected']['spent']
-    if spent + player[6] > budget:
-        await query.edit_message_text(f'Недостаточно HC для выбора {player[1]}!')
-        return TOUR_GOALIE
-    context.user_data['tour_selected']['goalie'] = pid
-    context.user_data['tour_selected']['spent'] += player[6]
-    left = budget - context.user_data['tour_selected']['spent']
-    await query.edit_message_text(f'Вы выбрали: {player[1]} ({player[6]} HC)\nОсталось HC: {left}')
-    # Дальше — выбор капитана
-    return TOUR_CAPTAIN
 
 async def tour_goalie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     budget = context.user_data['tour_budget']
