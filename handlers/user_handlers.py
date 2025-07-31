@@ -155,7 +155,7 @@ async def tour_forward_2(update: Update, context: ContextTypes.DEFAULT_TYPE):
     spent = context.user_data['tour_selected']['spent']
     left = budget - spent
     picked = context.user_data['tour_selected']['forwards']
-    return await send_player_choice(update, context, 'нападающий', picked, TOUR_FORWARD_2, left)
+    return await send_player_choice(update, context, 'нападающий', picked, TOUR_FORWARD_3, left)
 
 
 async def tour_forward_3(update: Update, context: ContextTypes.DEFAULT_TYPE):
