@@ -104,44 +104,51 @@ async def tour_forward_1(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def tour_forward_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print("tour_forward_callback TRIGGERED", flush=True)
     try:
         query = update.callback_query
         await query.answer()
         data = query.data
         print(f"Callback data: {data}", flush=True)
-    # Ожидается формат pick_<player_id>_нападающий
-    if not data.startswith('pick_') or '_нападающий' not in data:
-        await query.edit_message_text('Некорректный выбор.')
+        # Ожидается формат pick_<player_id>_нападающий
+        if not data.startswith('pick_') or '_нападающий' not in data:
+            await query.edit_message_text('Некорректный выбор.')
+            return TOUR_FORWARD_1
+        pid = int(data.split('_')[1])
+        # Получаем игрока по id
+        roster = context.user_data['tour_roster']
+        player = next((p for p in roster if p[1] == pid), None)
+        if not player:
+            await query.edit_message_text('Игрок не найден.')
+            return TOUR_FORWARD_1
+        # Проверяем бюджет
+        budget = context.user_data['tour_budget']
+        spent = context.user_data['tour_selected']['spent']
+        if spent + player[6] > budget:
+            await query.edit_message_text(f'Недостаточно HC для выбора {player[1]}!')
+            return TOUR_FORWARD_1
+        # Сохраняем выбор
+        context.user_data['tour_selected']['forwards'].append(pid)
+        context.user_data['tour_selected']['spent'] += player[6]
+        left = budget - context.user_data['tour_selected']['spent']
+        await query.edit_message_text(f'Вы выбрали: {player[1]} ({player[6]} HC)\nОсталось HC: {left}')
+        # Переход ко второму или третьему нападающему
+        if len(context.user_data['tour_selected']['forwards']) == 1:
+            print("tour_forward_callback SUCCESS: переход к tour_forward_2", flush=True)
+            return await tour_forward_2(update, context)
+        elif len(context.user_data['tour_selected']['forwards']) == 2:
+            print("tour_forward_callback SUCCESS: переход к tour_forward_3", flush=True)
+            return await tour_forward_3(update, context)
+        else:
+            print("tour_forward_callback SUCCESS: переход к TOUR_DEFENDER_1", flush=True)
+            return TOUR_DEFENDER_1
+    except Exception as e:
+        print(f"tour_forward_callback ERROR: {e}", flush=True)
+        logger.exception("Exception in tour_forward_callback")
+        await query.edit_message_text(f"Ошибка: {e}")
         return TOUR_FORWARD_1
-    pid = int(data.split('_')[1])
-    # Получаем игрока по id
-    roster = context.user_data['tour_roster']
-    player = next((p for p in roster if p[1] == pid), None)
-    if not player:
-        await query.edit_message_text('Игрок не найден.')
-        return TOUR_FORWARD_1
-    # Проверяем бюджет
-    budget = context.user_data['tour_budget']
-    spent = context.user_data['tour_selected']['spent']
-    if spent + player[6] > budget:
-        await query.edit_message_text(f'Недостаточно HC для выбора {player[1]}!')
-        return TOUR_FORWARD_1
-    # Сохраняем выбор
-    context.user_data['tour_selected']['forwards'].append(pid)
-    context.user_data['tour_selected']['spent'] += player[6]
-    left = budget - context.user_data['tour_selected']['spent']
-    await query.edit_message_text(f'Вы выбрали: {player[1]} ({player[6]} HC)\nОсталось HC: {left}')
-    # Переход ко второму или третьему нападающему
-    if len(context.user_data['tour_selected']['forwards']) == 1:
-        print("tour_forward_callback SUCCESS: переход к tour_forward_2", flush=True)
-        return await tour_forward_2(update, context)
-    elif len(context.user_data['tour_selected']['forwards']) == 2:
-        print("tour_forward_callback SUCCESS: переход к tour_forward_3", flush=True)
-        return await tour_forward_3(update, context)
-    else:
-        print("tour_forward_callback SUCCESS: переход к TOUR_DEFENDER_1", flush=True)
-        return TOUR_DEFENDER_1
+    finally:
+        print("tour_forward_callback FINISHED", flush=True)
+
 
 async def tour_forward_2(update: Update, context: ContextTypes.DEFAULT_TYPE):
     budget = context.user_data['tour_budget']
@@ -159,37 +166,36 @@ async def tour_forward_3(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return await send_player_choice(update, context, 'нападающий', picked, TOUR_DEFENDER_1, left)
 
 async def tour_defender_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print("tour_defender_callback TRIGGERED", flush=True)
     try:
         query = update.callback_query
         await query.answer()
         data = query.data
         print(f"Callback data: {data}", flush=True)
-    # Ожидается формат pick_<player_id>_защитник
-    if not data.startswith('pick_') or '_защитник' not in data:
-        await query.edit_message_text('Некорректный выбор.')
-        return TOUR_DEFENDER_1
-    pid = int(data.split('_')[1])
-    roster = context.user_data['tour_roster']
-    player = next((p for p in roster if p[1] == pid), None)
-    if not player:
-        await query.edit_message_text('Игрок не найден.')
-        return TOUR_DEFENDER_1
-    budget = context.user_data['tour_budget']
-    spent = context.user_data['tour_selected']['spent']
-    if spent + player[6] > budget:
-        await query.edit_message_text(f'Недостаточно HC для выбора {player[1]}!')
-        return TOUR_DEFENDER_1
-    context.user_data['tour_selected']['defenders'].append(pid)
-    context.user_data['tour_selected']['spent'] += player[6]
-    left = budget - context.user_data['tour_selected']['spent']
-    await query.edit_message_text(f'Вы выбрали: {player[1]} ({player[6]} HC)\nОсталось HC: {left}')
-    if len(context.user_data['tour_selected']['defenders']) == 1:
-        print("tour_defender_callback SUCCESS: переход к tour_defender_2", flush=True)
-        return await tour_defender_2(update, context)
-    else:
-        print("tour_defender_callback SUCCESS: переход к tour_goalie", flush=True)
-        return await tour_goalie(update, context)
+        # Ожидается формат pick_<player_id>_защитник
+        if not data.startswith('pick_') or '_защитник' not in data:
+            await query.edit_message_text('Некорректный выбор.')
+            return TOUR_DEFENDER_1
+        pid = int(data.split('_')[1])
+        roster = context.user_data['tour_roster']
+        player = next((p for p in roster if p[1] == pid), None)
+        if not player:
+            await query.edit_message_text('Игрок не найден.')
+            return TOUR_DEFENDER_1
+        budget = context.user_data['tour_budget']
+        spent = context.user_data['tour_selected']['spent']
+        if spent + player[6] > budget:
+            await query.edit_message_text(f'Недостаточно HC для выбора {player[1]}!')
+            return TOUR_DEFENDER_1
+        context.user_data['tour_selected']['defenders'].append(pid)
+        context.user_data['tour_selected']['spent'] += player[6]
+        left = budget - context.user_data['tour_selected']['spent']
+        await query.edit_message_text(f'Вы выбрали: {player[1]} ({player[6]} HC)\nОсталось HC: {left}')
+        if len(context.user_data['tour_selected']['defenders']) == 1:
+            print("tour_defender_callback SUCCESS: переход к tour_defender_2", flush=True)
+            return await tour_defender_2(update, context)
+        else:
+            print("tour_defender_callback SUCCESS: переход к tour_goalie", flush=True)
+            return await tour_goalie(update, context)
     except Exception as e:
         print(f"tour_defender_callback ERROR: {e}", flush=True)
         logger.exception("Exception in tour_defender_callback")
@@ -214,15 +220,11 @@ async def tour_defender_2(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return await send_player_choice(update, context, 'защитник', picked, TOUR_GOALIE, left)
 
 async def tour_goalie_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print("tour_goalie_callback TRIGGERED", flush=True)
     try:
         query = update.callback_query
         await query.answer()
         data = query.data
         print(f"Callback data: {data}", flush=True)
-        await query.answer()
-        data = query.data
-        logger.info(f"Callback data: {data}")
         # Ожидается формат pick_<player_id>_вратарь
         if not data.startswith('pick_') or '_вратарь' not in data:
             await query.edit_message_text('Некорректный выбор.')
