@@ -126,12 +126,12 @@ async def tour_forward_callback(update: Update, context: ContextTypes.DEFAULT_TY
         # Проверяем бюджет
         budget = context.user_data['tour_budget']
         spent = context.user_data['tour_selected']['spent']
-        if spent + player[6] > budget:
+        if spent + player[7] > budget:
             await query.edit_message_text(f'Недостаточно HC для выбора {player[1]}!')
             return TOUR_FORWARD_1
         # Сохраняем выбор
         context.user_data['tour_selected']['forwards'].append(pid)
-        context.user_data['tour_selected']['spent'] += player[6]
+        context.user_data['tour_selected']['spent'] += player[7]
         left = budget - context.user_data['tour_selected']['spent']
         await query.edit_message_text(f'Вы выбрали: {player[2]} ({player[7]} HC)\nОсталось HC: {left}')
         # Переход ко второму или третьему нападающему
@@ -187,11 +187,11 @@ async def tour_defender_callback(update: Update, context: ContextTypes.DEFAULT_T
             return TOUR_DEFENDER_1
         budget = context.user_data['tour_budget']
         spent = context.user_data['tour_selected']['spent']
-        if spent + player[6] > budget:
+        if spent + player[7] > budget:
             await query.edit_message_text(f'Недостаточно HC для выбора {player[1]}!')
             return TOUR_DEFENDER_1
         context.user_data['tour_selected']['defenders'].append(pid)
-        context.user_data['tour_selected']['spent'] += player[6]
+        context.user_data['tour_selected']['spent'] += player[7]
         left = budget - context.user_data['tour_selected']['spent']
         await query.edit_message_text(f'Вы выбрали: {player[2]} ({player[7]} HC)\nОсталось HC: {left}')
         if len(context.user_data['tour_selected']['defenders']) == 1:
@@ -241,11 +241,11 @@ async def tour_goalie_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             return TOUR_GOALIE
         budget = context.user_data['tour_budget']
         spent = context.user_data['tour_selected']['spent']
-        if spent + player[6] > budget:
+        if spent + player[7] > budget:
             await query.edit_message_text(f'Недостаточно HC для выбора {player[1]}!')
             return TOUR_GOALIE
         context.user_data['tour_selected']['goalie'] = pid
-        context.user_data['tour_selected']['spent'] += player[6]
+        context.user_data['tour_selected']['spent'] += player[7]
         left = budget - context.user_data['tour_selected']['spent']
         await query.edit_message_text(f'Вы выбрали: {player[2]} ({player[7]} HC)\nОсталось HC: {left}')
         # Дальше — выбор капитана
