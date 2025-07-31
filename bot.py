@@ -112,12 +112,30 @@ if __name__ == '__main__':
     tour_conv = ConversationHandler(
         entry_points=[CommandHandler('tour', tour_start)],
         states={
-            TOUR_FORWARD_1: [CallbackQueryHandler(tour_forward_callback, pattern=r"^pick_\d+_нападающий$")],
-            TOUR_FORWARD_2: [CallbackQueryHandler(tour_forward_callback, pattern=r"^pick_\d+_нападающий$")],
-            TOUR_FORWARD_3: [CallbackQueryHandler(tour_forward_callback, pattern=r"^pick_\d+_нападающий$")],
-            TOUR_DEFENDER_1: [CallbackQueryHandler(tour_defender_callback, pattern=r"^pick_\d+_защитник$")],
-            TOUR_DEFENDER_2: [CallbackQueryHandler(tour_defender_callback, pattern=r"^pick_\d+_защитник$")],
-            TOUR_GOALIE: [CallbackQueryHandler(tour_goalie_callback, pattern=r"^pick_\d+_вратарь$")],
+            TOUR_FORWARD_1: [
+                CallbackQueryHandler(tour_forward_callback, pattern=r"^pick_\d+_нападающий$"),
+                CallbackQueryHandler(restart_tour_callback, pattern=r"^restart_tour$")
+            ],
+            TOUR_FORWARD_2: [
+                CallbackQueryHandler(tour_forward_callback, pattern=r"^pick_\d+_нападающий$"),
+                CallbackQueryHandler(restart_tour_callback, pattern=r"^restart_tour$")
+            ],
+            TOUR_FORWARD_3: [
+                CallbackQueryHandler(tour_forward_callback, pattern=r"^pick_\d+_нападающий$"),
+                CallbackQueryHandler(restart_tour_callback, pattern=r"^restart_tour$")
+            ],
+            TOUR_DEFENDER_1: [
+                CallbackQueryHandler(tour_defender_callback, pattern=r"^pick_\d+_защитник$"),
+                CallbackQueryHandler(restart_tour_callback, pattern=r"^restart_tour$")
+            ],
+            TOUR_DEFENDER_2: [
+                CallbackQueryHandler(tour_defender_callback, pattern=r"^pick_\d+_защитник$"),
+                CallbackQueryHandler(restart_tour_callback, pattern=r"^restart_tour$")
+            ],
+            TOUR_GOALIE: [
+                CallbackQueryHandler(tour_goalie_callback, pattern=r"^pick_\d+_вратарь$"),
+                CallbackQueryHandler(restart_tour_callback, pattern=r"^restart_tour$")
+            ],
             TOUR_CAPTAIN: [MessageHandler(filters.ALL, tour_captain)],
         },
         fallbacks=[],

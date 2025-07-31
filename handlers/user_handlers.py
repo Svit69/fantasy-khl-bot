@@ -81,16 +81,30 @@ async def tour_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton
 
 async def send_player_choice(update, context, position, exclude_ids, next_state, budget):
+    from telegram import InlineKeyboardMarkup, InlineKeyboardButton
     # Получаем актуальный ростер
     roster = context.user_data['tour_roster']
     # Фильтруем по позиции и исключениям
     players = [p for p in roster if p[3].lower() == position and p[1] not in exclude_ids and p[7] <= budget]
     if not players:
-        await update.effective_message.reply_text(f'Нет доступных игроков позиции {position} в рамках бюджета {budget} HC.')
-        # Если next_state — функция, вызываем её, иначе возвращаем как есть
-        if callable(next_state):
-            return await next_state(update, context)
-        return next_state
+        # Проверка: если не хватает HC для обязательного выбора
+        text = (
+            '🚨 Вы привысили потолок зарплат. Пересоберите состав, чтобы вписаться в лимит.'
+        )
+        keyboard = [
+            [InlineKeyboardButton('Пересобрать состав', callback_data='restart_tour')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.effective_message.reply_text(text, reply_markup=reply_markup)
+        return ConversationHandler.END
+    keyboard = []
+    for p in players:
+        btn_text = f"{p[2]} — {p[7]} HC"
+        keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"pick_{p[1]}_{position}")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    text = f"Выберите {position} (осталось HC: {budget})"
+    await update.effective_message.reply_text(text, reply_markup=reply_markup)
+    return next_state
     keyboard = []
     for p in players:
         btn_text = f"{p[2]} — {p[7]} HC"
@@ -277,6 +291,12 @@ async def tour_captain(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text("Выбор капитана в разработке. Спасибо за участие!")
     return ConversationHandler.END
 
+
+async def restart_tour_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    # Сброс и запуск процедуры сбора состава заново
+    return await tour_start(update, context)
 
 async def hc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
