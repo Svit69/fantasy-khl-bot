@@ -143,7 +143,8 @@ async def tour_forward_callback(update: Update, context: ContextTypes.DEFAULT_TY
             return await tour_forward_3(update, context)
         elif len(context.user_data['tour_selected']['forwards']) == 3:
             print("tour_forward_callback SUCCESS: переход к tour_defender_1", flush=True)
-            return await tour_defender_1(update, context)
+            await tour_defender_1(update, context)
+            return TOUR_DEFENDER_1
     except Exception as e:
         print(f"tour_forward_callback ERROR: {e}", flush=True)
         logger.exception("Exception in tour_forward_callback")
@@ -162,12 +163,9 @@ async def tour_forward_2(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def tour_forward_3(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    budget = context.user_data['tour_budget']
-    spent = context.user_data['tour_selected']['spent']
-    left = budget - spent
-    picked = context.user_data['tour_selected']['forwards']
-    # Показываем клавиатуру для третьего нападающего, затем — защитники
-    return await send_player_choice(update, context, 'нападающий', picked, tour_defender_1, left)
+    # После выбора третьего нападающего — сразу переход к выбору защитника
+    await tour_defender_1(update, context)
+    return TOUR_DEFENDER_1
 
 async def tour_defender_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
