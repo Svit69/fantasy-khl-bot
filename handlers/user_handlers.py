@@ -23,14 +23,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
     markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     if registered:
-        await update.effective_message.reply_text(msg_id + msg, reply_markup=markup)
+        await message.reply_text(msg_id + msg, reply_markup=markup)
     else:
-        await update.effective_message.reply_text(msg_id + 'Ты уже зарегистрирован!', reply_markup=markup)
+        await message.reply_text(msg_id + 'Ты уже зарегистрирован!', reply_markup=markup)
 
 # --- TOUR ConversationHandler states ---
 TOUR_START, TOUR_FORWARD_1, TOUR_FORWARD_2, TOUR_FORWARD_3, TOUR_DEFENDER_1, TOUR_DEFENDER_2, TOUR_GOALIE, TOUR_CAPTAIN = range(8)
 
 async def tour_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Получаем объект сообщения для ответа (универсально для Update и CallbackQuery)
+    message = getattr(update, "effective_message", None)
+    if message is None and hasattr(update, "message"):
+        message = update.message
+    elif message is None and hasattr(update, "callback_query"):
+        message = update.callback_query.message
     # 1. Отправить картинку тура и вводный текст с бюджетом
     budget = db.get_budget() or 0
     roster = db.get_tour_roster_with_player_info()
@@ -74,7 +80,7 @@ async def tour_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "3 нападающих\n2 защитников\n1 вратаря\n\n1 капитан (из выбранных)\n\n"
         f"💰 Ваш бюджет: {budget} HC"
     )
-    await update.effective_message.reply_text(intro)
+    await message.reply_text(intro)
     # Сразу показываем выбор первого нападающего!
     return await tour_forward_1(update, context)
 
@@ -95,7 +101,7 @@ async def send_player_choice(update, context, position, exclude_ids, next_state,
             [InlineKeyboardButton('Пересобрать состав', callback_data='restart_tour')]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.effective_message.reply_text(text, reply_markup=reply_markup)
+        await message.reply_text(text, reply_markup=reply_markup)
         return ConversationHandler.END
     keyboard = []
     for p in players:
@@ -103,7 +109,7 @@ async def send_player_choice(update, context, position, exclude_ids, next_state,
         keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"pick_{p[1]}_{position}")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     text = f"Выберите {position} (осталось HC: {budget})"
-    await update.effective_message.reply_text(text, reply_markup=reply_markup)
+    await message.reply_text(text, reply_markup=reply_markup)
     return next_state
     keyboard = []
     for p in players:
@@ -111,7 +117,7 @@ async def send_player_choice(update, context, position, exclude_ids, next_state,
         keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"pick_{p[1]}_{position}")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     text = f"Выберите {position} (осталось HC: {budget})"
-    await update.effective_message.reply_text(text, reply_markup=reply_markup)
+    await message.reply_text(text, reply_markup=reply_markup)
     return next_state
 
 async def tour_forward_1(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -288,7 +294,7 @@ async def tour_goalie(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def tour_captain(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.effective_message.reply_text("Выбор капитана в разработке. Спасибо за участие!")
+    await message.reply_text("Выбор капитана в разработке. Спасибо за участие!")
     return ConversationHandler.END
 
 
@@ -303,6 +309,6 @@ async def hc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     data = db.get_user_by_id(user.id)
     if data:
-        await update.effective_message.reply_text(f'💰 Твой баланс: {data[3]} HC')
+        await message.reply_text(f'💰 Твой баланс: {data[3]} HC')
     else:
-        await update.effective_message.reply_text('Ты не зарегистрирован!')
+        await message.reply_text('Ты не зарегистрирован!')
