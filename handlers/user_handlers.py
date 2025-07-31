@@ -83,8 +83,8 @@ async def send_player_choice(update, context, position, exclude_ids, next_state,
         return next_state
     keyboard = []
     for p in players:
-        btn_text = f"{p[1]} — {p[6]} HC"
-        keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"pick_{p[0]}_{position}")])
+        btn_text = f"{p[2]} — {p[7]} HC"
+        keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"pick_{p[1]}_{position}")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     text = f"Выберите {position} (осталось HC: {budget})"
     await update.effective_message.reply_text(text, reply_markup=reply_markup)
@@ -107,7 +107,7 @@ async def tour_forward_callback(update: Update, context: ContextTypes.DEFAULT_TY
     pid = int(data.split('_')[1])
     # Получаем игрока по id
     roster = context.user_data['tour_roster']
-    player = next((p for p in roster if p[0] == pid), None)
+    player = next((p for p in roster if p[1] == pid), None)
     if not player:
         await query.edit_message_text('Игрок не найден.')
         return TOUR_FORWARD_1
@@ -155,7 +155,7 @@ async def tour_defender_callback(update: Update, context: ContextTypes.DEFAULT_T
         return TOUR_DEFENDER_1
     pid = int(data.split('_')[1])
     roster = context.user_data['tour_roster']
-    player = next((p for p in roster if p[0] == pid), None)
+    player = next((p for p in roster if p[1] == pid), None)
     if not player:
         await query.edit_message_text('Игрок не найден.')
         return TOUR_DEFENDER_1
@@ -197,7 +197,7 @@ async def tour_goalie_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         return TOUR_GOALIE
     pid = int(data.split('_')[1])
     roster = context.user_data['tour_roster']
-    player = next((p for p in roster if p[0] == pid), None)
+    player = next((p for p in roster if p[1] == pid), None)
     if not player:
         await query.edit_message_text('Игрок не найден.')
         return TOUR_GOALIE
