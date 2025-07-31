@@ -198,9 +198,10 @@ async def tour_defender_callback(update: Update, context: ContextTypes.DEFAULT_T
         if len(context.user_data['tour_selected']['defenders']) == 1:
             print("tour_defender_callback SUCCESS: переход к tour_defender_2", flush=True)
             return await tour_defender_2(update, context)
-        else:
+        elif len(context.user_data['tour_selected']['defenders']) == 2:
             print("tour_defender_callback SUCCESS: переход к tour_goalie", flush=True)
-            return await tour_goalie(update, context)
+            await tour_goalie(update, context)
+            return TOUR_GOALIE
     except Exception as e:
         print(f"tour_defender_callback ERROR: {e}", flush=True)
         logger.exception("Exception in tour_defender_callback")
@@ -222,7 +223,8 @@ async def tour_defender_2(update: Update, context: ContextTypes.DEFAULT_TYPE):
     spent = context.user_data['tour_selected']['spent']
     left = budget - spent
     picked = context.user_data['tour_selected']['defenders']
-    return await send_player_choice(update, context, 'защитник', picked, TOUR_GOALIE, left)
+    # Показываем клавиатуру для второго защитника, next_state — TOUR_DEFENDER_2
+    return await send_player_choice(update, context, 'защитник', picked, TOUR_DEFENDER_2, left)
 
 async def tour_goalie_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
