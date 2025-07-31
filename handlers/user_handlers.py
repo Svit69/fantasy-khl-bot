@@ -1,5 +1,5 @@
 from telegram import Update, InputFile, ReplyKeyboardMarkup
-from telegram.ext import ContextTypes
+from telegram.ext import ContextTypes, ConversationHandler
 from config import ADMIN_ID
 import db
 import os
@@ -23,9 +23,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
     markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     if registered:
-        await update.message.reply_text(msg_id + msg, reply_markup=markup)
+        await update.effective_message.reply_text(msg_id + msg, reply_markup=markup)
     else:
-        await update.message.reply_text(msg_id + 'Ты уже зарегистрирован!', reply_markup=markup)
+        await update.effective_message.reply_text(msg_id + 'Ты уже зарегистрирован!', reply_markup=markup)
 
 # --- TOUR ConversationHandler states ---
 TOUR_START, TOUR_FORWARD_1, TOUR_FORWARD_2, TOUR_FORWARD_3, TOUR_DEFENDER_1, TOUR_DEFENDER_2, TOUR_GOALIE, TOUR_CAPTAIN = range(8)
@@ -74,7 +74,7 @@ async def tour_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "3 нападающих\n2 защитников\n1 вратаря\n\n1 капитан (из выбранных)\n\n"
         f"💰 Ваш бюджет: {budget} HC"
     )
-    await update.message.reply_text(intro)
+    await update.effective_message.reply_text(intro)
     # Сразу показываем выбор первого нападающего!
     return await tour_forward_1(update, context)
 
@@ -302,6 +302,6 @@ async def hc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     data = db.get_user_by_id(user.id)
     if data:
-        await update.message.reply_text(f'💰 Твой баланс: {data[3]} HC')
+        await update.effective_message.reply_text(f'💰 Твой баланс: {data[3]} HC')
     else:
-        await update.message.reply_text('Ты не зарегистрирован!')
+        await update.effective_message.reply_text('Ты не зарегистрирован!')
