@@ -277,8 +277,8 @@ async def tour_goalie_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         context.user_data['tour_selected']['spent'] += player[7]
         left = budget - context.user_data['tour_selected']['spent']
         await query.edit_message_text(f'Вы выбрали: {player[2]} ({player[7]} HC)\nОсталось HC: {left}')
-        # Дальше — выбор капитана
-        return TOUR_CAPTAIN
+        # Показываем этап выбора капитана
+        return await tour_captain(update, context)
     except Exception as e:
         print(f"tour_goalie_callback ERROR: {e}", flush=True)
         logger.exception("Exception in tour_goalie_callback")
@@ -325,6 +325,7 @@ async def tour_captain(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- Обработчик выбора капитана ---
 async def tour_captain_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    from telegram import InlineKeyboardMarkup, InlineKeyboardButton
     query = update.callback_query
     await query.answer()
     data = query.data
@@ -332,21 +333,42 @@ async def tour_captain_callback(update: Update, context: ContextTypes.DEFAULT_TY
         await query.edit_message_text('Некорректный выбор капитана.')
         return TOUR_CAPTAIN
     captain_id = int(data.replace('pick_captain_', ''))
-    context.user_data['tour_selected']['captain'] = captain_id
-    # Получаем финальный состав
     selected = context.user_data['tour_selected']
     roster = context.user_data['tour_roster']
-    def get_name(pid):
+    field_ids = selected['forwards'] + selected['defenders']
+    if captain_id not in field_ids:
+        await query.edit_message_text('Капитан должен быть полевым игроком из вашего состава!')
+        return TOUR_CAPTAIN
+    context.user_data['tour_selected']['captain'] = captain_id
+    # Формируем красивое итоговое сообщение
+    def get_name(pid, emoji=None, captain=False):
         p = next((x for x in roster if x[1]==pid), None)
-        return f"{p[2]} ({p[3]})" if p else str(pid)
-    text = "\n".join([
-        "Ваш итоговый состав:",
-        f"Нападающие: {', '.join(get_name(pid) for pid in selected['forwards'])}",
-        f"Защитники: {', '.join(get_name(pid) for pid in selected['defenders'])}",
-        f"Вратарь: {get_name(selected['goalie'])}",
-        f"\nКапитан: {get_name(captain_id)} (очки x1.5)"
-    ])
-    await query.edit_message_text(text)
+        if not p:
+            return str(pid)
+        base = f"{p[2]} ({p[4]})"
+        if captain:
+            return f"🏅 {base}"
+        if emoji:
+            return f"{emoji} {base}"
+        return base
+    forwards = ', '.join(get_name(pid, '🎯', pid==captain_id) for pid in selected['forwards'])
+    defenders = ', '.join(get_name(pid, '🛡', pid==captain_id) for pid in selected['defenders'])
+    goalie = get_name(selected['goalie'], '🥅', False)
+    captain = get_name(captain_id, None, True)
+    spent = selected['spent']
+    budget = context.user_data.get('tour_budget', 0)
+    text = (
+        "Ваш итоговый состав:\n"
+        f"{goalie}\n"
+        f"{defenders}\n"
+        f"{forwards}\n\n"
+        f"{captain} (очки x1.5)\n\n"
+        f"💰 Потрачено: {spent} HC из {budget} HC"
+    )
+    # Кнопка "Начать заново"
+    keyboard = [[InlineKeyboardButton('Пересобрать состав', callback_data='restart_tour')]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.edit_message_text(text, reply_markup=reply_markup)
     return ConversationHandler.END
 
 
