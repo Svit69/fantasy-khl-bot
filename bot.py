@@ -92,7 +92,6 @@ if __name__ == '__main__':
     
     # Регистрация обработчиков
     app.add_handler(CommandHandler('start', start))
-    app.add_handler(CommandHandler('tour', tour_start))
     app.add_handler(CommandHandler('hc', hc))
     
     send_tour_image_conv = ConversationHandler(
