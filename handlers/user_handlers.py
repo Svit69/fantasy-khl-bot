@@ -39,6 +39,13 @@ async def tour_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     goalies = [p for p in roster if p[3].lower() == 'вратарь']
     context.user_data['tour_budget'] = budget
     context.user_data['tour_roster'] = roster
+    context.user_data['tour_selected'] = {
+        'forwards': [],
+        'defenders': [],
+        'goalie': None,
+        'captain': None,
+        'spent': 0
+    }
     context.user_data['tour_selected'] = {'forwards': [], 'defenders': [], 'goalie': None, 'captain': None, 'spent': 0}
     # Отправить картинку (если есть)
     try:
@@ -225,8 +232,8 @@ async def tour_goalie(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def tour_captain(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # TODO: показать кнопки с выбранными нападающими и защитниками, обработать выбор капитана
-    pass
+    await update.effective_message.reply_text("Выбор капитана в разработке. Спасибо за участие!")
+    return ConversationHandler.END
 
 
 async def hc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
