@@ -159,8 +159,12 @@ async def tour_forward_2(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def tour_forward_3(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # После выбора третьего нападающего — сразу переход к выбору защитника
-    return await tour_defender_1(update, context)
+    budget = context.user_data['tour_budget']
+    spent = context.user_data['tour_selected']['spent']
+    left = budget - spent
+    picked = context.user_data['tour_selected']['forwards']
+    # Показываем клавиатуру для третьего нападающего, затем — защитники
+    return await send_player_choice(update, context, 'нападающий', picked, TOUR_DEFENDER_1, left)
 
 async def tour_defender_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
