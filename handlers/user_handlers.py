@@ -309,7 +309,9 @@ async def restart_tour_callback(update: Update, context: ContextTypes.DEFAULT_TY
     await query.answer()
     # Сброс и запуск процедуры сбора состава заново
     # Передаем update.callback_query, чтобы корректно работал tour_start
-    return await tour_start(query, context)
+    await tour_start(query, context)
+    from .user_handlers import TOUR_FORWARD_1
+    return TOUR_FORWARD_1
 
 async def hc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
