@@ -87,6 +87,9 @@ async def send_player_choice(update, context, position, exclude_ids, next_state,
     players = [p for p in roster if p[3].lower() == position and p[0] not in exclude_ids and p[6] <= budget]
     if not players:
         await update.effective_message.reply_text(f'Нет доступных игроков позиции {position} в рамках бюджета {budget} HC.')
+        # Если next_state — функция, вызываем её, иначе возвращаем как есть
+        if callable(next_state):
+            return await next_state(update, context)
         return next_state
     keyboard = []
     for p in players:
@@ -164,7 +167,7 @@ async def tour_forward_3(update: Update, context: ContextTypes.DEFAULT_TYPE):
     left = budget - spent
     picked = context.user_data['tour_selected']['forwards']
     # Показываем клавиатуру для третьего нападающего, затем — защитники
-    return await send_player_choice(update, context, 'нападающий', picked, TOUR_DEFENDER_1, left)
+    return await send_player_choice(update, context, 'нападающий', picked, tour_defender_1, left)
 
 async def tour_defender_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
