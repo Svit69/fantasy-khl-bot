@@ -121,7 +121,6 @@ if __name__ == '__main__':
             TOUR_CAPTAIN: [MessageHandler(filters.ALL, tour_captain)],
         },
         fallbacks=[],
-        per_message=True,
     )
     app.add_handler(tour_conv)
 
