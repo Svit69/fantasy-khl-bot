@@ -105,9 +105,11 @@ async def tour_forward_1(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def tour_forward_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("tour_forward_callback TRIGGERED", flush=True)
-    query = update.callback_query
-    await query.answer()
-    data = query.data
+    try:
+        query = update.callback_query
+        await query.answer()
+        data = query.data
+        print(f"Callback data: {data}", flush=True)
     # Ожидается формат pick_<player_id>_нападающий
     if not data.startswith('pick_') or '_нападающий' not in data:
         await query.edit_message_text('Некорректный выбор.')
@@ -132,10 +134,13 @@ async def tour_forward_callback(update: Update, context: ContextTypes.DEFAULT_TY
     await query.edit_message_text(f'Вы выбрали: {player[1]} ({player[6]} HC)\nОсталось HC: {left}')
     # Переход ко второму или третьему нападающему
     if len(context.user_data['tour_selected']['forwards']) == 1:
+        print("tour_forward_callback SUCCESS: переход к tour_forward_2", flush=True)
         return await tour_forward_2(update, context)
     elif len(context.user_data['tour_selected']['forwards']) == 2:
+        print("tour_forward_callback SUCCESS: переход к tour_forward_3", flush=True)
         return await tour_forward_3(update, context)
     else:
+        print("tour_forward_callback SUCCESS: переход к TOUR_DEFENDER_1", flush=True)
         return TOUR_DEFENDER_1
 
 async def tour_forward_2(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -155,9 +160,11 @@ async def tour_forward_3(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def tour_defender_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("tour_defender_callback TRIGGERED", flush=True)
-    query = update.callback_query
-    await query.answer()
-    data = query.data
+    try:
+        query = update.callback_query
+        await query.answer()
+        data = query.data
+        print(f"Callback data: {data}", flush=True)
     # Ожидается формат pick_<player_id>_защитник
     if not data.startswith('pick_') or '_защитник' not in data:
         await query.edit_message_text('Некорректный выбор.')
@@ -178,9 +185,19 @@ async def tour_defender_callback(update: Update, context: ContextTypes.DEFAULT_T
     left = budget - context.user_data['tour_selected']['spent']
     await query.edit_message_text(f'Вы выбрали: {player[1]} ({player[6]} HC)\nОсталось HC: {left}')
     if len(context.user_data['tour_selected']['defenders']) == 1:
+        print("tour_defender_callback SUCCESS: переход к tour_defender_2", flush=True)
         return await tour_defender_2(update, context)
     else:
+        print("tour_defender_callback SUCCESS: переход к tour_goalie", flush=True)
         return await tour_goalie(update, context)
+    except Exception as e:
+        print(f"tour_defender_callback ERROR: {e}", flush=True)
+        logger.exception("Exception in tour_defender_callback")
+        await query.edit_message_text(f"Ошибка: {e}")
+        return TOUR_DEFENDER_1
+    finally:
+        print("tour_defender_callback FINISHED", flush=True)
+
 
 async def tour_defender_1(update: Update, context: ContextTypes.DEFAULT_TYPE):
     budget = context.user_data['tour_budget']
@@ -200,6 +217,9 @@ async def tour_goalie_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     print("tour_goalie_callback TRIGGERED", flush=True)
     try:
         query = update.callback_query
+        await query.answer()
+        data = query.data
+        print(f"Callback data: {data}", flush=True)
         await query.answer()
         data = query.data
         logger.info(f"Callback data: {data}")
@@ -225,9 +245,13 @@ async def tour_goalie_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         # Дальше — выбор капитана
         return TOUR_CAPTAIN
     except Exception as e:
+        print(f"tour_goalie_callback ERROR: {e}", flush=True)
         logger.exception("Exception in tour_goalie_callback")
         await query.edit_message_text(f"Ошибка: {e}")
         return TOUR_GOALIE
+    finally:
+        print("tour_goalie_callback FINISHED", flush=True)
+
 
 async def tour_goalie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     budget = context.user_data['tour_budget']
