@@ -130,7 +130,7 @@ async def tour_forward_callback(update: Update, context: ContextTypes.DEFAULT_TY
         context.user_data['tour_selected']['forwards'].append(pid)
         context.user_data['tour_selected']['spent'] += player[6]
         left = budget - context.user_data['tour_selected']['spent']
-        await query.edit_message_text(f'Вы выбрали: {player[1]} ({player[6]} HC)\nОсталось HC: {left}')
+        await query.edit_message_text(f'Вы выбрали: {player[2]} ({player[7]} HC)\nОсталось HC: {left}')
         # Переход ко второму или третьему нападающему
         if len(context.user_data['tour_selected']['forwards']) == 1:
             print("tour_forward_callback SUCCESS: переход к tour_forward_2", flush=True)
@@ -139,8 +139,8 @@ async def tour_forward_callback(update: Update, context: ContextTypes.DEFAULT_TY
             print("tour_forward_callback SUCCESS: переход к tour_forward_3", flush=True)
             return await tour_forward_3(update, context)
         else:
-            print("tour_forward_callback SUCCESS: переход к TOUR_DEFENDER_1", flush=True)
-            return TOUR_DEFENDER_1
+            print("tour_forward_callback SUCCESS: переход к tour_defender_1", flush=True)
+            return await tour_defender_1(update, context)
     except Exception as e:
         print(f"tour_forward_callback ERROR: {e}", flush=True)
         logger.exception("Exception in tour_forward_callback")
@@ -189,7 +189,7 @@ async def tour_defender_callback(update: Update, context: ContextTypes.DEFAULT_T
         context.user_data['tour_selected']['defenders'].append(pid)
         context.user_data['tour_selected']['spent'] += player[6]
         left = budget - context.user_data['tour_selected']['spent']
-        await query.edit_message_text(f'Вы выбрали: {player[1]} ({player[6]} HC)\nОсталось HC: {left}')
+        await query.edit_message_text(f'Вы выбрали: {player[2]} ({player[7]} HC)\nОсталось HC: {left}')
         if len(context.user_data['tour_selected']['defenders']) == 1:
             print("tour_defender_callback SUCCESS: переход к tour_defender_2", flush=True)
             return await tour_defender_2(update, context)
@@ -243,7 +243,7 @@ async def tour_goalie_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         context.user_data['tour_selected']['goalie'] = pid
         context.user_data['tour_selected']['spent'] += player[6]
         left = budget - context.user_data['tour_selected']['spent']
-        await query.edit_message_text(f'Вы выбрали: {player[1]} ({player[6]} HC)\nОсталось HC: {left}')
+        await query.edit_message_text(f'Вы выбрали: {player[2]} ({player[7]} HC)\nОсталось HC: {left}')
         # Дальше — выбор капитана
         return TOUR_CAPTAIN
     except Exception as e:
