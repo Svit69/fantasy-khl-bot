@@ -88,6 +88,12 @@ from telegram import InlineKeyboardMarkup, InlineKeyboardButton
 
 async def send_player_choice(update, context, position, exclude_ids, next_state, budget):
     from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+    # Универсально получаем message для reply_text
+    message = getattr(update, "effective_message", None)
+    if message is None and hasattr(update, "message"):
+        message = update.message
+    elif message is None and hasattr(update, "callback_query"):
+        message = update.callback_query.message
     # Получаем актуальный ростер
     roster = context.user_data['tour_roster']
     # Фильтруем по позиции и исключениям
