@@ -142,6 +142,8 @@ if __name__ == '__main__':
         fallbacks=[],
     )
     app.add_handler(tour_conv)
+    # Глобальный обработчик для кнопки "Пересобрать состав"
+    app.add_handler(CallbackQueryHandler(restart_tour_callback, pattern=r"^restart_tour$"))
 
     # ConversationHandler для установки бюджета
     set_budget_conv = ConversationHandler(
