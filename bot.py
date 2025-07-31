@@ -109,17 +109,17 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('get_tour_roster', get_tour_roster))
 
     # --- ConversationHandler для /tour ---
-    TOUR_FORWARD_1, TOUR_FORWARD_2, TOUR_FORWARD_3, TOUR_DEFENDER_1, TOUR_DEFENDER_2, TOUR_GOALIE, TOUR_CAPTAIN = range(7)
+    TOUR_START, TOUR_FORWARD_1, TOUR_FORWARD_2, TOUR_FORWARD_3, TOUR_DEFENDER_1, TOUR_DEFENDER_2, TOUR_GOALIE, TOUR_CAPTAIN = range(8)
     tour_conv = ConversationHandler(
         entry_points=[CommandHandler('tour', tour_start)],
         states={
-            TOUR_FORWARD_1: [CallbackQueryHandler(tour_forward_callback, pattern=r"^pick_\d+_нападающий")],
-            TOUR_FORWARD_2: [CallbackQueryHandler(tour_forward_callback, pattern=r"^pick_\d+_нападающий")],
-            TOUR_FORWARD_3: [CallbackQueryHandler(tour_forward_callback, pattern=r"^pick_\d+_нападающий")],
-            TOUR_DEFENDER_1: [CallbackQueryHandler(tour_defender_callback, pattern=r"^pick_\d+_защитник")],
-            TOUR_DEFENDER_2: [CallbackQueryHandler(tour_defender_callback, pattern=r"^pick_\d+_защитник")],
-            TOUR_GOALIE: [CallbackQueryHandler(tour_goalie_callback, pattern=r"^pick_\d+_вратарь")],
-            TOUR_CAPTAIN: [CallbackQueryHandler(tour_captain, pattern=r"^pick_\d+_капитан")],
+            TOUR_FORWARD_1: [CallbackQueryHandler(tour_forward_callback, pattern=r"^pick_\d+_нападающий$")],
+            TOUR_FORWARD_2: [CallbackQueryHandler(tour_forward_callback, pattern=r"^pick_\d+_нападающий$")],
+            TOUR_FORWARD_3: [CallbackQueryHandler(tour_forward_callback, pattern=r"^pick_\d+_нападающий$")],
+            TOUR_DEFENDER_1: [CallbackQueryHandler(tour_defender_callback, pattern=r"^pick_\d+_защитник$")],
+            TOUR_DEFENDER_2: [CallbackQueryHandler(tour_defender_callback, pattern=r"^pick_\d+_защитник$")],
+            TOUR_GOALIE: [CallbackQueryHandler(tour_goalie_callback, pattern=r"^pick_\d+_вратарь$")],
+            TOUR_CAPTAIN: [MessageHandler(filters.ALL, tour_captain)],
         },
         fallbacks=[],
         per_message=True,
