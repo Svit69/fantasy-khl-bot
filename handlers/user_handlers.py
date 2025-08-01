@@ -381,14 +381,20 @@ async def tour_captain_callback(update: Update, context: ContextTypes.DEFAULT_TY
         f"Капитан: {captain}\n\n"
         f"💰 Потрачено: {spent} HC из {budget} HC"
     )
-    # Собираем entities для всех плейсхолдеров
+    # Функция для расчёта offset в UTF-16 code units
+    def utf16_offset(text, index):
+        return len(text[:index].encode('utf-16-le')) // 2
+
     entities = []
     offset = 0
     for line in [goalie, defenders, forwards]:
         for i, c in enumerate(line):
             if c == placeholder:
-                entities.append(custom_emoji_entity(emoji_id, offset + i))
-        offset += len(line) + 1  # +1 за \n
+                entities.append(custom_emoji_entity(
+                    emoji_id,
+                    offset + utf16_offset(line, i)
+                ))
+        offset += utf16_offset(line, len(line)) + 1  # +1 за \n
     # Кнопка "Начать заново"
     keyboard = [[InlineKeyboardButton('Пересобрать состав', callback_data='restart_tour')]]
     reply_markup = InlineKeyboardMarkup(keyboard)
