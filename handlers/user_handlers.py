@@ -347,7 +347,7 @@ async def tour_captain_callback(update: Update, context: ContextTypes.DEFAULT_TY
         return '[\u200b](tg://emoji\\?id=' + str(emoji_id) + ')'
 
     def escape_md(text):
-        return re.sub(r'([_*\[\]()~`>#+\-=|{}.!])', r'\\\1', str(text))
+        return re.sub(r'([_*\u007f\[\]()~`>#+\-=|{}.!-])', r'\\\1', str(text))
 
     def get_name(pid, captain=False):
         p = next((x for x in roster if x[1]==pid), None)
@@ -359,12 +359,13 @@ async def tour_captain_callback(update: Update, context: ContextTypes.DEFAULT_TY
         return base
 
     emoji = custom_emoji()
+    sep = escape_md(' - ')
     # Формируем строки с эмодзи и экранируем текст
     goalie = f"{emoji} {escape_md(get_name(selected['goalie']))}"
-    defenders = f"{emoji} {escape_md(get_name(selected['defenders'][0]))} - {emoji} {escape_md(get_name(selected['defenders'][1]))}"
+    defenders = f"{emoji} {escape_md(get_name(selected['defenders'][0]))}{sep}{emoji} {escape_md(get_name(selected['defenders'][1]))}"
     forwards = (
-        f"{emoji} {escape_md(get_name(selected['forwards'][0]))} - "
-        f"{emoji} {escape_md(get_name(selected['forwards'][1]))} - "
+        f"{emoji} {escape_md(get_name(selected['forwards'][0]))}{sep}"
+        f"{emoji} {escape_md(get_name(selected['forwards'][1]))}{sep}"
         f"{emoji} {escape_md(get_name(selected['forwards'][2]))}"
     )
     captain = escape_md(get_name(captain_id))
