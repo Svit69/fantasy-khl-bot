@@ -341,13 +341,16 @@ async def tour_captain_callback(update: Update, context: ContextTypes.DEFAULT_TY
         return TOUR_CAPTAIN
     context.user_data['tour_selected']['captain'] = captain_id
     # Формируем красивое итоговое сообщение с кастомным эмодзи
-    import re
-    def custom_emoji(emoji_id: int = 5395320471078055274) -> str:
-        # zero-width space между скобками! Экранирование для MarkdownV2
-        return '[\u200b](tg://emoji\\?id=' + str(emoji_id) + ')'
+    def custom_emoji_entity(emoji_id, offset):
+        return MessageEntity(
+            type=MessageEntityType.CUSTOM_EMOJI,
+            offset=offset,
+            length=1,
+            custom_emoji_id=str(emoji_id)
+        )
 
-    def escape_md(text):
-        return re.sub(r'([_*\u007f\[\]()~`>#+\-=|{}.!-])', r'\\\1', str(text))
+    emoji_id = "5395320471078055274"
+    placeholder = "🟦"
 
     def get_name(pid, captain=False):
         p = next((x for x in roster if x[1]==pid), None)
@@ -358,17 +361,15 @@ async def tour_captain_callback(update: Update, context: ContextTypes.DEFAULT_TY
             return f"🏅 {base}"
         return base
 
-    emoji = custom_emoji()
-    sep = escape_md(' - ')
-    # Формируем строки с эмодзи и экранируем текст
-    goalie = f"{emoji} {escape_md(get_name(selected['goalie']))}"
-    defenders = f"{emoji} {escape_md(get_name(selected['defenders'][0]))}{sep}{emoji} {escape_md(get_name(selected['defenders'][1]))}"
+    # Формируем строки с плейсхолдерами
+    goalie = f"{placeholder} {get_name(selected['goalie'])}"
+    defenders = f"{placeholder} {get_name(selected['defenders'][0])} - {placeholder} {get_name(selected['defenders'][1])}"
     forwards = (
-        f"{emoji} {escape_md(get_name(selected['forwards'][0]))}{sep}"
-        f"{emoji} {escape_md(get_name(selected['forwards'][1]))}{sep}"
-        f"{emoji} {escape_md(get_name(selected['forwards'][2]))}"
+        f"{placeholder} {get_name(selected['forwards'][0])} - "
+        f"{placeholder} {get_name(selected['forwards'][1])} - "
+        f"{placeholder} {get_name(selected['forwards'][2])}"
     )
-    captain = escape_md(get_name(captain_id))
+    captain = get_name(captain_id)
     spent = selected['spent']
     budget = context.user_data.get('tour_budget', 0)
     text = (
@@ -379,10 +380,18 @@ async def tour_captain_callback(update: Update, context: ContextTypes.DEFAULT_TY
         f"Капитан: {captain}\n\n"
         f"💰 Потрачено: {spent} HC из {budget} HC"
     )
+    # Собираем entities для всех плейсхолдеров
+    entities = []
+    offset = 0
+    for line in [goalie, defenders, forwards]:
+        for i, c in enumerate(line):
+            if c == placeholder:
+                entities.append(custom_emoji_entity(emoji_id, offset + i))
+        offset += len(line) + 1  # +1 за \n
     # Кнопка "Начать заново"
     keyboard = [[InlineKeyboardButton('Пересобрать состав', callback_data='restart_tour')]]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='MarkdownV2')
+    await query.edit_message_text(text, reply_markup=reply_markup, entities=entities)
     return ConversationHandler.END
 
 
