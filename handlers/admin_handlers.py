@@ -351,3 +351,98 @@ async def send_results(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.message.reply_text(f'Результаты (текст) разосланы. Успешно: {success}, ошибки: {failed}')
     else:
         await update.message.reply_text('Пришлите изображение или текст после команды.')
+
+# --- Управление турами (admin) ---
+from telegram.ext import CommandHandler, MessageHandler, filters, ConversationHandler
+import json
+
+TOUR_NAME, TOUR_START, TOUR_DEADLINE, TOUR_END, TOUR_CONFIRM = range(100, 105)
+
+async def create_tour_start(update, context):
+    if not await admin_only(update, context):
+        return ConversationHandler.END
+    await update.message.reply_text("Введите название тура:")
+    return TOUR_NAME
+
+async def create_tour_name(update, context):
+    context.user_data['tour_name'] = update.message.text.strip()
+    await update.message.reply_text("Введите дату старта тура (дд.мм.гг):")
+    return TOUR_START
+
+async def create_tour_start_date(update, context):
+    context.user_data['tour_start'] = update.message.text.strip()
+    await update.message.reply_text("Введите дедлайн (дд.мм.гг чч:мм):")
+    return TOUR_DEADLINE
+
+async def create_tour_deadline(update, context):
+    context.user_data['tour_deadline'] = update.message.text.strip()
+    await update.message.reply_text("Введите дату окончания тура (дд.мм.гг):")
+    return TOUR_END
+
+async def create_tour_end_date(update, context):
+    context.user_data['tour_end'] = update.message.text.strip()
+    summary = (
+        f"Название: {context.user_data['tour_name']}\n"
+        f"Старт: {context.user_data['tour_start']}\n"
+        f"Дедлайн: {context.user_data['tour_deadline']}\n"
+        f"Окончание: {context.user_data['tour_end']}\n"
+        "\nПодтвердить создание тура? (да/нет)"
+    )
+    await update.message.reply_text(summary)
+    return TOUR_CONFIRM
+
+async def create_tour_confirm(update, context):
+    text = update.message.text.strip().lower()
+    if text not in ("да", "нет"):
+        await update.message.reply_text("Пожалуйста, напишите 'да' или 'нет'.")
+        return TOUR_CONFIRM
+    if text == "нет":
+        await update.message.reply_text("Создание тура отменено.")
+        return ConversationHandler.END
+    db.create_tour(
+        context.user_data['tour_name'],
+        context.user_data['tour_start'],
+        context.user_data['tour_deadline'],
+        context.user_data['tour_end']
+    )
+    await update.message.reply_text("Тур успешно создан!")
+    return ConversationHandler.END
+
+async def create_tour_cancel(update, context):
+    await update.message.reply_text("Создание тура отменено.")
+    return ConversationHandler.END
+
+create_tour_conv = ConversationHandler(
+    entry_points=[CommandHandler("create_tour", create_tour_start)],
+    states={
+        TOUR_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_tour_name)],
+        TOUR_START: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_tour_start_date)],
+        TOUR_DEADLINE: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_tour_deadline)],
+        TOUR_END: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_tour_end_date)],
+        TOUR_CONFIRM: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_tour_confirm)],
+    },
+    fallbacks=[CommandHandler("cancel", create_tour_cancel)],
+)
+
+async def list_tours(update, context):
+    if not await admin_only(update, context):
+        return
+    tours = db.get_all_tours()
+    if not tours:
+        await update.message.reply_text("Туров пока нет.")
+        return
+    msg = "Список туров:\n"
+    for t in tours:
+        winners = "-"
+        try:
+            winners_list = json.loads(t[6]) if t[6] else []
+            if winners_list:
+                winners = ", ".join(map(str, winners_list))
+        except Exception:
+            winners = t[6]
+        msg += (
+            f"\nID: {t[0]} | {t[1]}\n"
+            f"Старт: {t[2]} | Дедлайн: {t[3]} | Окончание: {t[4]}\n"
+            f"Статус: {t[5]} | Победители: {winners}\n"
+        )
+    await update.message.reply_text(msg)

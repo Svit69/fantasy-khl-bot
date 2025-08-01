@@ -21,7 +21,8 @@ from handlers.admin_handlers import (
     remove_player, edit_player_start, edit_player_name, edit_player_position, edit_player_club,
     edit_player_nation, edit_player_age, edit_player_price, edit_player_cancel,
     set_tour_roster_start, set_tour_roster_process, get_tour_roster,
-    set_budget_start, set_budget_process
+    set_budget_start, set_budget_process,
+    create_tour_conv, list_tours
 )
 
 ADD_NAME, ADD_POSITION, ADD_CLUB, ADD_NATION, ADD_AGE, ADD_PRICE = range(6)
@@ -198,6 +199,10 @@ if __name__ == '__main__':
         fallbacks=[CommandHandler('cancel', edit_player_cancel)],
     )
     app.add_handler(edit_player_conv)
+
+    # --- Турнирные туры ---
+    app.add_handler(create_tour_conv)
+    app.add_handler(CommandHandler('list_tours', list_tours))
 
     # Установка команд для пользователей и админа
     user_commands = [

@@ -43,6 +43,18 @@ def init_db():
                     value INTEGER NOT NULL
                 )
             ''')
+            # Таблица туров
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS tours (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    start_date TEXT NOT NULL,
+                    deadline TEXT NOT NULL,
+                    end_date TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'создан',
+                    winners TEXT DEFAULT ''
+                )
+            ''')
 
 def register_user(telegram_id, username, name):
     with closing(sqlite3.connect(DB_NAME)) as conn:
@@ -138,3 +150,29 @@ def update_player(player_id, name, position, club, nation, age, price):
                 (name, position, club, nation, age, price, player_id)
             )
             return cursor.rowcount > 0
+
+# --- Турнирные туры ---
+def create_tour(name, start_date, deadline, end_date, status="создан"):
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            cur = conn.execute(
+                'INSERT INTO tours (name, start_date, deadline, end_date, status) VALUES (?, ?, ?, ?, ?)',
+                (name, start_date, deadline, end_date, status)
+            )
+            return cur.lastrowid
+
+def get_all_tours():
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        return conn.execute('SELECT id, name, start_date, deadline, end_date, status, winners FROM tours ORDER BY id').fetchall()
+
+def update_tour_status(tour_id, status):
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            conn.execute('UPDATE tours SET status = ? WHERE id = ?', (status, tour_id))
+
+def set_tour_winners(tour_id, winners):
+    import json
+    winners_str = json.dumps(winners)
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            conn.execute('UPDATE tours SET winners = ? WHERE id = ?', (winners_str, tour_id))
