@@ -1,4 +1,5 @@
-from telegram import Update, InputFile, ReplyKeyboardMarkup
+from telegram import Update, InputFile, ReplyKeyboardMarkup, MessageEntity
+from telegram.constants import MessageEntityType
 from telegram.ext import ContextTypes, ConversationHandler
 from config import ADMIN_ID
 import db
