@@ -340,35 +340,40 @@ async def tour_captain_callback(update: Update, context: ContextTypes.DEFAULT_TY
         await query.edit_message_text('Капитан должен быть полевым игроком из вашего состава!')
         return TOUR_CAPTAIN
     context.user_data['tour_selected']['captain'] = captain_id
-    # Формируем красивое итоговое сообщение
-    def get_name(pid, emoji=None, captain=False):
+    # Формируем красивое итоговое сообщение с кастомным эмодзи
+    def custom_emoji(emoji_id: int = 5395320471078055274) -> str:
+        # zero-width space между скобками!
+        return '[\u200b](tg://emoji?id=' + str(emoji_id) + ')'
+
+    def get_name(pid, captain=False):
         p = next((x for x in roster if x[1]==pid), None)
         if not p:
             return str(pid)
         base = f"{p[2]} ({p[4]})"
         if captain:
             return f"🏅 {base}"
-        if emoji:
-            return f"{emoji} {base}"
         return base
-    forwards = ', '.join(get_name(pid, '🎯', pid==captain_id) for pid in selected['forwards'])
-    defenders = ', '.join(get_name(pid, '🛡', pid==captain_id) for pid in selected['defenders'])
-    goalie = get_name(selected['goalie'], '🥅', False)
-    captain = get_name(captain_id, None, True)
+
+    emoji = custom_emoji()
+    # Формируем строки с эмодзи
+    goalie = f"{emoji} {get_name(selected['goalie'])}"
+    defenders = f"{emoji} {get_name(selected['defenders'][0])} - {emoji} {get_name(selected['defenders'][1])}"
+    forwards = f"{emoji} {get_name(selected['forwards'][0])} - {emoji} {get_name(selected['forwards'][1])} - {emoji} {get_name(selected['forwards'][2])}"
+    captain = get_name(captain_id)
     spent = selected['spent']
     budget = context.user_data.get('tour_budget', 0)
     text = (
-        "Ваш итоговый состав:\n"
+        "Ваш итоговый состав:\n\n"
         f"{goalie}\n"
         f"{defenders}\n"
         f"{forwards}\n\n"
-        f"{captain} (очки x1.5)\n\n"
+        f"Капитан: {captain}\n\n"
         f"💰 Потрачено: {spent} HC из {budget} HC"
     )
     # Кнопка "Начать заново"
     keyboard = [[InlineKeyboardButton('Пересобрать состав', callback_data='restart_tour')]]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(text, reply_markup=reply_markup)
+    await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     return ConversationHandler.END
 
 
