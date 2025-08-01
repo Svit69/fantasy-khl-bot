@@ -38,6 +38,15 @@ async def tour_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         message = update.message
     elif message is None and hasattr(update, "callback_query"):
         message = update.callback_query.message
+
+    # --- Определяем активный тур ---
+    from db import get_active_tour
+    active_tour = get_active_tour()
+    if not active_tour:
+        await message.reply_text("Нет активного тура для сбора состава. Обратитесь к администратору.")
+        return ConversationHandler.END
+    context.user_data['active_tour_id'] = active_tour['id']
+
     # 1. Отправить картинку тура и вводный текст с бюджетом
     budget = db.get_budget() or 0
     roster = db.get_tour_roster_with_player_info()
@@ -373,6 +382,19 @@ async def tour_captain_callback(update: Update, context: ContextTypes.DEFAULT_TY
     captain = get_name(captain_id)
     spent = selected['spent']
     budget = context.user_data.get('tour_budget', 0)
+
+    # --- Сохраняем финальный состав пользователя ---
+    user_id = update.effective_user.id
+    # Определяем tour_id (если есть активный, иначе 1)
+    tour_id = context.user_data.get('active_tour_id', 1)
+    roster_dict = {
+        'goalie': selected['goalie'],
+        'defenders': selected['defenders'],
+        'forwards': selected['forwards']
+    }
+    from db import save_user_tour_roster
+    save_user_tour_roster(user_id, tour_id, roster_dict, captain_id, spent)
+
     text = (
         "Ваш итоговый состав:\n\n"
         f"{goalie}\n"

@@ -55,6 +55,19 @@ def init_db():
                     winners TEXT DEFAULT ''
                 )
             ''')
+            # Таблица финальных составов пользователей на тур
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS user_tour_roster (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    tour_id INTEGER NOT NULL,
+                    roster_json TEXT NOT NULL,
+                    captain_id INTEGER,
+                    spent INTEGER,
+                    timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(user_id, tour_id)
+                )
+            ''')
 
 def register_user(telegram_id, username, name):
     with closing(sqlite3.connect(DB_NAME)) as conn:
@@ -176,3 +189,53 @@ def set_tour_winners(tour_id, winners):
     with closing(sqlite3.connect(DB_NAME)) as conn:
         with conn:
             conn.execute('UPDATE tours SET winners = ? WHERE id = ?', (winners_str, tour_id))
+
+# --- Получить активный тур ---
+def get_active_tour():
+    import datetime
+    now = datetime.datetime.now()
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        conn.row_factory = sqlite3.Row
+        # 1. Сначала ищем тур со статусом "активен"
+        row = conn.execute('SELECT * FROM tours WHERE status = ? ORDER BY start_date ASC LIMIT 1', ("активен",)).fetchone()
+        if row:
+            return dict(row)
+        # 2. Если нет — ищем тур по дате
+        rows = conn.execute('SELECT * FROM tours').fetchall()
+        for r in rows:
+            try:
+                start = datetime.datetime.strptime(r['start_date'], "%d.%m.%y")
+                deadline = datetime.datetime.strptime(r['deadline'], "%d.%m.%y %H:%M")
+                if start <= now < deadline:
+                    return dict(r)
+            except Exception:
+                continue
+        return None
+
+# --- Финальный состав пользователя на тур ---
+def save_user_tour_roster(user_id, tour_id, roster_dict, captain_id, spent):
+    import json
+    roster_json = json.dumps(roster_dict, ensure_ascii=False)
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            conn.execute('''
+                INSERT OR REPLACE INTO user_tour_roster (user_id, tour_id, roster_json, captain_id, spent, timestamp)
+                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ''', (user_id, tour_id, roster_json, captain_id, spent))
+
+def get_user_tour_roster(user_id, tour_id):
+    import json
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        row = conn.execute('''
+            SELECT roster_json, captain_id, spent, timestamp FROM user_tour_roster
+            WHERE user_id = ? AND tour_id = ?
+        ''', (user_id, tour_id)).fetchone()
+        if row:
+            roster = json.loads(row[0])
+            return {
+                'roster': roster,
+                'captain_id': row[1],
+                'spent': row[2],
+                'timestamp': row[3]
+            }
+        return None
