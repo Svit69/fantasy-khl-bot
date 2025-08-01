@@ -22,7 +22,7 @@ from handlers.admin_handlers import (
     edit_player_nation, edit_player_age, edit_player_price, edit_player_cancel,
     set_tour_roster_start, set_tour_roster_process, get_tour_roster,
     set_budget_start, set_budget_process,
-    create_tour_conv, list_tours
+    create_tour_conv, list_tours, activate_tour
 )
 
 ADD_NAME, ADD_POSITION, ADD_CLUB, ADD_NATION, ADD_AGE, ADD_PRICE = range(6)
