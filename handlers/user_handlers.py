@@ -351,7 +351,7 @@ async def tour_captain_callback(update: Update, context: ContextTypes.DEFAULT_TY
         )
 
     emoji_id = "5395320471078055274"
-    placeholder = "🟦"
+    placeholder = "E"
 
     def get_name(pid, captain=False):
         p = next((x for x in roster if x[1]==pid), None)
