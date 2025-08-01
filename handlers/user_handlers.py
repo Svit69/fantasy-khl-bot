@@ -341,9 +341,13 @@ async def tour_captain_callback(update: Update, context: ContextTypes.DEFAULT_TY
         return TOUR_CAPTAIN
     context.user_data['tour_selected']['captain'] = captain_id
     # Формируем красивое итоговое сообщение с кастомным эмодзи
+    import re
     def custom_emoji(emoji_id: int = 5395320471078055274) -> str:
-        # zero-width space между скобками!
-        return '[\u200b](tg://emoji?id=' + str(emoji_id) + ')'
+        # zero-width space между скобками! Экранирование для MarkdownV2
+        return '[\u200b](tg://emoji\\?id=' + str(emoji_id) + ')'
+
+    def escape_md(text):
+        return re.sub(r'([_*\[\]()~`>#+\-=|{}.!])', r'\\\1', str(text))
 
     def get_name(pid, captain=False):
         p = next((x for x in roster if x[1]==pid), None)
@@ -355,11 +359,15 @@ async def tour_captain_callback(update: Update, context: ContextTypes.DEFAULT_TY
         return base
 
     emoji = custom_emoji()
-    # Формируем строки с эмодзи
-    goalie = f"{emoji} {get_name(selected['goalie'])}"
-    defenders = f"{emoji} {get_name(selected['defenders'][0])} - {emoji} {get_name(selected['defenders'][1])}"
-    forwards = f"{emoji} {get_name(selected['forwards'][0])} - {emoji} {get_name(selected['forwards'][1])} - {emoji} {get_name(selected['forwards'][2])}"
-    captain = get_name(captain_id)
+    # Формируем строки с эмодзи и экранируем текст
+    goalie = f"{emoji} {escape_md(get_name(selected['goalie']))}"
+    defenders = f"{emoji} {escape_md(get_name(selected['defenders'][0]))} - {emoji} {escape_md(get_name(selected['defenders'][1]))}"
+    forwards = (
+        f"{emoji} {escape_md(get_name(selected['forwards'][0]))} - "
+        f"{emoji} {escape_md(get_name(selected['forwards'][1]))} - "
+        f"{emoji} {escape_md(get_name(selected['forwards'][2]))}"
+    )
+    captain = escape_md(get_name(captain_id))
     spent = selected['spent']
     budget = context.user_data.get('tour_budget', 0)
     text = (
@@ -373,7 +381,7 @@ async def tour_captain_callback(update: Update, context: ContextTypes.DEFAULT_TY
     # Кнопка "Начать заново"
     keyboard = [[InlineKeyboardButton('Пересобрать состав', callback_data='restart_tour')]]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+    await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='MarkdownV2')
     return ConversationHandler.END
 
 
