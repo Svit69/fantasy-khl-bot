@@ -388,12 +388,16 @@ async def tour_captain_callback(update: Update, context: ContextTypes.DEFAULT_TY
     entities = []
     offset = 0
     for line in [goalie, defenders, forwards]:
-        for i, c in enumerate(line):
-            if c == placeholder:
-                entities.append(custom_emoji_entity(
-                    emoji_id,
-                    offset + utf16_offset(line, i)
-                ))
+        start = 0
+        while True:
+            idx = line.find(placeholder, start)
+            if idx == -1:
+                break
+            entities.append(custom_emoji_entity(
+                emoji_id,
+                offset + utf16_offset(line, idx)
+            ))
+            start = idx + len(placeholder)
         offset += utf16_offset(line, len(line)) + 1  # +1 за \n
     # Кнопка "Начать заново"
     keyboard = [[InlineKeyboardButton('Пересобрать состав', callback_data='restart_tour')]]
