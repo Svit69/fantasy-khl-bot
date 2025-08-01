@@ -446,3 +446,24 @@ async def list_tours(update, context):
             f"Статус: {t[5]} | Победители: {winners}\n"
         )
     await update.message.reply_text(msg)
+
+# --- Активация тура админом ---
+async def activate_tour(update, context):
+    if not await admin_only(update, context):
+        return
+    if not context.args or not context.args[0].isdigit():
+        await update.message.reply_text("Использование: /activate_tour <id>")
+        return
+    tour_id = int(context.args[0])
+    tours = db.get_all_tours()
+    found = False
+    for t in tours:
+        if t[0] == tour_id:
+            db.update_tour_status(tour_id, "активен")
+            found = True
+        elif t[5] == "активен":
+            db.update_tour_status(t[0], "создан")
+    if found:
+        await update.message.reply_text(f"Тур {tour_id} активирован.")
+    else:
+        await update.message.reply_text(f"Тур с id {tour_id} не найден.")

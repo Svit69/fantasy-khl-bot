@@ -62,7 +62,7 @@ async def send_tour_image_start(update, context):
 async def send_tour_image_photo(update, context):
     logger.info(f"[send_tour_image_photo] user_id={update.effective_user.id if update.effective_user else None}, has_photo={bool(update.message.photo)}")
     try:
-        from handlers.admin_handlers import process_tour_image_photo
+        from handlers.admin_handlers import process_tour_image_photo, create_tour_conv, list_tours, activate_tour
         await process_tour_image_photo(update, context)
         logger.info("[send_tour_image_photo] Фото успешно обработано и разослано.")
     except Exception as e:
@@ -203,6 +203,7 @@ if __name__ == '__main__':
     # --- Турнирные туры ---
     app.add_handler(create_tour_conv)
     app.add_handler(CommandHandler('list_tours', list_tours))
+    app.add_handler(CommandHandler('activate_tour', activate_tour))
 
     # Установка команд для пользователей и админа
     user_commands = [
