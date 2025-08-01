@@ -45,8 +45,55 @@ async def tour_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not active_tour:
         await message.reply_text("Нет активного тура для сбора состава. Обратитесь к администратору.")
         return ConversationHandler.END
+async def tour_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+    # Получаем объект сообщения для ответа (универсально для Update и CallbackQuery)
+    message = getattr(update, "effective_message", None)
+    if message is None and hasattr(update, "message"):
+        message = update.message
+    elif message is None and hasattr(update, "callback_query"):
+        message = update.callback_query.message
+
+    # --- Определяем активный тур ---
+    from db import get_active_tour, get_user_tour_roster, get_player_by_id
+    active_tour = get_active_tour()
+    if not active_tour:
+        await message.reply_text("Нет активного тура для сбора состава. Обратитесь к администратору.")
+        return ConversationHandler.END
     context.user_data['active_tour_id'] = active_tour['id']
 
+    user_id = update.effective_user.id
+    tour_id = active_tour['id']
+    user_roster = get_user_tour_roster(user_id, tour_id)
+    if user_roster and user_roster.get('roster'):
+        # Форматируем состав для вывода
+        def format_user_roster(roster_data):
+            roster = roster_data['roster']
+            captain_id = roster_data.get('captain_id')
+            spent = roster_data.get('spent', 0)
+            # Получаем инфу по игрокам
+            goalie = get_player_by_id(roster.get('goalie'))
+            defenders = [get_player_by_id(pid) for pid in roster.get('defenders', [])]
+            forwards = [get_player_by_id(pid) for pid in roster.get('forwards', [])]
+            def fmt(p):
+                if not p: return "-"
+                return f"{p[1]} ({p[3]})"
+            g_str = f"Вратарь: {fmt(goalie)}"
+            d_str = f"Защитники: {fmt(defenders[0])} - {fmt(defenders[1])}" if len(defenders) == 2 else "Защитники: -"
+            f_str = f"Нападающие: {fmt(forwards[0])} - {fmt(forwards[1])} - {fmt(forwards[2])}" if len(forwards) == 3 else "Нападающие: -"
+            captain = None
+            for p in [goalie] + defenders + forwards:
+                if p and p[0] == captain_id:
+                    captain = f"🏅 {fmt(p)}"
+            cap_str = f"Капитан: {captain}" if captain else "Капитан: -"
+            return f"Ваш состав на тур:\n\n{g_str}\n{d_str}\n{f_str}\n\n{cap_str}\n\n💰 Потрачено: {spent} HC"
+        text = format_user_roster(user_roster)
+        keyboard = [[InlineKeyboardButton('Пересобрать состав', callback_data='restart_tour')]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await message.reply_text(text, reply_markup=reply_markup)
+        return ConversationHandler.END
+
+    # --- Если состава нет, запускаем обычный сценарий выбора ---
     # 1. Отправить картинку тура и вводный текст с бюджетом
     budget = db.get_budget() or 0
     roster = db.get_tour_roster_with_player_info()
