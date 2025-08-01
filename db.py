@@ -213,6 +213,12 @@ def get_active_tour():
         return None
 
 # --- Финальный состав пользователя на тур ---
+
+def clear_user_tour_roster(user_id, tour_id):
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            conn.execute('DELETE FROM user_tour_roster WHERE user_id = ? AND tour_id = ?', (user_id, tour_id))
+
 def save_user_tour_roster(user_id, tour_id, roster_dict, captain_id, spent):
     import json
     roster_json = json.dumps(roster_dict, ensure_ascii=False)

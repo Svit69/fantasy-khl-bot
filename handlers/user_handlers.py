@@ -461,8 +461,14 @@ async def tour_captain_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
 
 async def restart_tour_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    from db import get_active_tour, clear_user_tour_roster
     query = update.callback_query
     await query.answer()
+    user_id = query.from_user.id
+    active_tour = get_active_tour()
+    if active_tour:
+        tour_id = active_tour['id']
+        clear_user_tour_roster(user_id, tour_id)
     # Запускаем процесс выбора состава заново через /tour (ConversationHandler entry_point)
     await context.bot.send_message(chat_id=query.message.chat_id, text="/tour")
     return ConversationHandler.END
