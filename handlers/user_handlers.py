@@ -381,28 +381,13 @@ async def tour_captain_callback(update: Update, context: ContextTypes.DEFAULT_TY
         f"Капитан: {captain}\n\n"
         f"💰 Потрачено: {spent} HC из {budget} HC"
     )
-    # Функция для расчёта offset в UTF-16 code units
-    def utf16_offset(text, index):
-        return len(text[:index].encode('utf-16-le')) // 2
-
-    entities = []
-    offset = 0
-    for line in [goalie, defenders, forwards]:
-        start = 0
-        while True:
-            idx = line.find(placeholder, start)
-            if idx == -1:
-                break
-            entities.append(custom_emoji_entity(
-                emoji_id,
-                offset + utf16_offset(line, idx)
-            ))
-            start = idx + len(placeholder)
-        offset += utf16_offset(line, len(line)) + 1  # +1 за \n
-    # Кнопка "Начать заново"
     keyboard = [[InlineKeyboardButton('Пересобрать состав', callback_data='restart_tour')]]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(text, reply_markup=reply_markup, entities=entities)
+
+    await query.edit_message_text(
+        text=text,
+        reply_markup=reply_markup
+    )
     return ConversationHandler.END
 
 
