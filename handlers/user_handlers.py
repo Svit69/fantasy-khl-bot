@@ -346,12 +346,12 @@ async def tour_captain_callback(update: Update, context: ContextTypes.DEFAULT_TY
         return MessageEntity(
             type=MessageEntityType.CUSTOM_EMOJI,
             offset=offset,
-            length=1,
+            length=2,  # эмодзи занимает 2 UTF-16 code units
             custom_emoji_id=str(emoji_id)
         )
 
     emoji_id = "5395320471078055274"
-    placeholder = "E"
+    placeholder = "🟦"
 
     def get_name(pid, captain=False):
         p = next((x for x in roster if x[1]==pid), None)
