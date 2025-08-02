@@ -524,6 +524,13 @@ async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await message.reply_text(text, parse_mode="MarkdownV2")
 
 async def hc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # Универсально получаем message для reply_text
+    message = getattr(update, "effective_message", None)
+    if message is None and hasattr(update, "message"):
+        message = update.message
+    elif message is None and hasattr(update, "callback_query"):
+        message = update.callback_query.message
+
     user = update.effective_user
     data = db.get_user_by_id(user.id)
     if data:
