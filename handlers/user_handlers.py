@@ -7,6 +7,12 @@ import os
 from utils import is_admin, IMAGES_DIR, logger
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # Универсально получаем message для reply_text
+    message = getattr(update, "effective_message", None)
+    if message is None and hasattr(update, "message"):
+        message = update.message
+    elif message is None and hasattr(update, "callback_query"):
+        message = update.callback_query.message
     user = update.effective_user
     registered = db.register_user(user.id, user.username, user.full_name)
     msg_id = f"Ваш Telegram ID: {user.id}\n"
