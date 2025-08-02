@@ -501,13 +501,15 @@ async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         message = update.callback_query.message
     active_tour = get_active_tour()
     budget = active_tour['budget'] if active_tour and 'budget' in active_tour else 'N/A'
+    # Экранируем спецсимволы для MarkdownV2
+    budget_str = str(budget).replace('-', '\-')
     text = (
         "*Правила игры:*\n\n"
-        "Соберите свою команду из 6 игроков (3 нападающих, 2 защитника, 1 вратарь) с ограниченным бюджетом. "
-        "У каждого игрока своя стоимость — 10, 30, 40 или 50 единиц.\n\n"
+        "Соберите свою команду из 6 игроков \(3 нападающих, 2 защитника, 1 вратарь\) с ограниченным бюджетом\. "
+        "У каждого игрока своя стоимость \- 10, 30, 40 или 50 единиц\.\n\n"
         "⚡️ Назначь одного полевого игрока из состава капитаном\n\n"
-        f"*Ваш бюджет: {budget}*\n\n"
-        "Собрать состав — /tour"
+        f"*Ваш бюджет: {budget_str}*\n\n"
+        "Собрать состав \- /tour"
     )
     await message.reply_text(text, parse_mode="MarkdownV2")
 
