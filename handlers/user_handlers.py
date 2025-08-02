@@ -17,16 +17,28 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             'Доступные команды:\n/tour — показать состав на тур\n/hc — баланс HC\n/send_tour_image — загрузить и разослать изображение тура\n/addhc — начислить HC пользователю\n/send_results — разослать результаты тура\n/add_player — добавить игрока\n/list_players — список игроков'
         )
     else:
-        keyboard = [["/tour", "/hc"]]
+        keyboard = [["/tour", "/hc", "/rules", "/shop"]]
         msg = (
-            f'Привет, {user.full_name}! Ты зарегистрирован в Fantasy KHL.\n\n'
-            'Доступные команды:\n/tour — показать состав на тур\n/hc — баланс HC'
+            f'Привет, {user.full_name}! Добро пожаловать в Фентези Драфт КХЛ\n\n'
+            '🔸 Собирай свою команду на каждый тур\n'
+            '🔸 Следи за результатами туров\n'
+            '🔸 Зарабатывай и копи Hockey Coin (HC)\n'
+            '🔸 Меняй Hockey Coin (HC) на призы\n\n'
+            'Доступные команды:\n'
+            '/tour — тур и управление командой\n'
+            '/hc — твой баланс Hockey Coin\n'
+            '/rules — правила сборки составов\n'
+            '/shop — магазин призов'
         )
     markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     if registered:
         await message.reply_text(msg_id + msg, reply_markup=markup)
     else:
-        await message.reply_text(msg_id + 'Ты уже зарегистрирован!', reply_markup=markup)
+        await message.reply_text(
+            '⚠️ Ты уже в списке генеральных менеджеров Фентези Драфта КХЛ.\n\n'
+            'Формируй состав и следи за результатами туров /tour',
+            reply_markup=markup
+        )
 
 # --- TOUR ConversationHandler states ---
 TOUR_START, TOUR_FORWARD_1, TOUR_FORWARD_2, TOUR_FORWARD_3, TOUR_DEFENDER_1, TOUR_DEFENDER_2, TOUR_GOALIE, TOUR_CAPTAIN = range(8)
@@ -479,4 +491,7 @@ async def hc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if data:
         await message.reply_text(f'💰 Твой баланс: {data[3]} HC')
     else:
-        await message.reply_text('Ты не зарегистрирован!')
+        await message.reply_text(
+            '🚫 Тебя еще нет в списке генменеджеров Фентези Драфт КХЛ\n\n'
+            'Зарегистрируйся через /start — и вперёд к сборке состава!'
+        )
