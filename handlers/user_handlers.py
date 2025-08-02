@@ -491,6 +491,26 @@ async def restart_tour_callback(update: Update, context: ContextTypes.DEFAULT_TY
     await context.bot.send_message(chat_id=query.message.chat_id, text="/tour")
     return ConversationHandler.END
 
+async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    from db import get_active_tour
+    # Универсально получаем message для reply_text
+    message = getattr(update, "effective_message", None)
+    if message is None and hasattr(update, "message"):
+        message = update.message
+    elif message is None and hasattr(update, "callback_query"):
+        message = update.callback_query.message
+    active_tour = get_active_tour()
+    budget = active_tour['budget'] if active_tour and 'budget' in active_tour else 'N/A'
+    text = (
+        "*Правила игры:*\n\n"
+        "Соберите свою команду из 6 игроков (3 нападающих, 2 защитника, 1 вратарь) с ограниченным бюджетом. "
+        "У каждого игрока своя стоимость — 10, 30, 40 или 50 единиц.\n\n"
+        "⚡️ Назначь одного полевого игрока из состава капитаном\n\n"
+        f"*Ваш бюджет: {budget}*\n\n"
+        "Собрать состав — /tour"
+    )
+    await message.reply_text(text, parse_mode="MarkdownV2")
+
 async def hc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     data = db.get_user_by_id(user.id)

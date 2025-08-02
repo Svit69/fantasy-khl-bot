@@ -210,6 +210,7 @@ if __name__ == '__main__':
         BotCommand("start", "Регистрация и приветствие"),
         BotCommand("tour", "Показать состав игроков на тур"),
         BotCommand("hc", "Показать баланс HC"),
+        BotCommand("rules", "Правила сборки составов"),
     ]
     
     admin_commands = user_commands + [
@@ -222,6 +223,7 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('start', start))
     app.add_handler(CommandHandler('tour', tour_start))
     app.add_handler(CommandHandler('hc', hc))
+    app.add_handler(CommandHandler('rules', rules))
     app.run_polling()
 
 
