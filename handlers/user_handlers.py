@@ -6,6 +6,12 @@ import db
 import os
 from utils import is_admin, IMAGES_DIR, logger
 
+def escape_md(text):
+    # Все спецсимволы MarkdownV2
+    for ch in r'\_*[]()~`>#+-=|{}.!':
+        text = text.replace(ch, '\\' + ch)
+    return text
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # Универсально получаем message для reply_text
     message = getattr(update, "effective_message", None)
@@ -245,9 +251,9 @@ async def tour_forward_callback(update: Update, context: ContextTypes.DEFAULT_TY
         context.user_data['tour_selected']['forwards'].append(pid)
         context.user_data['tour_selected']['spent'] += player[7]
         left = budget - context.user_data['tour_selected']['spent']
-        player_name = str(player[2]).replace('-', '\\-').replace('.', '\\.')
-        cost = str(player[7]).replace('-', '\\-').replace('.', '\\.')
-        left_str = str(left).replace('-', '\\-').replace('.', '\\.')
+        player_name = escape_md(str(player[2]))
+        cost = escape_md(str(player[7]))
+        left_str = escape_md(str(left))
         await query.edit_message_text(f'Вы выбрали {player_name} ({cost})\n\n*Оставшийся бюджет: {left_str}*', parse_mode="MarkdownV2")
         # Переход ко второму или третьему нападающему
         if len(context.user_data['tour_selected']['forwards']) == 1:
@@ -309,9 +315,9 @@ async def tour_defender_callback(update: Update, context: ContextTypes.DEFAULT_T
         context.user_data['tour_selected']['defenders'].append(pid)
         context.user_data['tour_selected']['spent'] += player[7]
         left = budget - context.user_data['tour_selected']['spent']
-        player_name = str(player[2]).replace('-', '\\-').replace('.', '\\.')
-        cost = str(player[7]).replace('-', '\\-').replace('.', '\\.')
-        left_str = str(left).replace('-', '\\-').replace('.', '\\.')
+        player_name = escape_md(str(player[2]))
+        cost = escape_md(str(player[7]))
+        left_str = escape_md(str(left))
         await query.edit_message_text(f'Вы выбрали {player_name} ({cost})\n\n*Оставшийся бюджет: {left_str}*', parse_mode="MarkdownV2")
         if len(context.user_data['tour_selected']['defenders']) == 1:
             print("tour_defender_callback SUCCESS: переход к tour_defender_2", flush=True)
@@ -368,9 +374,9 @@ async def tour_goalie_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         context.user_data['tour_selected']['goalie'] = pid
         context.user_data['tour_selected']['spent'] += player[7]
         left = budget - context.user_data['tour_selected']['spent']
-        player_name = str(player[2]).replace('-', '\\-').replace('.', '\\.')
-        cost = str(player[7]).replace('-', '\\-').replace('.', '\\.')
-        left_str = str(left).replace('-', '\\-').replace('.', '\\.')
+        player_name = escape_md(str(player[2]))
+        cost = escape_md(str(player[7]))
+        left_str = escape_md(str(left))
         await query.edit_message_text(f'Вы выбрали {player_name} ({cost})\n\n*Оставшийся бюджет: {left_str}*', parse_mode="MarkdownV2")
         # Показываем этап выбора капитана
         return await tour_captain(update, context)
