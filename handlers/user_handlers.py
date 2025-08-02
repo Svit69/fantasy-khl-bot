@@ -154,6 +154,7 @@ async def tour_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Вводный текст
     # Формируем строку дедлайна
     deadline = active_tour.get('deadline', '')
+    deadline_str = str(deadline).replace('.', '\\.')
     # Формируем красивый текст с MarkdownV2
     intro = rf"""*Список игроков на текущий тур\!* Выбери к себе в состав:
 🔸3 нападающих
@@ -164,7 +165,7 @@ async def tour_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 *Ваш бюджет: {budget}*
 
-Принимаем составы до: {deadline}"""
+Принимаем составы до: {deadline_str}"""
     await message.reply_text(intro, parse_mode="MarkdownV2")
     # Сразу показываем выбор первого нападающего!
     return await tour_forward_1(update, context)
