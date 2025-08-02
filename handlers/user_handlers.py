@@ -254,8 +254,8 @@ async def tour_forward_callback(update: Update, context: ContextTypes.DEFAULT_TY
         player_name = escape_md(str(player[2]))
         cost = escape_md(str(player[7]))
         left_str = escape_md(str(left))
-        await query.edit_message_text(f'Вы выбрали {player_name} ({cost})\n\n*Оставшийся бюджет: {left_str}*', parse_mode="MarkdownV2")
-        # Переход ко второму или третьему нападающему
+        msg = f'Вы выбрали {player_name} \\({cost}\\)\n\n*Оставшийся бюджет: {left_str}*'
+        await query.edit_message_text(msg, parse_mode="MarkdownV2")
         if len(context.user_data['tour_selected']['forwards']) == 1:
             print("tour_forward_callback SUCCESS: переход к tour_forward_2", flush=True)
             return await tour_forward_2(update, context)
