@@ -12,6 +12,14 @@ def escape_md(text):
         text = text.replace(ch, '\\' + ch)
     return text
 
+async def send_player_selected_message(query, player, budget, context):
+    left = budget - context.user_data['tour_selected']['spent']
+    player_name = escape_md(str(player[2]))
+    cost = escape_md(str(player[7]))
+    left_str = escape_md(str(left))
+    msg = f'Вы выбрали {player_name} \\({cost}\\)\n\n*Оставшийся бюджет: {left_str}*'
+    await query.edit_message_text(msg, parse_mode="MarkdownV2")
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # Универсально получаем message для reply_text
     message = getattr(update, "effective_message", None)
