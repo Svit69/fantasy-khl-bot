@@ -500,15 +500,16 @@ async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     elif message is None and hasattr(update, "callback_query"):
         message = update.callback_query.message
     budget = get_budget()
-    budget_str = str(budget).replace('-', '\-') if budget is not None else 'N/A'
-    text = (
-        "*Правила игры:*\n\n"
-        "Соберите свою команду из 6 игроков \(3 нападающих, 2 защитника, 1 вратарь\) с ограниченным бюджетом\. "
-        "У каждого игрока своя стоимость \- 10, 30, 40 или 50 единиц\.\n\n"
-        "⚡️ Назначь одного полевого игрока из состава капитаном\n\n"
-        f"*Ваш бюджет: {budget_str}*\n\n"
-        "Собрать состав \- /tour"
-    )
+    budget_str = str(budget).replace("-", r"\-") if budget is not None else 'N/A'
+    text = rf"""*Правила игры:*
+
+Соберите свою команду из 6 игроков \(3 нападающих, 2 защитника, 1 вратарь\) с ограниченным бюджетом\. У каждого игрока своя стоимость \- 10, 30, 40 или 50 единиц\.
+
+⚡️ Назначь одного полевого игрока из состава капитаном
+
+*Ваш бюджет: {budget_str}*
+
+Собрать состав \- /tour"""
     await message.reply_text(text, parse_mode="MarkdownV2")
 
 async def hc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
