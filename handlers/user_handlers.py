@@ -492,17 +492,15 @@ async def restart_tour_callback(update: Update, context: ContextTypes.DEFAULT_TY
     return ConversationHandler.END
 
 async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    from db import get_active_tour
+    from db import get_budget
     # Универсально получаем message для reply_text
     message = getattr(update, "effective_message", None)
     if message is None and hasattr(update, "message"):
         message = update.message
     elif message is None and hasattr(update, "callback_query"):
         message = update.callback_query.message
-    active_tour = get_active_tour()
-    budget = active_tour['budget'] if active_tour and 'budget' in active_tour else 'N/A'
-    # Экранируем спецсимволы для MarkdownV2
-    budget_str = str(budget).replace('-', '\-')
+    budget = get_budget()
+    budget_str = str(budget).replace('-', '\-') if budget is not None else 'N/A'
     text = (
         "*Правила игры:*\n\n"
         "Соберите свою команду из 6 игроков \(3 нападающих, 2 защитника, 1 вратарь\) с ограниченным бюджетом\. "
