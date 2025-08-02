@@ -318,7 +318,8 @@ async def tour_defender_callback(update: Update, context: ContextTypes.DEFAULT_T
         player_name = escape_md(str(player[2]))
         cost = escape_md(str(player[7]))
         left_str = escape_md(str(left))
-        await query.edit_message_text(f'Вы выбрали {player_name} ({cost})\n\n*Оставшийся бюджет: {left_str}*', parse_mode="MarkdownV2")
+        msg = f'Вы выбрали {player_name} \\({cost}\\)\n\n*Оставшийся бюджет: {left_str}*'
+        await query.edit_message_text(msg, parse_mode="MarkdownV2")
         if len(context.user_data['tour_selected']['defenders']) == 1:
             print("tour_defender_callback SUCCESS: переход к tour_defender_2", flush=True)
             return await tour_defender_2(update, context)
@@ -377,7 +378,8 @@ async def tour_goalie_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         player_name = escape_md(str(player[2]))
         cost = escape_md(str(player[7]))
         left_str = escape_md(str(left))
-        await query.edit_message_text(f'Вы выбрали {player_name} ({cost})\n\n*Оставшийся бюджет: {left_str}*', parse_mode="MarkdownV2")
+        msg = f'Вы выбрали {player_name} \\({cost}\\)\n\n*Оставшийся бюджет: {left_str}*'
+        await query.edit_message_text(msg, parse_mode="MarkdownV2")
         # Показываем этап выбора капитана
         return await tour_captain(update, context)
     except Exception as e:
