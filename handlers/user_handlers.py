@@ -55,9 +55,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await message.reply_text(msg_id + msg, reply_markup=markup)
     else:
         await message.reply_text(
-            "⚠️ Ты уже в списке *генеральных менеджеров Фентези Драфта КХЛ*.\
-\n\
-*Формируй состав* и следи за результатами туров - /tour",
+            escape_md("⚠️ Ты уже в списке *генеральных менеджеров Фентези Драфта КХЛ*\.\n\n*Формируй состав* и следи за результатами туров \- /tour"),
             reply_markup=markup,
             parse_mode="MarkdownV2"
         )
