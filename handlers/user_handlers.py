@@ -450,16 +450,13 @@ async def tour_captain_callback(update: Update, context: ContextTypes.DEFAULT_TY
         return TOUR_CAPTAIN
     context.user_data['tour_selected']['captain'] = captain_id
     # Формируем красивое итоговое сообщение с кастомным эмодзи
-    def custom_emoji_entity(emoji_id, offset):
-        return MessageEntity(
-            type=MessageEntityType.CUSTOM_EMOJI,
-            offset=offset,
-            length=1,  # ASCII-символ
-            custom_emoji_id=str(emoji_id)
-        )
-
-    emoji_id = "5395320471078055274"
-    placeholder = "X"
+    # def custom_emoji_entity(emoji_id, offset):
+    #     return MessageEntity(
+    #         type=MessageEntityType.CUSTOM_EMOJI,
+    #         offset=offset,
+    #         length=1,  # ASCII-символ
+    #         custom_emoji_id=str(emoji_id)
+    #     )
 
     def get_name(pid, captain=False):
         p = next((x for x in roster if x[1]==pid), None)
@@ -470,21 +467,31 @@ async def tour_captain_callback(update: Update, context: ContextTypes.DEFAULT_TY
             return f"🏅 {base}"
         return base
 
-    # Формируем строки с плейсхолдерами
-    goalie = f"{placeholder} {get_name(selected['goalie'])}"
-    defenders = f"{placeholder} {get_name(selected['defenders'][0])} - {placeholder} {get_name(selected['defenders'][1])}"
-    forwards = (
-        f"{placeholder} {get_name(selected['forwards'][0])} - "
-        f"{placeholder} {get_name(selected['forwards'][1])} - "
-        f"{placeholder} {get_name(selected['forwards'][2])}"
+    def format_final_roster_md(goalie, defenders, forwards, captain, spent, budget):
+        lines = [
+            '*Ваш итоговый состав:*',
+            '',
+            escape_md(goalie),
+            escape_md(defenders),
+            escape_md(forwards),
+            '',
+            f'Капитан: {escape_md(captain)}',
+            f'Потрачено: *{escape_md(str(spent))}*/*{escape_md(str(budget))}*'
+        ]
+        return '\n'.join(lines)
+
+    goalie_str = get_name(selected['goalie'])
+    defenders_str = f"{get_name(selected['defenders'][0])} - {get_name(selected['defenders'][1])}"
+    forwards_str = (
+        f"{get_name(selected['forwards'][0])} - "
+        f"{get_name(selected['forwards'][1])} - "
+        f"{get_name(selected['forwards'][2])}"
     )
-    captain = get_name(captain_id)
+    captain_str = get_name(captain_id)
     spent = selected['spent']
     budget = context.user_data.get('tour_budget', 0)
 
-    # --- Сохраняем финальный состав пользователя ---
     user_id = update.effective_user.id
-    # Определяем tour_id (если есть активный, иначе 1)
     tour_id = context.user_data.get('active_tour_id', 1)
     roster_dict = {
         'goalie': selected['goalie'],
@@ -494,20 +501,14 @@ async def tour_captain_callback(update: Update, context: ContextTypes.DEFAULT_TY
     from db import save_user_tour_roster
     save_user_tour_roster(user_id, tour_id, roster_dict, captain_id, spent)
 
-    text = (
-        "Ваш итоговый состав:\n\n"
-        f"{goalie}\n"
-        f"{defenders}\n"
-        f"{forwards}\n\n"
-        f"Капитан: {captain}\n\n"
-        f"💰 Потрачено: {spent} HC из {budget} HC"
-    )
+    text = format_final_roster_md(goalie_str, defenders_str, forwards_str, captain_str, spent, budget)
     keyboard = [[InlineKeyboardButton('Пересобрать состав', callback_data='restart_tour')]]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await query.edit_message_text(
         text=text,
-        reply_markup=reply_markup
+        reply_markup=reply_markup,
+        parse_mode="MarkdownV2"
     )
     return ConversationHandler.END
 
