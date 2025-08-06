@@ -27,3 +27,14 @@ async def send_message_to_users(bot, users, text: str = None, photo_path: str = 
             logger.warning(f"Ошибка при отправке пользователю {user[0]}: {e}")
             failed += 1
     return success, failed
+
+import re
+
+def escape_md(text: str) -> str:
+    """
+    Экранирует спецсимволы для Telegram MarkdownV2.
+    """
+    if not isinstance(text, str):
+        text = str(text)
+    # Экранируем все специальные символы MarkdownV2
+    return re.sub(r'([_\*\[\]()~`>#+\-=|{}.!])', r'\\\1', text)
