@@ -99,7 +99,8 @@ async def tour_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_roster = get_user_tour_roster(user_id, tour_id)
     if user_roster and user_roster.get('roster'):
         # Форматируем состав для вывода
-        def format_user_roster(roster_data):
+        def format_user_roster_md(roster_data):
+            from utils import escape_md
             roster = roster_data['roster']
             captain_id = roster_data.get('captain_id')
             spent = roster_data.get('spent', 0)
@@ -110,19 +111,30 @@ async def tour_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             def fmt(p):
                 if not p: return "-"
                 return f"{p[1]} ({p[3]})"
-            g_str = f"Вратарь: {fmt(goalie)}"
-            d_str = f"Защитники: {fmt(defenders[0])} - {fmt(defenders[1])}" if len(defenders) == 2 else "Защитники: -"
-            f_str = f"Нападающие: {fmt(forwards[0])} - {fmt(forwards[1])} - {fmt(forwards[2])}" if len(forwards) == 3 else "Нападающие: -"
+            g_str = escape_md(fmt(goalie))
+            d_str = escape_md(f"{fmt(defenders[0])} - {fmt(defenders[1])}") if len(defenders) == 2 else "-"
+            f_str = escape_md(f"{fmt(forwards[0])} - {fmt(forwards[1])} - {fmt(forwards[2])}") if len(forwards) == 3 else "-"
             captain = None
             for p in [goalie] + defenders + forwards:
                 if p and p[0] == captain_id:
-                    captain = f"🏅 {fmt(p)}"
-            cap_str = f"Капитан: {captain}" if captain else "Капитан: -"
-            return f"Ваш состав на тур:\n\n{g_str}\n{d_str}\n{f_str}\n\n{cap_str}\n\n💰 Потрачено: {spent} HC"
-        text = format_user_roster(user_roster)
+                    captain = fmt(p)
+            cap_str = f"Капитан: {escape_md(captain)}" if captain else "Капитан: -"
+            lines = [
+                '*Ваш сохранённый состав:*',
+                '',
+                g_str,
+                d_str,
+                f_str,
+                '',
+                cap_str,
+                f'Потрачено: *{escape_md(str(spent))}* HC'
+            ]
+            return '\n'.join(lines)
+
+        text = format_user_roster_md(user_roster)
         keyboard = [[InlineKeyboardButton('Пересобрать состав', callback_data='restart_tour')]]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await message.reply_text(text, reply_markup=reply_markup)
+        await message.reply_text(text, reply_markup=reply_markup, parse_mode="MarkdownV2")
         return ConversationHandler.END
 
     # --- Если состава нет, запускаем обычный сценарий выбора ---
