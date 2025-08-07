@@ -68,6 +68,14 @@ def init_db():
                     UNIQUE(user_id, tour_id)
                 )
             ''')
+            # Таблица подписок
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS subscriptions (
+                    user_id INTEGER PRIMARY KEY,
+                    paid_until TEXT,
+                    last_payment_id TEXT
+                )
+            ''')
 
 def register_user(telegram_id, username, name):
     with closing(sqlite3.connect(DB_NAME)) as conn:
@@ -88,6 +96,19 @@ def get_user_by_username(username):
 def get_user_by_id(telegram_id):
     with closing(sqlite3.connect(DB_NAME)) as conn:
         return conn.execute('SELECT * FROM users WHERE telegram_id = ?', (telegram_id,)).fetchone()
+
+def get_subscription(user_id):
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        return conn.execute('SELECT * FROM subscriptions WHERE user_id = ?', (user_id,)).fetchone()
+
+def add_or_update_subscription(user_id, paid_until, last_payment_id):
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            conn.execute('''
+                INSERT INTO subscriptions (user_id, paid_until, last_payment_id)
+                VALUES (?, ?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET paid_until=excluded.paid_until, last_payment_id=excluded.last_payment_id
+            ''', (user_id, paid_until, last_payment_id))
 
 def update_hc_balance(telegram_id, amount):
     with closing(sqlite3.connect(DB_NAME)) as conn:
