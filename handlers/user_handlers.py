@@ -1,4 +1,4 @@
-from telegram import Update, InputFile, ReplyKeyboardMarkup, MessageEntity
+from telegram import Update, InputFile, ReplyKeyboardMarkup, MessageEntity, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.constants import MessageEntityType
 from telegram.ext import ContextTypes, ConversationHandler
 from config import ADMIN_ID
@@ -61,6 +61,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
 
 # --- TOUR ConversationHandler states ---
+
+async def referral(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+    bot_username = (await context.bot.get_me()).username
+    link = f"https://t.me/{bot_username}?start=ref_{user.id}"
+    text = (
+        f"🔗 Ваша реферальная ссылка:\n"
+        f"{link}\n\n"
+        f"Приглашайте друзей! За каждого нового участника вы получите +50 HC после его регистрации."
+    )
+    keyboard = [[InlineKeyboardButton('Скопировать ссылку', url=link)]]
+    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+
 TOUR_START, TOUR_FORWARD_1, TOUR_FORWARD_2, TOUR_FORWARD_3, TOUR_DEFENDER_1, TOUR_DEFENDER_2, TOUR_GOALIE, TOUR_CAPTAIN = range(8)
 
 async def tour_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
