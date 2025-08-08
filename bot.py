@@ -1,8 +1,7 @@
-from yookassa import configuration
+from yookassa import Configuration
 from utils import YOOKASSA_SHOP_ID, YOOKASSA_SECRET_KEY
-configuration.account_id = YOOKASSA_SHOP_ID
-configuration.secret_key = YOOKASSA_SECRET_KEY
-print("[DEBUG] Ключи установлены в bot.py:", configuration.account_id, configuration.secret_key)
+Configuration.configure(YOOKASSA_SHOP_ID, YOOKASSA_SECRET_KEY)
+print("[DEBUG] Ключи установлены через Configuration.configure:", Configuration.account_id, Configuration.secret_key)
 import os
 import logging
 import asyncio
