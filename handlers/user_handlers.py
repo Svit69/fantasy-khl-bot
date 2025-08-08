@@ -150,61 +150,170 @@ async def challenge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await update.message.reply_text("Не удалось проверить подписку. Попробуйте позже или оформите /subscribe.")
         return
 
-    # Пытаемся отправить последнюю картинку челленджа
-    photo_sent = False
-    # 1) Попробуем отправить по file_id из БД
+    # Список доступных челленджей: все со статусом "активен" и "в игре". Если таких нет — показать последний "завершен".
+    challenges = []
     try:
-        ch = db.get_latest_challenge()
-        if ch:
-            # ch: (id, start, deadline, end, image_filename, status, image_file_id)
-            image_file_id = ch[6] if len(ch) >= 7 else ''
-            if image_file_id:
-                try:
-                    await context.bot.send_photo(chat_id=update.effective_chat.id, photo=image_file_id)
-                    photo_sent = True
-                except Exception:
-                    photo_sent = False
+        challenges = db.get_all_challenges() or []
     except Exception:
-        pass
-    # 2) Если не получилось — попробуем локальный файл из CHALLENGE_IMAGE_PATH_FILE
-    if not photo_sent:
+        challenges = []
+
+    active_or_play = [c for c in challenges if len(c) > 5 and c[5] in ("активен", "в игре")]
+    last_finished = None
+    if challenges:
+        # выбрать последний завершенный по end_date
         try:
-            if os.path.exists(CHALLENGE_IMAGE_PATH_FILE):
-                with open(CHALLENGE_IMAGE_PATH_FILE, 'r') as f:
-                    fname = f.read().strip()
-                fpath = os.path.join(IMAGES_DIR, fname)
-                if os.path.exists(fpath):
-                    try:
-                        await context.bot.send_photo(chat_id=update.effective_chat.id, photo=InputFile(fpath))
-                        photo_sent = True
-                    except Exception:
-                        photo_sent = False
+            import datetime
+            finished = [c for c in challenges if len(c) > 5 and c[5] == "завершен"]
+            def parse_iso(s):
+                try:
+                    return datetime.datetime.fromisoformat(str(s))
+                except Exception:
+                    return datetime.datetime.min
+            if finished:
+                last_finished = sorted(finished, key=lambda c: parse_iso(c[3]) or datetime.datetime.min)[-1]
         except Exception:
             pass
-    # 3) Если не получилось фото — попробуем отправить как документ
-    if not photo_sent:
-        try:
-            if 'fpath' in locals() and os.path.exists(fpath):
-                await context.bot.send_document(chat_id=update.effective_chat.id, document=InputFile(fpath))
-                photo_sent = True
-        except Exception as e:
-            try:
-                await update.message.reply_text(f"[WARN] Не удалось отправить картинку челленджа: {e}")
-            except Exception:
-                pass
 
+    list_to_show = active_or_play if active_or_play else ([last_finished] if last_finished else [])
+
+    if not list_to_show:
+        await update.message.reply_text("Сейчас нет доступных челленджей. Загляните позже.")
+        return
+
+    lines = ["Доступные челленджи:"]
+    buttons = []
+    for c in list_to_show:
+        # c: (id, start, deadline, end, image_filename, status, [image_file_id])
+        cid = c[0]
+        start = c[1]
+        deadline = c[2]
+        end = c[3]
+        status = c[5] if len(c) > 5 else ''
+        lines.append(f"#{cid} | {status} | старт: {start} | дедлайн: {deadline} | конец: {end}")
+        buttons.append([InlineKeyboardButton(f"Открыть #{cid}", callback_data=f"challenge_open_{cid}")])
+
+    await update.message.reply_text("\n".join(lines), reply_markup=InlineKeyboardMarkup(buttons))
+
+
+async def challenge_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    try:
+        cid = int(data.replace("challenge_open_", ""))
+    except Exception:
+        await query.edit_message_text("Некорректный выбор челленджа.")
+        return
+
+    # Найдем челлендж по id
+    ch = None
+    try:
+        rows = db.get_all_challenges() or []
+        for r in rows:
+            if r[0] == cid:
+                ch = r
+                break
+    except Exception:
+        ch = None
+    if not ch:
+        await query.edit_message_text("Челлендж не найден.")
+        return
+
+    # Попробуем отправить картинку челленджа как фото
+    image_sent = False
+    image_file_id = ch[6] if len(ch) >= 7 else ''
+    if image_file_id:
+        try:
+            await context.bot.send_photo(chat_id=update.effective_chat.id, photo=image_file_id)
+            image_sent = True
+        except Exception:
+            logger.warning("send_photo by file_id failed in open_callback", exc_info=True)
+    if not image_sent:
+        try:
+            fname = ch[4] if len(ch) > 4 else ''
+            if fname:
+                fpath = os.path.join(IMAGES_DIR, fname)
+                if os.path.exists(fpath):
+                    with open(fpath, 'rb') as fp:
+                        await context.bot.send_photo(chat_id=update.effective_chat.id, photo=InputFile(fp, filename=fname))
+                        image_sent = True
+        except Exception:
+            logger.error("send_photo from local file failed in open_callback", exc_info=True)
+
+    # Меню действий по челленджу
+    status = ch[5] if len(ch) > 5 else ''
     text = (
-        "Челлендж против редакции Голевой\n"
-        "Выбирай трёх игроков:\n"
-        "🔸1 нападающий\n"
-        "🔸1 защитник\n"
-        "🔸1 вратарь\n\n"
-        "Редакция уже готова — смотри картинку\n\n"
-        "Теперь выбери уровень вызова:\n"
-        "⚡️ 50 HC\n"
-        "⚡️ 100 HC\n"
-        "⚡️ 500 HC\n\n"
-        "Если твой состав наберет очков больше редакции — получаешь x2 от уровня вызова. Если нет — твои HC списываются в пользу редакции."
+        f"Челлендж #{ch[0]}\n"
+        f"Статус: {status}\n"
+        f"Старт: {ch[1]}\nДедлайн: {ch[2]}\nОкончание: {ch[3]}"
+    )
+    buttons = [[InlineKeyboardButton("Инфо", callback_data=f"challenge_info_{ch[0]}")]]
+    if status == "активен":
+        buttons.append([InlineKeyboardButton("Собрать состав", callback_data=f"challenge_build_{ch[0]}")])
+    await context.bot.send_message(chat_id=update.effective_chat.id, text=text, reply_markup=InlineKeyboardMarkup(buttons))
+
+
+async def challenge_info_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    try:
+        cid = int(query.data.replace("challenge_info_", ""))
+    except Exception:
+        await query.edit_message_text("Некорректный запрос.")
+        return
+    # Найдем челлендж
+    ch = None
+    try:
+        rows = db.get_all_challenges() or []
+        for r in rows:
+            if r[0] == cid:
+                ch = r
+                break
+    except Exception:
+        ch = None
+    if not ch:
+        await query.edit_message_text("Челлендж не найден.")
+        return
+    status = ch[5] if len(ch) > 5 else ''
+    txt = (
+        f"Информация по челленджу #{ch[0]}\n"
+        f"Статус: {status}\n"
+        f"Старт: {ch[1]}\nДедлайн: {ch[2]}\nОкончание: {ch[3]}\n\n"
+        f"Если статус 'активен' — можете собрать состав."
+    )
+    await query.edit_message_text(txt)
+
+
+async def challenge_build_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    try:
+        cid = int(query.data.replace("challenge_build_", ""))
+    except Exception:
+        await query.edit_message_text("Некорректный запрос.")
+        return
+    # Проверим, что выбранный челлендж активен
+    ch = None
+    try:
+        rows = db.get_all_challenges() or []
+        for r in rows:
+            if r[0] == cid:
+                ch = r
+                break
+    except Exception:
+        ch = None
+    if not ch:
+        await query.edit_message_text("Челлендж не найден.")
+        return
+    status = ch[5] if len(ch) > 5 else ''
+    if status != "активен":
+        await query.edit_message_text("Сбор состава недоступен: челлендж не активен.")
+        return
+
+    # Переиспользуем текущую механику: выбор уровня вызова
+    text = (
+        "Выберите уровень вызова для челленджа:\n\n"
+        "⚡️ 50 HC\n⚡️ 100 HC\n⚡️ 500 HC"
     )
     keyboard = [
         [
@@ -213,7 +322,7 @@ async def challenge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             InlineKeyboardButton('⚡️ 500 HC', callback_data='challenge_level_500'),
         ]
     ]
-    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
 
 
 async def challenge_level_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):

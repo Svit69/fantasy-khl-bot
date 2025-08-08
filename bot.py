@@ -20,7 +20,8 @@ from handlers.user_handlers import start, hc, IMAGES_DIR, \
     tour_forward_callback, tour_defender_callback, tour_goalie_callback, \
     restart_tour_callback, tour_captain_callback, rules, referral, subscribe, \
     premium_add_pool_callback, premium_team_input, premium_position_selected, \
-    challenge_command, challenge_level_callback
+    challenge_command, challenge_level_callback, \
+    challenge_open_callback, challenge_info_callback, challenge_build_callback
 from handlers.admin_handlers import addhc, send_results, show_users
 from handlers.admin_handlers import list_challenges, delete_challenge_cmd
 from handlers.admin_handlers import (
@@ -300,6 +301,9 @@ if __name__ == '__main__':
     # Глобальный обработчик для кнопки "Пересобрать состав"
     app.add_handler(CallbackQueryHandler(restart_tour_callback, pattern=r"^restart_tour$"))
     # Глобальные колбэки челленджа
+    app.add_handler(CallbackQueryHandler(challenge_open_callback, pattern=r"^challenge_open_\d+$"))
+    app.add_handler(CallbackQueryHandler(challenge_info_callback, pattern=r"^challenge_info_\d+$"))
+    app.add_handler(CallbackQueryHandler(challenge_build_callback, pattern=r"^challenge_build_\d+$"))
     app.add_handler(CallbackQueryHandler(challenge_level_callback, pattern=r"^challenge_level_(50|100|500)$"))
 
     # ConversationHandler для установки бюджета
