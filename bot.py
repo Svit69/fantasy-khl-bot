@@ -82,7 +82,7 @@ async def send_tour_image_cancel(update, context):
 import utils
 
 async def on_startup(app):
-    app.create_task(utils.poll_yoomoney_payments(app.bot, interval=60))
+    app.create_task(utils.poll_yookassa_payments(app.bot, interval=60))
 
 if __name__ == '__main__':
     import platform
