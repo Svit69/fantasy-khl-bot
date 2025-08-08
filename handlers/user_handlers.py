@@ -74,6 +74,39 @@ async def referral(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     keyboard = [[InlineKeyboardButton('Скопировать ссылку', url=link)]]
     await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
 
+
+async def subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+    amount = 299
+    shop_id = "1141033"
+    payment_url = (
+        f"https://yoomoney.ru/quickpay/shop-widget?writer=seller"
+        f"&targets=Оплата+подписки+для+user_{user.id}"
+        f"&targets-hint=&default-sum={amount}"
+        f"&button-text=11&payment-type-choice=on&mobile-payment-type-choice=on"
+        f"&successURL=https://t.me/{(await context.bot.get_me()).username}?start=paid_{user.id}"
+        f"&label=user_{user.id}"
+        f"&shopId={shop_id}"
+    )
+    text = (
+        f"💳 <b>Подписка на Fantasy KHL</b>\n\n"
+        f"Стоимость: <b>{amount} руб/месяц</b>\n\n"
+        f"Нажмите кнопку ниже для оплаты через ЮMoney. После успешной оплаты подписка активируется автоматически."
+    )
+    keyboard = [[InlineKeyboardButton('Оплатить 299₽ через ЮMoney', url=payment_url)]]
+    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+    user = update.effective_user
+    bot_username = (await context.bot.get_me()).username
+    link = f"https://t.me/{bot_username}?start=ref_{user.id}"
+    text = (
+        f"🔗 Ваша реферальная ссылка:\n"
+        f"{link}\n\n"
+        f"Приглашайте друзей! За каждого нового участника вы получите +50 HC после его регистрации."
+    )
+    keyboard = [[InlineKeyboardButton('Скопировать ссылку', url=link)]]
+    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+
 TOUR_START, TOUR_FORWARD_1, TOUR_FORWARD_2, TOUR_FORWARD_3, TOUR_DEFENDER_1, TOUR_DEFENDER_2, TOUR_GOALIE, TOUR_CAPTAIN = range(8)
 
 async def tour_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
