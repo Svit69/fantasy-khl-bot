@@ -7,6 +7,7 @@ import logging
 import asyncio
 
 from telegram import Update, InputFile, BotCommand, BotCommandScopeDefault, BotCommandScopeChat
+from telegram.ext import PicklePersistence
 from telegram.ext import Application, CommandHandler, ContextTypes, ConversationHandler, MessageHandler, CallbackQueryHandler, filters
 import httpx
 
@@ -101,8 +102,18 @@ async def on_startup(app):
         BotCommand("addhc", "Начислить HC пользователю (админ)"),
         BotCommand("send_results", "Разослать результаты тура (админ)"),
     ]
+    # Установка команд через Bot API
     await app.bot.set_my_commands(user_commands)
     await app.bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=ADMIN_ID))
+    
+    # Принудительное обновление кеша команд в Telegram
+    try:
+        await app.bot.delete_my_commands()
+        await app.bot.set_my_commands(user_commands)
+        await app.bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=ADMIN_ID))
+        print("[DEBUG] Команды успешно обновлены через Bot API")
+    except Exception as e:
+        print(f"[ERROR] Ошибка обновления команд: {e}")
 
 
 
@@ -125,7 +136,14 @@ if __name__ == '__main__':
         import asyncio
         asyncio.create_task(utils.poll_yookassa_payments(app.bot, 60))
 
-    app = Application.builder().token(TELEGRAM_TOKEN).post_init(on_startup).post_init(post_init_poll_payments).build()
+    # Создаем приложение с persistence для сохранения состояний
+    persistence = PicklePersistence(filepath='bot_persistence.pickle')
+    app = Application.builder()\
+        .token(TELEGRAM_TOKEN)\
+        .persistence(persistence)\
+        .post_init(on_startup)\
+        .post_init(post_init_poll_payments)\
+        .build()
 
     # ЯВНЫЙ запуск poll_yookassa_payments для отладки
     import asyncio
