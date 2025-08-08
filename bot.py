@@ -81,6 +81,9 @@ async def send_tour_image_cancel(update, context):
 
 import utils
 
+async def on_startup(app):
+    app.create_task(utils.poll_yoomoney_payments(app.bot, interval=60))
+
 if __name__ == '__main__':
     import platform
     import sys
@@ -92,14 +95,12 @@ if __name__ == '__main__':
         asyncio.events._get_event_loop = asyncio.get_event_loop
 
     # Создание и настройка приложения    
-    app = Application.builder().token(TELEGRAM_TOKEN).build()
+    app = Application.builder().token(TELEGRAM_TOKEN).post_init(on_startup).build()
     
     # Регистрация обработчиков
     app.add_handler(CommandHandler('start', start))
 
-    # Запуск polling ЮMoney
-    import asyncio
-    asyncio.create_task(utils.poll_yoomoney_payments(app.bot, interval=60))
+
     app.add_handler(CommandHandler('hc', hc))
     app.add_handler(CommandHandler('referral', referral))
     app.add_handler(CommandHandler('subscribe', subscribe))
