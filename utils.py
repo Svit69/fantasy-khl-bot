@@ -3,10 +3,59 @@ from telegram import Update, InputFile
 from telegram.ext import ContextTypes
 from config import ADMIN_ID
 import os
-import requests
+from yookassa import Payment
+
+YOOKASSA_SHOP_ID = "1141033"
+YOOKASSA_SECRET_KEY = "test_NnIZ_gFbddTpDQQNphx0KuZFqBWHd6PVoB1KxVtWOHw"
+SUBSCRIPTION_AMOUNT = 299
+
+
+def create_yookassa_payment(user_id: int):
+    payment = Payment.create({
+        "amount": {
+            "value": f"{SUBSCRIPTION_AMOUNT}.00",
+            "currency": "RUB"
+        },
+        "confirmation": {
+            "type": "redirect",
+            "return_url": "https://t.me/<ВАШ_БОТ>"
+        },
+        "capture": True,
+        "description": f"Подписка на Fantasy KHL для user_{user_id}",
+        "metadata": {"user_id": str(user_id)}
+    },
+    shop_id=YOOKASSA_SHOP_ID, api_key=YOOKASSA_SECRET_KEY)
+    from db import save_payment_id
+    save_payment_id(user_id, payment.id, status='pending')
+    return payment.confirmation.confirmation_url, payment.id
+
 import db
 import datetime
 import asyncio
+
+async def poll_yookassa_payments(bot, interval=60):
+    """
+    Периодически проверяет статус платежей в ЮKassa и активирует подписку при успешной оплате.
+    """
+    from yookassa import Payment
+    import db
+    while True:
+        try:
+            pending = db.get_pending_payments()
+            for payment_id, user_id in pending:
+                payment = Payment.find_one(payment_id, shop_id=YOOKASSA_SHOP_ID, api_key=YOOKASSA_SECRET_KEY)
+                if payment.status == "succeeded":
+                    # Продлить подписку
+                    paid_until = datetime.datetime.utcnow() + datetime.timedelta(days=31)
+                    db.add_or_update_subscription(user_id, paid_until.isoformat(), payment_id)
+                    db.update_payment_status(payment_id, "succeeded")
+                    try:
+                        await bot.send_message(chat_id=user_id, text=f"✅ Ваша подписка успешно продлена до {paid_until.strftime('%d.%m.%Y')}!")
+                    except Exception as e:
+                        print(f"Не удалось уведомить пользователя {user_id}: {e}")
+        except Exception as e:
+            print(f"Ошибка при polling ЮKassa: {e}")
+        await asyncio.sleep(interval)
 
 IMAGES_DIR = 'images'
 __all__ = ['IMAGES_DIR']

@@ -76,6 +76,18 @@ async def referral(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    from utils import create_yookassa_payment
+    user = update.effective_user
+    payment_url, payment_id = create_yookassa_payment(user.id)
+    # Сохраняем payment_id в БД (можно добавить функцию)
+    # db.save_payment_id(user.id, payment_id)
+    text = (
+        f"💳 <b>Подписка на Fantasy KHL</b>\n\n"
+        f"Стоимость: <b>299 руб/месяц</b>\n\n"
+        f"Нажмите кнопку ниже для оплаты через ЮKassa. После успешной оплаты подписка активируется автоматически."
+    )
+    keyboard = [[InlineKeyboardButton('Оплатить 299₽ через ЮKassa', url=payment_url)]]
+    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
     user = update.effective_user
     amount = 299
     shop_id = "1141033"
