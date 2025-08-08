@@ -414,9 +414,19 @@ async def premium_position_selected(update: Update, context: ContextTypes.DEFAUL
                 return team_text in str(t or '').lower()
             except Exception:
                 return False
+        # Исключим игроков, уже включённых в туровый ростер
+        tour_roster = context.user_data.get('tour_roster', [])
+        tour_ids = set([tr[1] for tr in tour_roster])  # p.id из турового списка
         # Индексы в players: 0-id,1-name,2-position,3-club,6-price
-        filtered = [p for p in all_players if p[2].lower() == pos and p[0] not in exclude_ids and (p[6] or 0) <= left and team_match(p[3])]
-        print(f"[DEBUG] premium_position_selected: team='{team_text}', found={len(filtered)} players in DB, left={left}")
+        filtered = [
+            p for p in all_players
+            if p[2].lower() == pos
+            and p[0] not in exclude_ids
+            and p[0] not in tour_ids
+            and (p[6] or 0) <= left
+            and team_match(p[3])
+        ]
+        print(f"[DEBUG] premium_position_selected: team='{team_text}', found={len(filtered)} players in DB (excluding tour roster), left={left}")
         if not filtered:
             await query.message.reply_text("По заданным фильтрам игроков не найдено. Измените команду или позицию.")
             return next_state
