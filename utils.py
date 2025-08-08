@@ -7,6 +7,9 @@ from yookassa import Payment
 
 YOOKASSA_SHOP_ID = "1141033"
 YOOKASSA_SECRET_KEY = "test_NnIZ_gFbddTpDQQNphx0KuZFqBWHd6PVoB1KxVtWOHw"
+from yookassa import configuration
+configuration.account_id = YOOKASSA_SHOP_ID
+configuration.secret_key = YOOKASSA_SECRET_KEY
 SUBSCRIPTION_AMOUNT = 299
 
 
