@@ -3,7 +3,7 @@ from telegram.ext import ContextTypes, ConversationHandler
 from config import ADMIN_ID
 import db
 import os
-from utils import is_admin, send_message_to_users, IMAGES_DIR, TOUR_IMAGE_PATH_FILE, logger
+from utils import is_admin, send_message_to_users, IMAGES_DIR, TOUR_IMAGE_PATH_FILE, CHALLENGE_IMAGE_PATH_FILE, logger
 
 # --- Добавление игрока ---
 ADD_NAME, ADD_POSITION, ADD_CLUB, ADD_NATION, ADD_AGE, ADD_PRICE = range(6)
@@ -366,6 +366,47 @@ async def addhc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     new_balance = db.get_user_by_id(user[0])[3]
     await context.bot.send_message(chat_id=user[0], text=f'🎉 Тебе начислено {amount} HC!\n💰 Новый баланс: {new_balance} HC')
     await update.message.reply_text(f'Пользователю @{username} начислено {amount} HC.')
+
+# --- Картинка для челленджа ---
+CHALLENGE_WAIT_IMAGE = 31
+
+async def send_challenge_image_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await admin_only(update, context):
+        return ConversationHandler.END
+    try:
+        await update.message.reply_text('Пожалуйста, прикрепите картинку челленджа следующим сообщением.')
+    except Exception:
+        pass
+    return CHALLENGE_WAIT_IMAGE
+
+async def send_challenge_image_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        await process_challenge_image_photo(update, context)
+        await update.message.reply_text('✅ Картинка челленджа сохранена.')
+    except Exception as e:
+        await update.message.reply_text(f'Ошибка при обработке фото челленджа: {e}')
+    return ConversationHandler.END
+
+async def send_challenge_image_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        await update.message.reply_text('Отменено.')
+    except Exception:
+        pass
+    return ConversationHandler.END
+
+async def process_challenge_image_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    try:
+        photo = update.message.photo[-1]
+        file = await photo.get_file()
+        filename = f"challenge_{photo.file_unique_id}.jpg"
+        path = os.path.join(IMAGES_DIR, filename)
+        await file.download_to_drive(path)
+        with open(CHALLENGE_IMAGE_PATH_FILE, 'w') as f:
+            f.write(filename)
+        logger.info(f"Картинка челленджа сохранена: {path} (от {update.effective_user.id})")
+    except Exception as e:
+        logger.error(f'Ошибка при сохранении картинки челленджа: {e}')
+        await update.message.reply_text(f'Ошибка при сохранении картинки челленджа: {e}')
 
 async def send_results(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await admin_only(update, context):

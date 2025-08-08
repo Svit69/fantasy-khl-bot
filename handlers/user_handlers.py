@@ -4,7 +4,7 @@ from telegram.ext import ContextTypes, ConversationHandler
 from config import ADMIN_ID
 import db
 import os
-from utils import is_admin, IMAGES_DIR, logger
+from utils import is_admin, IMAGES_DIR, logger, CHALLENGE_IMAGE_PATH_FILE
 
 def escape_md(text):
     # Все спецсимволы MarkdownV2
@@ -135,6 +135,67 @@ async def subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
     keyboard = [[InlineKeyboardButton('Оплатить 299₽ через ЮKassa', url=payment_url)]]
     await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+
+# --- CHALLENGE ---
+async def challenge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+    # Только для подписчиков
+    try:
+        from db import is_subscription_active
+        if not is_subscription_active(user.id):
+            await update.message.reply_text("Функция доступна только подписчикам. Оформите подписку: /subscribe")
+            return
+    except Exception:
+        await update.message.reply_text("Не удалось проверить подписку. Попробуйте позже или оформите /subscribe.")
+        return
+
+    # Пытаемся отправить последнюю картинку челленджа
+    photo_sent = False
+    try:
+        if os.path.exists(CHALLENGE_IMAGE_PATH_FILE):
+            with open(CHALLENGE_IMAGE_PATH_FILE, 'r') as f:
+                fname = f.read().strip()
+            fpath = os.path.join(IMAGES_DIR, fname)
+            if os.path.exists(fpath):
+                await context.bot.send_photo(chat_id=update.effective_chat.id, photo=InputFile(fpath))
+                photo_sent = True
+    except Exception as e:
+        try:
+            await update.message.reply_text(f"[WARN] Не удалось отправить картинку челленджа: {e}")
+        except Exception:
+            pass
+
+    text = (
+        "*Челлендж против редакции Голевой*\n"
+        "Выбирай трёх игроков:\n"
+        "🔸1 нападающий\n"
+        "🔸1 защитник\n"
+        "🔸1 вратарь\n\n"
+        "Редакция уже готова — смотри картинку\n\n"
+        "Теперь выбери *уровень вызова:*\n"
+        "⚡ 50 HC\n"
+        "⚡ 100 HC\n"
+        "⚡ 500 HC\n\n"
+        "Если твой состав обгонит редакцию по очкам — получаешь *x2 от уровня вызова.*"
+    )
+    keyboard = [
+        [
+            InlineKeyboardButton('⚡ 50 HC', callback_data='challenge_level_50'),
+            InlineKeyboardButton('⚡ 100 HC', callback_data='challenge_level_100'),
+            InlineKeyboardButton('⚡ 500 HC', callback_data='challenge_level_500'),
+        ]
+    ]
+    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+
+
+async def challenge_level_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    level = data.replace('challenge_level_', '')
+    context.user_data['challenge_level'] = int(level)
+    await query.edit_message_text(f"Уровень вызова выбран: {level} HC. Теперь выбери трёх игроков (функция подготавливается).")
 
 
 TOUR_START, TOUR_FORWARD_1, TOUR_FORWARD_2, TOUR_FORWARD_3, TOUR_DEFENDER_1, TOUR_DEFENDER_2, TOUR_GOALIE, TOUR_CAPTAIN, PREMIUM_TEAM, PREMIUM_POSITION = range(10)

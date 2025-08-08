@@ -124,6 +124,7 @@ IMAGES_DIR = 'images'
 __all__ = ['IMAGES_DIR']
 
 TOUR_IMAGE_PATH_FILE = 'latest_tour.txt'
+CHALLENGE_IMAGE_PATH_FILE = 'latest_challenge.txt'
 logger = logging.getLogger(__name__)
 
 def is_admin(user_id: int) -> bool:

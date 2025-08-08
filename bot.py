@@ -19,8 +19,12 @@ from handlers.user_handlers import start, hc, IMAGES_DIR, \
     tour_defender_1, tour_defender_2, tour_goalie, tour_captain, \
     tour_forward_callback, tour_defender_callback, tour_goalie_callback, \
     restart_tour_callback, tour_captain_callback, rules, referral, subscribe, \
-    premium_add_pool_callback, premium_team_input, premium_position_selected
+    premium_add_pool_callback, premium_team_input, premium_position_selected, \
+    challenge_command, challenge_level_callback
 from handlers.admin_handlers import addhc, send_results, show_users
+from handlers.admin_handlers import (
+    send_challenge_image_start, send_challenge_image_photo, send_challenge_image_cancel, CHALLENGE_WAIT_IMAGE
+)
 from handlers.admin_handlers import (
     add_player_start, add_player_name, add_player_position, add_player_club,
     add_player_nation, add_player_age, add_player_price, add_player_cancel, list_players, find_player,
@@ -97,10 +101,12 @@ async def on_startup(app):
         BotCommand("hc", "Показать баланс HC"),
         BotCommand("subscribe", "Оформить подписку"),
         BotCommand("rules", "Правила сборки составов"),
+        BotCommand("challenge", "Челлендж против редакции"),
     ]
     admin_commands = user_commands + [
         BotCommand("show_users", "Список пользователей и подписок (админ)"),
         BotCommand("send_tour_image", "Разослать изображение тура (админ)"),
+        BotCommand("send_challenge_image", "Загрузить картинку челленджа (админ)"),
         BotCommand("addhc", "Начислить HC пользователю (админ)"),
         BotCommand("send_results", "Разослать результаты тура (админ)"),
     ]
@@ -192,6 +198,7 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('referral', referral))
     app.add_handler(CommandHandler('show_users', show_users))  # Только для админа
     app.add_handler(CommandHandler('subscribe', subscribe))
+    app.add_handler(CommandHandler('challenge', challenge_command))
     
     send_tour_image_conv = ConversationHandler(
         entry_points=[CommandHandler('send_tour_image', send_tour_image_start)],
@@ -202,6 +209,16 @@ if __name__ == '__main__':
         allow_reentry=True
     )
     app.add_handler(send_tour_image_conv)
+    # --- ConversationHandler для send_challenge_image ---
+    send_challenge_image_conv = ConversationHandler(
+        entry_points=[CommandHandler('send_challenge_image', send_challenge_image_start)],
+        states={
+            CHALLENGE_WAIT_IMAGE: [MessageHandler(filters.PHOTO, send_challenge_image_photo)]
+        },
+        fallbacks=[CommandHandler('cancel', send_challenge_image_cancel)],
+        allow_reentry=True
+    )
+    app.add_handler(send_challenge_image_conv)
     app.add_handler(CommandHandler('addhc', addhc))
     app.add_handler(CommandHandler('send_results', send_results))
     app.add_handler(CommandHandler('get_tour_roster', get_tour_roster))
@@ -265,6 +282,8 @@ if __name__ == '__main__':
     app.add_handler(tour_conv)
     # Глобальный обработчик для кнопки "Пересобрать состав"
     app.add_handler(CallbackQueryHandler(restart_tour_callback, pattern=r"^restart_tour$"))
+    # Глобальные колбэки челленджа
+    app.add_handler(CallbackQueryHandler(challenge_level_callback, pattern=r"^challenge_level_(50|100|500)$"))
 
     # ConversationHandler для установки бюджета
     set_budget_conv = ConversationHandler(
