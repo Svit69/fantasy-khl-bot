@@ -102,7 +102,12 @@ if __name__ == '__main__':
         asyncio.events._get_event_loop = asyncio.get_event_loop
 
     # Создание и настройка приложения    
-    app = Application.builder().token(TELEGRAM_TOKEN).post_init(on_startup).build()
+    async def post_init_poll_payments(app):
+        import utils
+        import asyncio
+        asyncio.create_task(utils.poll_yookassa_payments(app.bot, 60))
+
+    app = Application.builder().token(TELEGRAM_TOKEN).post_init(on_startup).post_init(post_init_poll_payments).build()
     
     # Регистрация обработчиков
     app.add_handler(CommandHandler('start', start))
