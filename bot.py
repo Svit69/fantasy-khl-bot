@@ -87,7 +87,7 @@ async def send_tour_image_cancel(update, context):
 import utils
 
 async def on_startup(app):
-    from telegram import BotCommand, BotCommandScopeChat
+    from telegram import BotCommand, BotCommandScopeChat, BotCommandScopeAllPrivateChats
     from config import ADMIN_ID
     print("[DEBUG] on_startup called: setting bot commands")
     user_commands = [
@@ -104,22 +104,35 @@ async def on_startup(app):
         BotCommand("send_results", "Разослать результаты тура (админ)"),
     ]
     try:
-        # Очистим команды на всякий случай
+        # Очистим команды на всякий случай (default и ru)
         await app.bot.delete_my_commands()
         await app.bot.delete_my_commands(language_code='ru')
+        print("[DEBUG] Existing commands cleared (default + ru)")
     except Exception as e:
         print(f"[WARN] delete_my_commands failed: {e}")
+
     # Установим команды по умолчанию и для RU
     await app.bot.set_my_commands(user_commands)
     await app.bot.set_my_commands(user_commands, language_code='ru')
+    print("[DEBUG] Default commands set (default + ru)")
+
+    # Установим команды для всех приватных чатов (дублирование для надёжности)
+    try:
+        await app.bot.set_my_commands(user_commands, scope=BotCommandScopeAllPrivateChats())
+        await app.bot.set_my_commands(user_commands, scope=BotCommandScopeAllPrivateChats(), language_code='ru')
+        print("[DEBUG] Commands set for all private chats (default + ru)")
+    except Exception as e:
+        print(f"[WARN] Failed to set commands for AllPrivateChats: {e}")
+
     # Для админа в личке (его чат)
     await app.bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=ADMIN_ID))
     try:
         await app.bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=ADMIN_ID), language_code='ru')
+        print("[DEBUG] Admin chat commands set (default + ru)")
     except Exception:
         # Не все клиенты поддерживают язык для chat scope — игнорируем
-        pass
-    print("[DEBUG] Bot commands set (default and ru), admin chat overridden")
+        print("[WARN] Admin chat commands ru-language not supported; skipped")
+    print("[DEBUG] Bot commands set complete")
     
     # Принудительное обновление кеша команд в Telegram
     try:
