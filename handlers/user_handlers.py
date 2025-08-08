@@ -335,8 +335,9 @@ async def premium_add_pool_callback(update: Update, context: ContextTypes.DEFAUL
             return TOUR_FORWARD_1
     except Exception:
         print("[WARN] premium_add_pool_callback: failed to check subscription")
-    # Установим флаг: доступен +1 игрок в пул
+    # Установим флаги премиум-режима: добавление в пул (без автодобавления в состав)
     context.user_data['premium_extra_available'] = True
+    context.user_data['premium_mode'] = 'add_to_pool'
     print("[DEBUG] premium_add_pool_callback: premium_extra_available=True set")
     # Удалим предыдущее сообщение с выбором игроков, если сохранено
     try:
@@ -542,6 +543,27 @@ async def tour_forward_callback(update: Update, context: ContextTypes.DEFAULT_TY
             except Exception:
                 await query.edit_message_text('Игрок не найден.')
                 return TOUR_FORWARD_1
+        # Если активен режим добавления в пул — не добавляем в состав, а только расширяем пул
+        if context.user_data.get('premium_mode') == 'add_to_pool':
+            try:
+                # Убедимся, что игрок есть в персональном пуле
+                roster = context.user_data['tour_roster']
+                if not any(p_[1] == player[1] for p_ in roster):
+                    context.user_data['tour_roster'].append(player)
+                # Выключаем режим и сжигаем бонус
+                context.user_data['premium_mode'] = None
+                context.user_data['premium_extra_available'] = False
+                # Покажем обычный выбор нападающих с учётом расширенного пула
+                budget = context.user_data['tour_budget']
+                spent = context.user_data['tour_selected']['spent']
+                left = budget - spent
+                picked = context.user_data['tour_selected']['forwards']
+                await query.edit_message_text(f"Добавлен в ваш пул: {player[2]} ({player[4]}). Теперь выберите нападающего.")
+                next_state = TOUR_FORWARD_2 if len(picked) == 0 else TOUR_FORWARD_3
+                return await send_player_choice(update, context, 'нападающий', picked, next_state, left)
+            except Exception as e:
+                await query.edit_message_text(f"Ошибка добавления в пул: {e}")
+                return TOUR_FORWARD_1
         # Проверяем бюджет
         budget = context.user_data['tour_budget']
         spent = context.user_data['tour_selected']['spent']
@@ -625,6 +647,24 @@ async def tour_defender_callback(update: Update, context: ContextTypes.DEFAULT_T
             except Exception:
                 await query.edit_message_text('Игрок не найден.')
                 return TOUR_DEFENDER_1
+        # Режим добавления в пул — без автодобавления в состав
+        if context.user_data.get('premium_mode') == 'add_to_pool':
+            try:
+                roster = context.user_data['tour_roster']
+                if not any(p_[1] == player[1] for p_ in roster):
+                    context.user_data['tour_roster'].append(player)
+                context.user_data['premium_mode'] = None
+                context.user_data['premium_extra_available'] = False
+                budget = context.user_data['tour_budget']
+                spent = context.user_data['tour_selected']['spent']
+                left = budget - spent
+                picked = context.user_data['tour_selected']['defenders']
+                await query.edit_message_text(f"Добавлен в ваш пул: {player[2]} ({player[4]}). Теперь выберите защитника.")
+                next_state = TOUR_DEFENDER_2
+                return await send_player_choice(update, context, 'защитник', picked, next_state, left)
+            except Exception as e:
+                await query.edit_message_text(f"Ошибка добавления в пул: {e}")
+                return TOUR_DEFENDER_1
         budget = context.user_data['tour_budget']
         spent = context.user_data['tour_selected']['spent']
         if spent + player[7] > budget:
@@ -701,6 +741,25 @@ async def tour_goalie_callback(update: Update, context: ContextTypes.DEFAULT_TYP
                     return TOUR_GOALIE
             except Exception:
                 await query.edit_message_text('Игрок не найден.')
+                return TOUR_GOALIE
+        # Режим добавления в пул — без автодобавления в состав
+        if context.user_data.get('premium_mode') == 'add_to_pool':
+            try:
+                roster = context.user_data['tour_roster']
+                if not any(p_[1] == player[1] for p_ in roster):
+                    context.user_data['tour_roster'].append(player)
+                context.user_data['premium_mode'] = None
+                context.user_data['premium_extra_available'] = False
+                budget = context.user_data['tour_budget']
+                spent = context.user_data['tour_selected']['spent']
+                left = budget - spent
+                picked = []
+                if context.user_data['tour_selected']['goalie']:
+                    picked = [context.user_data['tour_selected']['goalie']]
+                await query.edit_message_text(f"Добавлен в ваш пул: {player[2]} ({player[4]}). Теперь выберите вратаря.")
+                return await send_player_choice(update, context, 'вратарь', picked, TOUR_CAPTAIN, left)
+            except Exception as e:
+                await query.edit_message_text(f"Ошибка добавления в пул: {e}")
                 return TOUR_GOALIE
         budget = context.user_data['tour_budget']
         spent = context.user_data['tour_selected']['spent']
