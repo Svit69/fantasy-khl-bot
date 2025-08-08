@@ -17,8 +17,7 @@ def create_yookassa_payment(user_id: int):
     print("[DEBUG] Модуль yookassa:", sys.modules.get('yookassa'))
     print("[DEBUG] Импорт Payment внутри функции create_yookassa_payment")
     from yookassa import Payment
-    print("[DEBUG] После импорта Payment: account_id=", getattr(configuration, 'account_id', None), "secret_key=", getattr(configuration, 'secret_key', None))
-    print(f"[DEBUG] Перед Payment.create: account_id={getattr(configuration, 'account_id', None)}, secret_key={getattr(configuration, 'secret_key', None)}")
+    print("[DEBUG] Перед Payment.create")
     payment = Payment.create({
         "amount": {
             "value": f"{SUBSCRIPTION_AMOUNT}.00",
