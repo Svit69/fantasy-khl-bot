@@ -167,26 +167,26 @@ async def challenge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             pass
 
     text = (
-        "*Челлендж против редакции Голевой*\n"
+        "Челлендж против редакции Голевой\n"
         "Выбирай трёх игроков:\n"
         "🔸1 нападающий\n"
         "🔸1 защитник\n"
         "🔸1 вратарь\n\n"
         "Редакция уже готова — смотри картинку\n\n"
-        "Теперь выбери *уровень вызова:*\n"
-        "⚡ 50 HC\n"
-        "⚡ 100 HC\n"
-        "⚡ 500 HC\n\n"
-        "Если твой состав обгонит редакцию по очкам — получаешь *x2 от уровня вызова.*"
+        "Теперь выбери уровень вызова:\n"
+        "⚡️ 50 HC\n"
+        "⚡️ 100 HC\n"
+        "⚡️ 500 HC\n\n"
+        "Если твой состав наберет очков больше редакции — получаешь x2 от уровня вызова. Если нет — твои HC списываются в пользу редакции."
     )
     keyboard = [
         [
-            InlineKeyboardButton('⚡ 50 HC', callback_data='challenge_level_50'),
-            InlineKeyboardButton('⚡ 100 HC', callback_data='challenge_level_100'),
-            InlineKeyboardButton('⚡ 500 HC', callback_data='challenge_level_500'),
+            InlineKeyboardButton('⚡️ 50 HC', callback_data='challenge_level_50'),
+            InlineKeyboardButton('⚡️ 100 HC', callback_data='challenge_level_100'),
+            InlineKeyboardButton('⚡️ 500 HC', callback_data='challenge_level_500'),
         ]
     ]
-    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
 
 
 async def challenge_level_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -194,8 +194,34 @@ async def challenge_level_callback(update: Update, context: ContextTypes.DEFAULT
     await query.answer()
     data = query.data
     level = data.replace('challenge_level_', '')
-    context.user_data['challenge_level'] = int(level)
-    await query.edit_message_text(f"Уровень вызова выбран: {level} HC. Теперь выбери трёх игроков (функция подготавливается).")
+    try:
+        level_int = int(level)
+    except Exception:
+        await query.edit_message_text("Некорректный уровень вызова.")
+        return
+    user = update.effective_user
+    user_row = db.get_user_by_id(user.id)
+    balance = user_row[3] if user_row else 0
+    if balance < level_int:
+        text = (
+            f"Недостаточно HC для уровня {level_int} HC.\n"
+            f"Текущий баланс: {balance} HC.\n\n"
+            "Выберите доступный уровень вызова:"
+        )
+        keyboard = [
+            [
+                InlineKeyboardButton('⚡️ 50 HC', callback_data='challenge_level_50'),
+                InlineKeyboardButton('⚡️ 100 HC', callback_data='challenge_level_100'),
+                InlineKeyboardButton('⚡️ 500 HC', callback_data='challenge_level_500'),
+            ]
+        ]
+        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+        return
+    # Баланс достаточен — фиксируем выбор
+    context.user_data['challenge_level'] = level_int
+    await query.edit_message_text(
+        f"Уровень вызова выбран: {level_int} HC. Баланс: {balance} HC. Теперь выбери трёх игроков (функция подготавливается)."
+    )
 
 
 TOUR_START, TOUR_FORWARD_1, TOUR_FORWARD_2, TOUR_FORWARD_3, TOUR_DEFENDER_1, TOUR_DEFENDER_2, TOUR_GOALIE, TOUR_CAPTAIN, PREMIUM_TEAM, PREMIUM_POSITION = range(10)
