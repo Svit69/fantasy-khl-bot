@@ -18,7 +18,7 @@ def create_yookassa_payment(user_id: int):
         },
         "confirmation": {
             "type": "redirect",
-            "return_url": "https://t.me/<ВАШ_БОТ>"
+            "return_url": "https://t.me/khl_draft_bot"
         },
         "capture": True,
         "description": f"Подписка на Fantasy KHL для user_{user_id}",
