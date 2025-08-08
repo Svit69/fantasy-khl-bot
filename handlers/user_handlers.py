@@ -385,9 +385,59 @@ async def premium_position_selected(update: Update, context: ContextTypes.DEFAUL
     pos = data.replace('premium_pos_', '')
     context.user_data['premium_position'] = pos
     print(f"[DEBUG] premium_position_selected: pos={pos}")
-    await query.message.reply_text(f"Вы выбрали позицию: {pos}")
-    # Продолжаем обычный сценарий выбора игроков
-    return TOUR_FORWARD_1
+    # Покажем список игроков, отфильтрованных по команде и позиции
+    try:
+        team_text = (context.user_data.get('premium_team_query') or '').strip().lower()
+        roster = context.user_data.get('tour_roster', [])
+        budget = context.user_data.get('tour_budget', 0)
+        spent = context.user_data.get('tour_selected', {}).get('spent', 0)
+        left = max(0, budget - spent)
+        # Исключения по уже выбранным
+        selected = context.user_data.get('tour_selected', {})
+        exclude_ids = []
+        next_state = TOUR_FORWARD_1
+        if pos == 'нападающий':
+            exclude_ids = selected.get('forwards', [])
+            next_state = TOUR_FORWARD_1
+        elif pos == 'защитник':
+            exclude_ids = selected.get('defenders', [])
+            # Выберем подходящее состояние в зависимости от уже выбранных
+            next_state = TOUR_DEFENDER_1 if len(exclude_ids) == 0 else TOUR_DEFENDER_2
+        elif pos == 'вратарь':
+            gid = selected.get('goalie')
+            exclude_ids = [gid] if gid else []
+            next_state = TOUR_GOALIE
+        # Фильтрация по позиции, команде, бюджету и исключениям
+        def team_match(t):
+            try:
+                return team_text in str(t or '').lower()
+            except Exception:
+                return False
+        filtered = [p for p in roster if p[3].lower() == pos and p[1] not in exclude_ids and p[7] <= left and team_match(p[4])]
+        print(f"[DEBUG] premium_position_selected: team='{team_text}', found={len(filtered)} players, left={left}")
+        if not filtered:
+            await query.message.reply_text("По заданным фильтрам игроков не найдено. Измените команду или позицию.")
+            return next_state
+        # Построим клавиатуру
+        from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+        keyboard = []
+        for p in filtered:
+            btn_text = f"{p[2]} — {p[7]} HC"
+            keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"pick_{p[1]}_{pos}")])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        text = f"Найденные игроки ({pos}, команда содержит: '{team_text}') — осталось HC: {left}"
+        sent = await query.message.reply_text(text, reply_markup=reply_markup)
+        # Сохраним, чтобы мочь удалить далее при необходимости
+        try:
+            context.user_data['last_choice_chat_id'] = sent.chat_id
+            context.user_data['last_choice_message_id'] = sent.message_id
+        except Exception:
+            pass
+        return next_state
+    except Exception as e:
+        print(f"[ERROR] premium_position_selected building list: {e}")
+        await query.message.reply_text(f"Ошибка построения списка: {e}")
+        return TOUR_FORWARD_1
 
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton
 
