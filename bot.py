@@ -23,7 +23,16 @@ from handlers.user_handlers import start, hc, IMAGES_DIR, \
     challenge_command, challenge_level_callback
 from handlers.admin_handlers import addhc, send_results, show_users
 from handlers.admin_handlers import (
-    send_challenge_image_start, send_challenge_image_photo, send_challenge_image_cancel, CHALLENGE_WAIT_IMAGE
+    send_challenge_image_start,
+    challenge_input_start_date,
+    challenge_input_deadline,
+    challenge_input_end_date,
+    send_challenge_image_photo,
+    send_challenge_image_cancel,
+    CHALLENGE_START,
+    CHALLENGE_DEADLINE,
+    CHALLENGE_END,
+    CHALLENGE_WAIT_IMAGE,
 )
 from handlers.admin_handlers import (
     add_player_start, add_player_name, add_player_position, add_player_club,
@@ -213,7 +222,10 @@ if __name__ == '__main__':
     send_challenge_image_conv = ConversationHandler(
         entry_points=[CommandHandler('send_challenge_image', send_challenge_image_start)],
         states={
-            CHALLENGE_WAIT_IMAGE: [MessageHandler(filters.PHOTO, send_challenge_image_photo)]
+            CHALLENGE_START: [MessageHandler(filters.TEXT & ~filters.COMMAND, challenge_input_start_date)],
+            CHALLENGE_DEADLINE: [MessageHandler(filters.TEXT & ~filters.COMMAND, challenge_input_deadline)],
+            CHALLENGE_END: [MessageHandler(filters.TEXT & ~filters.COMMAND, challenge_input_end_date)],
+            CHALLENGE_WAIT_IMAGE: [MessageHandler(filters.PHOTO, send_challenge_image_photo)],
         },
         fallbacks=[CommandHandler('cancel', send_challenge_image_cancel)],
         allow_reentry=True

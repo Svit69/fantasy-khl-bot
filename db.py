@@ -129,6 +129,17 @@ def init_db():
                     UNIQUE(user_id, notify_date, kind)
                 )
             ''')
+            # Таблица челленджей
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS challenges (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    start_date TEXT NOT NULL,
+                    deadline TEXT NOT NULL,
+                    end_date TEXT NOT NULL,
+                    image_filename TEXT NOT NULL,
+                    status TEXT NOT NULL
+                )
+            ''')
 
 def register_user(telegram_id, username, name):
     with closing(sqlite3.connect(DB_NAME)) as conn:
@@ -210,6 +221,40 @@ def record_subscription_notification(user_id: int, notify_date: str, kind: str) 
                 'INSERT OR IGNORE INTO subscription_notifications (user_id, notify_date, kind) VALUES (?, ?, ?)',
                 (user_id, notify_date, kind)
             )
+
+# --- Челленджи ---
+def create_challenge(start_date: str, deadline: str, end_date: str, image_filename: str) -> int:
+    """Создаёт запись челленджа и возвращает его id. Статус вычисляется относительно текущего времени."""
+    import datetime
+    now = datetime.datetime.utcnow()
+    def _parse(s):
+        try:
+            return datetime.datetime.fromisoformat(s)
+        except Exception:
+            return None
+    sd = _parse(start_date)
+    dl = _parse(deadline)
+    ed = _parse(end_date)
+    status = 'в ожидании'
+    if sd and dl and ed:
+        if sd <= now < dl:
+            status = 'активен'
+        elif dl <= now < ed:
+            status = 'в игре'
+        elif now >= ed:
+            status = 'завершен'
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            cur = conn.execute(
+                'INSERT INTO challenges (start_date, deadline, end_date, image_filename, status) VALUES (?, ?, ?, ?, ?)',
+                (start_date, deadline, end_date, image_filename, status)
+            )
+            return cur.lastrowid
+
+def get_latest_challenge():
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        row = conn.execute('SELECT id, start_date, deadline, end_date, image_filename, status FROM challenges ORDER BY id DESC LIMIT 1').fetchone()
+        return row
 
 # --- Игроки ---
 def add_player(name, position, club, nation, age, price):

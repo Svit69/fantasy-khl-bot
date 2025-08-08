@@ -367,35 +367,73 @@ async def addhc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await context.bot.send_message(chat_id=user[0], text=f'🎉 Тебе начислено {amount} HC!\n💰 Новый баланс: {new_balance} HC')
     await update.message.reply_text(f'Пользователю @{username} начислено {amount} HC.')
 
-# --- Картинка для челленджа ---
-CHALLENGE_WAIT_IMAGE = 31
+# --- Регистрация челленджа (+ загрузка картинки) ---
+CHALLENGE_START = 31
+CHALLENGE_DEADLINE = 32
+CHALLENGE_END = 33
+CHALLENGE_WAIT_IMAGE = 34
+
+def _parse_iso(dt_str: str):
+    import datetime
+    try:
+        return datetime.datetime.fromisoformat(dt_str)
+    except Exception:
+        return None
 
 async def send_challenge_image_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await admin_only(update, context):
         return ConversationHandler.END
-    try:
-        await update.message.reply_text('Пожалуйста, прикрепите картинку челленджа следующим сообщением.')
-    except Exception:
-        pass
+    context.user_data.pop('challenge_start', None)
+    context.user_data.pop('challenge_deadline', None)
+    context.user_data.pop('challenge_end', None)
+    await update.message.reply_text(
+        'Создание челленджа. Введите дату СТАРТА в формате ISO, например: 2025-08-08T12:00:00'
+    )
+    return CHALLENGE_START
+
+async def challenge_input_start_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = (update.message.text or '').strip()
+    dt = _parse_iso(text)
+    if not dt:
+        await update.message.reply_text('Некорректная дата. Повторите в формате ISO: 2025-08-08T12:00:00')
+        return CHALLENGE_START
+    context.user_data['challenge_start'] = text
+    await update.message.reply_text('Введите ДЕДЛАЙН (крайний срок выбора состава) в формате ISO: 2025-08-09T18:00:00')
+    return CHALLENGE_DEADLINE
+
+async def challenge_input_deadline(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = (update.message.text or '').strip()
+    dt = _parse_iso(text)
+    if not dt:
+        await update.message.reply_text('Некорректная дата. Повторите дедлайн в формате ISO.')
+        return CHALLENGE_DEADLINE
+    # Проверим порядок
+    sd = _parse_iso(context.user_data.get('challenge_start', ''))
+    if not sd or not (sd < dt):
+        await update.message.reply_text('Дедлайн должен быть ПОСЛЕ даты старта. Повторите ввод дедлайна.')
+        return CHALLENGE_DEADLINE
+    context.user_data['challenge_deadline'] = text
+    await update.message.reply_text('Введите ДАТУ ОКОНЧАНИЯ игры в формате ISO: 2025-08-12T23:59:59')
+    return CHALLENGE_END
+
+async def challenge_input_end_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = (update.message.text or '').strip()
+    dt = _parse_iso(text)
+    if not dt:
+        await update.message.reply_text('Некорректная дата. Повторите дату окончания в формате ISO.')
+        return CHALLENGE_END
+    sd = _parse_iso(context.user_data.get('challenge_start', ''))
+    dl = _parse_iso(context.user_data.get('challenge_deadline', ''))
+    if not sd or not dl or not (dl < dt):
+        await update.message.reply_text('Дата окончания должна быть ПОСЛЕ дедлайна. Повторите дату окончания.')
+        return CHALLENGE_END
+    context.user_data['challenge_end'] = text
+    await update.message.reply_text('Теперь пришлите КАРТИНКУ челленджа сообщением в чат.')
     return CHALLENGE_WAIT_IMAGE
 
 async def send_challenge_image_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        await process_challenge_image_photo(update, context)
-        await update.message.reply_text('✅ Картинка челленджа сохранена.')
-    except Exception as e:
-        await update.message.reply_text(f'Ошибка при обработке фото челленджа: {e}')
-    return ConversationHandler.END
-
-async def send_challenge_image_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        await update.message.reply_text('Отменено.')
-    except Exception:
-        pass
-    return ConversationHandler.END
-
-async def process_challenge_image_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    try:
+        # Сохраняем фото
         photo = update.message.photo[-1]
         file = await photo.get_file()
         filename = f"challenge_{photo.file_unique_id}.jpg"
@@ -403,10 +441,34 @@ async def process_challenge_image_photo(update: Update, context: ContextTypes.DE
         await file.download_to_drive(path)
         with open(CHALLENGE_IMAGE_PATH_FILE, 'w') as f:
             f.write(filename)
-        logger.info(f"Картинка челленджа сохранена: {path} (от {update.effective_user.id})")
+
+        # Регистрируем челлендж в БД
+        start_date = context.user_data.get('challenge_start')
+        deadline = context.user_data.get('challenge_deadline')
+        end_date = context.user_data.get('challenge_end')
+        ch_id = db.create_challenge(start_date, deadline, end_date, filename)
+
+        await update.message.reply_text(
+            f'✅ Челлендж зарегистрирован (id={ch_id}). Картинка сохранена как `{filename}`.'
+        )
+        logger.info(f"Челлендж {ch_id} создан: {start_date} / {deadline} / {end_date}, image={path}")
     except Exception as e:
-        logger.error(f'Ошибка при сохранении картинки челленджа: {e}')
-        await update.message.reply_text(f'Ошибка при сохранении картинки челленджа: {e}')
+        logger.error(f'Ошибка при регистрации челленджа: {e}')
+        await update.message.reply_text(f'Ошибка при регистрации челленджа: {e}')
+    finally:
+        # Очистим временные данные
+        for k in ('challenge_start','challenge_deadline','challenge_end'):
+            context.user_data.pop(k, None)
+    return ConversationHandler.END
+
+async def send_challenge_image_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        await update.message.reply_text('Отменено.')
+    except Exception:
+        pass
+    for k in ('challenge_start','challenge_deadline','challenge_end'):
+        context.user_data.pop(k, None)
+    return ConversationHandler.END
 
 async def send_results(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await admin_only(update, context):
