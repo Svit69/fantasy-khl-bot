@@ -15,8 +15,14 @@ SUBSCRIPTION_AMOUNT = 299
 
 
 def create_yookassa_payment(user_id: int):
+    import sys
+    print("[DEBUG] Модуль configuration:", sys.modules.get('yookassa.configuration'))
+    print("[DEBUG] Модуль Payment:", sys.modules.get('yookassa.payment'))
+    print("[DEBUG] Модуль client:", sys.modules.get('yookassa.client'))
+    print("[DEBUG] Модуль yookassa:", sys.modules.get('yookassa'))
     print("[DEBUG] Импорт Payment внутри функции create_yookassa_payment")
     from yookassa import Payment
+    print("[DEBUG] После импорта Payment: account_id=", getattr(configuration, 'account_id', None), "secret_key=", getattr(configuration, 'secret_key', None))
     print(f"[DEBUG] Перед Payment.create: account_id={getattr(configuration, 'account_id', None)}, secret_key={getattr(configuration, 'secret_key', None)}")
     payment = Payment.create({
         "amount": {
