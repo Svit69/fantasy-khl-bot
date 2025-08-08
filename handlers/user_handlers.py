@@ -385,10 +385,11 @@ async def premium_position_selected(update: Update, context: ContextTypes.DEFAUL
     pos = data.replace('premium_pos_', '')
     context.user_data['premium_position'] = pos
     print(f"[DEBUG] premium_position_selected: pos={pos}")
-    # Покажем список игроков, отфильтрованных по команде и позиции
+    # Покажем список игроков, отфильтрованных по команде и позиции (ИЗ ВСЕЙ БАЗЫ ИГРОКОВ)
     try:
         team_text = (context.user_data.get('premium_team_query') or '').strip().lower()
-        roster = context.user_data.get('tour_roster', [])
+        from db import get_all_players
+        all_players = get_all_players()  # (id, name, position, club, nation, age, price)
         budget = context.user_data.get('tour_budget', 0)
         spent = context.user_data.get('tour_selected', {}).get('spent', 0)
         left = max(0, budget - spent)
@@ -413,8 +414,9 @@ async def premium_position_selected(update: Update, context: ContextTypes.DEFAUL
                 return team_text in str(t or '').lower()
             except Exception:
                 return False
-        filtered = [p for p in roster if p[3].lower() == pos and p[1] not in exclude_ids and p[7] <= left and team_match(p[4])]
-        print(f"[DEBUG] premium_position_selected: team='{team_text}', found={len(filtered)} players, left={left}")
+        # Индексы в players: 0-id,1-name,2-position,3-club,6-price
+        filtered = [p for p in all_players if p[2].lower() == pos and p[0] not in exclude_ids and (p[6] or 0) <= left and team_match(p[3])]
+        print(f"[DEBUG] premium_position_selected: team='{team_text}', found={len(filtered)} players in DB, left={left}")
         if not filtered:
             await query.message.reply_text("По заданным фильтрам игроков не найдено. Измените команду или позицию.")
             return next_state
@@ -422,8 +424,8 @@ async def premium_position_selected(update: Update, context: ContextTypes.DEFAUL
         from telegram import InlineKeyboardMarkup, InlineKeyboardButton
         keyboard = []
         for p in filtered:
-            btn_text = f"{p[2]} — {p[7]} HC"
-            keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"pick_{p[1]}_{pos}")])
+            btn_text = f"{p[1]} — {p[6]} HC"
+            keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"pick_{p[0]}_{pos}")])
         reply_markup = InlineKeyboardMarkup(keyboard)
         text = f"Найденные игроки ({pos}, команда содержит: '{team_text}') — осталось HC: {left}"
         sent = await query.message.reply_text(text, reply_markup=reply_markup)
@@ -508,8 +510,18 @@ async def tour_forward_callback(update: Update, context: ContextTypes.DEFAULT_TY
         roster = context.user_data['tour_roster']
         player = next((p for p in roster if p[1] == pid), None)
         if not player:
-            await query.edit_message_text('Игрок не найден.')
-            return TOUR_FORWARD_1
+            # Fallback: ищем в общей БД игроков
+            try:
+                pdb = db.get_player_by_id(pid)
+                if pdb:
+                    # Преобразуем к формату: (tr.cost, p.id, p.name, p.position, p.club, p.nation, p.age, p.price)
+                    player = (pdb[6], pdb[0], pdb[1], pdb[2], pdb[3], pdb[4], pdb[5], pdb[6])
+                else:
+                    await query.edit_message_text('Игрок не найден.')
+                    return TOUR_FORWARD_1
+            except Exception:
+                await query.edit_message_text('Игрок не найден.')
+                return TOUR_FORWARD_1
         # Проверяем бюджет
         budget = context.user_data['tour_budget']
         spent = context.user_data['tour_selected']['spent']
@@ -574,8 +586,17 @@ async def tour_defender_callback(update: Update, context: ContextTypes.DEFAULT_T
         roster = context.user_data['tour_roster']
         player = next((p for p in roster if p[1] == pid), None)
         if not player:
-            await query.edit_message_text('Игрок не найден.')
-            return TOUR_DEFENDER_1
+            # Fallback: ищем в общей БД игроков
+            try:
+                pdb = db.get_player_by_id(pid)
+                if pdb:
+                    player = (pdb[6], pdb[0], pdb[1], pdb[2], pdb[3], pdb[4], pdb[5], pdb[6])
+                else:
+                    await query.edit_message_text('Игрок не найден.')
+                    return TOUR_DEFENDER_1
+            except Exception:
+                await query.edit_message_text('Игрок не найден.')
+                return TOUR_DEFENDER_1
         budget = context.user_data['tour_budget']
         spent = context.user_data['tour_selected']['spent']
         if spent + player[7] > budget:
@@ -634,8 +655,17 @@ async def tour_goalie_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         roster = context.user_data['tour_roster']
         player = next((p for p in roster if p[1] == pid), None)
         if not player:
-            await query.edit_message_text('Игрок не найден.')
-            return TOUR_GOALIE
+            # Fallback: ищем в общей БД игроков
+            try:
+                pdb = db.get_player_by_id(pid)
+                if pdb:
+                    player = (pdb[6], pdb[0], pdb[1], pdb[2], pdb[3], pdb[4], pdb[5], pdb[6])
+                else:
+                    await query.edit_message_text('Игрок не найден.')
+                    return TOUR_GOALIE
+            except Exception:
+                await query.edit_message_text('Игрок не найден.')
+                return TOUR_GOALIE
         budget = context.user_data['tour_budget']
         spent = context.user_data['tour_selected']['spent']
         if spent + player[7] > budget:
