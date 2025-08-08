@@ -324,6 +324,22 @@ async def premium_add_pool_callback(update: Update, context: ContextTypes.DEFAUL
         pass
     # Установим флаг: доступен +1 игрок в пул
     context.user_data['premium_extra_available'] = True
+    # Удалим предыдущее сообщение с выбором игроков, если сохранено
+    try:
+        chat_id = context.user_data.get('last_choice_chat_id')
+        msg_id = context.user_data.get('last_choice_message_id')
+        if chat_id and msg_id:
+            await context.bot.delete_message(chat_id=chat_id, message_id=msg_id)
+            # Очистим сохранённые значения
+            context.user_data.pop('last_choice_chat_id', None)
+            context.user_data.pop('last_choice_message_id', None)
+    except Exception:
+        pass
+    # Также удалим сообщение с самой премиум-кнопкой
+    try:
+        await context.bot.delete_message(chat_id=query.message.chat_id, message_id=query.message.message_id)
+    except Exception:
+        pass
     await query.message.reply_text("💎 Персональный бонус активирован: +1 игрок в пул.\n\nНапишите команду игрока")
     return PREMIUM_TEAM
 
@@ -383,7 +399,13 @@ async def send_player_choice(update, context, position, exclude_ids, next_state,
         keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"pick_{p[1]}_{position}")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     text = f"Выберите {position} (осталось HC: {budget})"
-    await message.reply_text(text, reply_markup=reply_markup)
+    sent_msg = await message.reply_text(text, reply_markup=reply_markup)
+    # Запомним последнее сообщение с выбором, чтобы мочь удалить при активации премиум-режима
+    try:
+        context.user_data['last_choice_chat_id'] = sent_msg.chat_id
+        context.user_data['last_choice_message_id'] = sent_msg.message_id
+    except Exception:
+        pass
     return next_state
     keyboard = []
     for p in players:
