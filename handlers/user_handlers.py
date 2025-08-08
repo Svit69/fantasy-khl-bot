@@ -304,7 +304,7 @@ async def tour_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             kb = InlineKeyboardMarkup(
                 [[InlineKeyboardButton('Добавить игрока в пул', callback_data='premium_add_pool')]]
             )
-            await message.reply_text(' ', reply_markup=kb)
+            await message.reply_text('💎 Премиум-опция', reply_markup=kb)
     except Exception:
         pass
     # Сразу показываем выбор первого нападающего!
