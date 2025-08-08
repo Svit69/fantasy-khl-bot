@@ -88,6 +88,7 @@ if __name__ == '__main__':
     from db import init_payments_table
     init_payments_table()
     from yookassa import configuration
+    from utils import YOOKASSA_SHOP_ID, YOOKASSA_SECRET_KEY
     configuration.account_id = YOOKASSA_SHOP_ID
     configuration.secret_key = YOOKASSA_SECRET_KEY
     import platform
