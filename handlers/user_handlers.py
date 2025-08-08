@@ -301,10 +301,18 @@ async def tour_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         from db import is_subscription_active
         if is_subscription_active(update.effective_user.id):
+            print("[DEBUG] tour_start: user has active subscription, showing premium button")
             kb = InlineKeyboardMarkup(
                 [[InlineKeyboardButton('Добавить игрока в пул', callback_data='premium_add_pool')]]
             )
-            await message.reply_text('💎 Премиум-опция', reply_markup=kb)
+            sent = await message.reply_text('💎 Премиум-опция', reply_markup=kb)
+            try:
+                # Запомним для диагностики id сообщения с премиум-кнопкой
+                context.user_data['premium_button_chat_id'] = sent.chat_id
+                context.user_data['premium_button_message_id'] = sent.message_id
+                print(f"[DEBUG] tour_start: premium button message_id={sent.message_id}")
+            except Exception as e:
+                print(f"[WARN] tour_start: failed to store premium button ids: {e}")
     except Exception:
         pass
     # Сразу показываем выбор первого нападающего!
@@ -314,32 +322,40 @@ async def tour_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def premium_add_pool_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Обработка нажатия премиум-кнопки: фиксируем флаг в user_data
     query = update.callback_query
+    try:
+        print(f"[DEBUG] premium_add_pool_callback: received callback data={query.data}")
+    except Exception:
+        pass
     await query.answer()
     try:
         from db import is_subscription_active
         if not is_subscription_active(update.effective_user.id):
+            print("[DEBUG] premium_add_pool_callback: subscription inactive")
             await query.message.reply_text("Премиум недоступен. Оформите /subscribe, чтобы активировать бонус.")
             return TOUR_FORWARD_1
     except Exception:
-        pass
+        print("[WARN] premium_add_pool_callback: failed to check subscription")
     # Установим флаг: доступен +1 игрок в пул
     context.user_data['premium_extra_available'] = True
+    print("[DEBUG] premium_add_pool_callback: premium_extra_available=True set")
     # Удалим предыдущее сообщение с выбором игроков, если сохранено
     try:
         chat_id = context.user_data.get('last_choice_chat_id')
         msg_id = context.user_data.get('last_choice_message_id')
         if chat_id and msg_id:
             await context.bot.delete_message(chat_id=chat_id, message_id=msg_id)
+            print(f"[DEBUG] premium_add_pool_callback: deleted last choice message id={msg_id}")
             # Очистим сохранённые значения
             context.user_data.pop('last_choice_chat_id', None)
             context.user_data.pop('last_choice_message_id', None)
     except Exception:
-        pass
+        print("[WARN] premium_add_pool_callback: failed to delete last choice message")
     # Также удалим сообщение с самой премиум-кнопкой
     try:
         await context.bot.delete_message(chat_id=query.message.chat_id, message_id=query.message.message_id)
+        print(f"[DEBUG] premium_add_pool_callback: deleted premium button message id={query.message.message_id}")
     except Exception:
-        pass
+        print("[WARN] premium_add_pool_callback: failed to delete premium button message")
     await query.message.reply_text("💎 Персональный бонус активирован: +1 игрок в пул.\n\nНапишите команду игрока")
     return PREMIUM_TEAM
 
@@ -348,6 +364,10 @@ async def premium_team_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
     # Получаем текст команды и просим выбрать позицию
     team_text = update.message.text.strip()
     context.user_data['premium_team_query'] = team_text
+    try:
+        print(f"[DEBUG] premium_team_input: received team text='{team_text}'")
+    except Exception:
+        pass
     from telegram import InlineKeyboardMarkup, InlineKeyboardButton
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton('нападающий', callback_data='premium_pos_нападающий')],
@@ -364,6 +384,7 @@ async def premium_position_selected(update: Update, context: ContextTypes.DEFAUL
     data = query.data
     pos = data.replace('premium_pos_', '')
     context.user_data['premium_position'] = pos
+    print(f"[DEBUG] premium_position_selected: pos={pos}")
     await query.message.reply_text(f"Вы выбрали позицию: {pos}")
     # Продолжаем обычный сценарий выбора игроков
     return TOUR_FORWARD_1
