@@ -137,7 +137,7 @@ async def subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
 
-TOUR_START, TOUR_FORWARD_1, TOUR_FORWARD_2, TOUR_FORWARD_3, TOUR_DEFENDER_1, TOUR_DEFENDER_2, TOUR_GOALIE, TOUR_CAPTAIN = range(8)
+TOUR_START, TOUR_FORWARD_1, TOUR_FORWARD_2, TOUR_FORWARD_3, TOUR_DEFENDER_1, TOUR_DEFENDER_2, TOUR_GOALIE, TOUR_CAPTAIN, PREMIUM_TEAM, PREMIUM_POSITION = range(10)
 
 async def tour_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Получаем объект сообщения для ответа (универсально для Update и CallbackQuery)
@@ -324,7 +324,32 @@ async def premium_add_pool_callback(update: Update, context: ContextTypes.DEFAUL
         pass
     # Установим флаг: доступен +1 игрок в пул
     context.user_data['premium_extra_available'] = True
-    await query.message.reply_text("💎 Персональный бонус активирован: +1 игрок в пул.")
+    await query.message.reply_text("💎 Персональный бонус активирован: +1 игрок в пул.\n\nНапишите команду игрока")
+    return PREMIUM_TEAM
+
+
+async def premium_team_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Получаем текст команды и просим выбрать позицию
+    team_text = update.message.text.strip()
+    context.user_data['premium_team_query'] = team_text
+    from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton('нападающий', callback_data='premium_pos_нападающий')],
+        [InlineKeyboardButton('защитник', callback_data='premium_pos_защитник')],
+        [InlineKeyboardButton('вратарь', callback_data='premium_pos_вратарь')],
+    ])
+    await update.message.reply_text('Выберите позицию игрока', reply_markup=kb)
+    return PREMIUM_POSITION
+
+
+async def premium_position_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    pos = data.replace('premium_pos_', '')
+    context.user_data['premium_position'] = pos
+    await query.message.reply_text(f"Вы выбрали позицию: {pos}")
+    # Продолжаем обычный сценарий выбора игроков
     return TOUR_FORWARD_1
 
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton

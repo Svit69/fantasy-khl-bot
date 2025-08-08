@@ -19,7 +19,7 @@ from handlers.user_handlers import start, hc, IMAGES_DIR, \
     tour_defender_1, tour_defender_2, tour_goalie, tour_captain, \
     tour_forward_callback, tour_defender_callback, tour_goalie_callback, \
     restart_tour_callback, tour_captain_callback, rules, referral, subscribe, \
-    premium_add_pool_callback
+    premium_add_pool_callback, premium_team_input, premium_position_selected
 from handlers.admin_handlers import addhc, send_results, show_users
 from handlers.admin_handlers import (
     add_player_start, add_player_name, add_player_position, add_player_club,
@@ -207,7 +207,7 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('get_tour_roster', get_tour_roster))
 
     # --- ConversationHandler для /tour ---
-    TOUR_START, TOUR_FORWARD_1, TOUR_FORWARD_2, TOUR_FORWARD_3, TOUR_DEFENDER_1, TOUR_DEFENDER_2, TOUR_GOALIE, TOUR_CAPTAIN = range(8)
+    TOUR_START, TOUR_FORWARD_1, TOUR_FORWARD_2, TOUR_FORWARD_3, TOUR_DEFENDER_1, TOUR_DEFENDER_2, TOUR_GOALIE, TOUR_CAPTAIN, PREMIUM_TEAM, PREMIUM_POSITION = range(10)
     tour_conv = ConversationHandler(
         entry_points=[CommandHandler('tour', tour_start)],
         states={
@@ -215,6 +215,12 @@ if __name__ == '__main__':
                 CallbackQueryHandler(premium_add_pool_callback, pattern=r"^premium_add_pool$"),
                 CallbackQueryHandler(tour_forward_callback, pattern=r"^pick_\d+_нападающий$"),
                 CallbackQueryHandler(restart_tour_callback, pattern=r"^restart_tour$")
+            ],
+            PREMIUM_TEAM: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, premium_team_input)
+            ],
+            PREMIUM_POSITION: [
+                CallbackQueryHandler(premium_position_selected, pattern=r"^premium_pos_(нападающий|защитник|вратарь)$")
             ],
             TOUR_FORWARD_2: [
                 CallbackQueryHandler(tour_forward_callback, pattern=r"^pick_\d+_нападающий$"),
