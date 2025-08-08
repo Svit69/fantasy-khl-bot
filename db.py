@@ -112,6 +112,14 @@ def init_db():
                 )
             ''')
 
+            # Таблица рефералов: кто кого пригласил (один раз на пользователя)
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS referrals (
+                    user_id INTEGER PRIMARY KEY,
+                    referrer_id INTEGER
+                )
+            ''')
+
 def register_user(telegram_id, username, name):
     with closing(sqlite3.connect(DB_NAME)) as conn:
         with conn:
@@ -238,6 +246,31 @@ def update_tour_status(tour_id, status):
     with closing(sqlite3.connect(DB_NAME)) as conn:
         with conn:
             conn.execute('UPDATE tours SET status = ? WHERE id = ?', (status, tour_id))
+
+# --- Реферальная система ---
+def init_referrals_table():
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS referrals (
+                    user_id INTEGER PRIMARY KEY,
+                    referrer_id INTEGER
+                )
+            ''')
+
+def add_referral_if_new(user_id: int, referrer_id: int) -> bool:
+    """Сохраняет пару (user_id -> referrer_id), если для user_id ещё не было записи.
+    Возвращает True, если запись была добавлена (т.е. первый раз), иначе False.
+    """
+    if user_id == referrer_id:
+        return False
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            exists = conn.execute('SELECT 1 FROM referrals WHERE user_id = ?', (user_id,)).fetchone()
+            if exists:
+                return False
+            conn.execute('INSERT INTO referrals (user_id, referrer_id) VALUES (?, ?)', (user_id, referrer_id))
+            return True
 
 def set_tour_winners(tour_id, winners):
     import json

@@ -29,6 +29,41 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         message = update.callback_query.message
     user = update.effective_user
     registered = db.register_user(user.id, user.username, user.full_name)
+
+    # --- Реферал: если пользователь пришёл по ссылке ref_<id>,
+    # и это его ПЕРВАЯ регистрация (registered == True), начисляем рефереру +50 HC
+    try:
+        if registered and getattr(context, 'args', None):
+            arg0 = context.args[0] if len(context.args) > 0 else ''
+            if isinstance(arg0, str) and arg0.startswith('ref_'):
+                ref_str = arg0[4:]
+                if ref_str.isdigit():
+                    referrer_id = int(ref_str)
+                    if referrer_id != user.id:
+                        # Вставим запись реферала, если для этого user_id её ещё не было
+                        if db.add_referral_if_new(user.id, referrer_id):
+                            db.update_hc_balance(referrer_id, 50)
+                            # Уведомим реферера (если можно)
+                            try:
+                                new_balance = db.get_user_by_id(referrer_id)
+                                new_balance = new_balance[3] if new_balance else '—'
+                                await context.bot.send_message(
+                                    chat_id=referrer_id,
+                                    text=f'🎉 По вашей реферальной ссылке зарегистрировался новый участник!\n+50 HC начислено. Текущий баланс: {new_balance} HC.'
+                                )
+                            except Exception:
+                                pass
+                            # Сообщим пользователю, что он пришёл по ссылке
+                            try:
+                                await message.reply_text('Вы зарегистрировались по реферальной ссылке — добро пожаловать!')
+                            except Exception:
+                                pass
+    except Exception as e:
+        # Не прерываем старт при ошибке реферальной обработки
+        try:
+            await message.reply_text(f"[WARN] Ошибка обработки реферала: {e}")
+        except Exception:
+            pass
     msg_id = f"Ваш Telegram ID: {user.id}\n"
     if is_admin(user.id):
         keyboard = [["/tour", "/hc"], ["/send_tour_image", "/addhc", "/send_results", "/add_player", "/list_players"]]

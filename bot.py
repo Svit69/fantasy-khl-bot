@@ -148,8 +148,9 @@ async def on_startup(app):
 
 
 if __name__ == '__main__':
-    from db import init_payments_table
+    from db import init_payments_table, init_referrals_table
     init_payments_table()
+    init_referrals_table()
     import platform
     import sys
     import asyncio
