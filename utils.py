@@ -24,7 +24,7 @@ async def poll_yoomoney_payments(bot, interval=60):
     last_checked = datetime.datetime.utcnow() - datetime.timedelta(days=1)
     while True:
         try:
-            print("[DEBUG] YOOMONEY_API_KEY:", YOOMONEY_API_KEY[:8], "...")
+            print("[DEBUG] API_KEY:", API_KEY[:8], "...")
             headers = {"Authorization": f"Bearer {API_KEY}"}
             data = {"type": "deposition", "records": 50}
             resp = requests.post(YOOMONEY_API_URL, headers=headers, data=data)
