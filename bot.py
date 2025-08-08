@@ -89,6 +89,7 @@ import utils
 async def on_startup(app):
     from telegram import BotCommand, BotCommandScopeChat
     from config import ADMIN_ID
+    print("[DEBUG] on_startup called: setting bot commands")
     user_commands = [
         BotCommand("start", "Регистрация и приветствие"),
         BotCommand("tour", "Показать состав игроков на тур"),
@@ -102,15 +103,31 @@ async def on_startup(app):
         BotCommand("addhc", "Начислить HC пользователю (админ)"),
         BotCommand("send_results", "Разослать результаты тура (админ)"),
     ]
-    # Установка команд через Bot API
+    try:
+        # Очистим команды на всякий случай
+        await app.bot.delete_my_commands()
+        await app.bot.delete_my_commands(language_code='ru')
+    except Exception as e:
+        print(f"[WARN] delete_my_commands failed: {e}")
+    # Установим команды по умолчанию и для RU
     await app.bot.set_my_commands(user_commands)
+    await app.bot.set_my_commands(user_commands, language_code='ru')
+    # Для админа в личке (его чат)
     await app.bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=ADMIN_ID))
+    try:
+        await app.bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=ADMIN_ID), language_code='ru')
+    except Exception:
+        # Не все клиенты поддерживают язык для chat scope — игнорируем
+        pass
+    print("[DEBUG] Bot commands set (default and ru), admin chat overridden")
     
     # Принудительное обновление кеша команд в Telegram
     try:
         await app.bot.delete_my_commands()
         await app.bot.set_my_commands(user_commands)
-        await app.bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=ADMIN_ID))
+        await app.bot.delete_my_commands(language_code='ru')
+        await app.bot.set_my_commands(user_commands, language_code='ru')
+        print("[DEBUG] Bot commands cache updated (default and ru)")
         print("[DEBUG] Команды успешно обновлены через Bot API")
     except Exception as e:
         print(f"[ERROR] Ошибка обновления команд: {e}")
