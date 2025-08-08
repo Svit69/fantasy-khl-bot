@@ -87,6 +87,8 @@ async def on_startup(app):
 if __name__ == '__main__':
     from db import init_payments_table
     init_payments_table()
+    from yookassa import configuration
+    configuration.configure(YOOKASSA_SHOP_ID, YOOKASSA_SECRET_KEY)
     import platform
     import sys
     import asyncio

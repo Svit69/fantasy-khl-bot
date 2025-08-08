@@ -11,7 +11,6 @@ SUBSCRIPTION_AMOUNT = 299
 
 
 def create_yookassa_payment(user_id: int):
-    Payment.configure(YOOKASSA_SHOP_ID, YOOKASSA_SECRET_KEY)
     payment = Payment.create({
         "amount": {
             "value": f"{SUBSCRIPTION_AMOUNT}.00",
