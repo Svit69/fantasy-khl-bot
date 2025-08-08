@@ -1,3 +1,7 @@
+from yookassa import configuration
+from utils import YOOKASSA_SHOP_ID, YOOKASSA_SECRET_KEY
+configuration.account_id = YOOKASSA_SHOP_ID
+configuration.secret_key = YOOKASSA_SECRET_KEY
 import os
 import logging
 import asyncio

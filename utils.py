@@ -6,11 +6,6 @@ import os
 
 YOOKASSA_SHOP_ID = "1141033"
 YOOKASSA_SECRET_KEY = "test_NnIZ_gFbddTpDQQNphx0KuZFqBWHd6PVoB1KxVtWOHw"
-from yookassa import configuration
-print(f"[DEBUG] Установка ключей YooKassa: shop_id={YOOKASSA_SHOP_ID}, secret_key={YOOKASSA_SECRET_KEY}")
-configuration.account_id = YOOKASSA_SHOP_ID
-configuration.secret_key = YOOKASSA_SECRET_KEY
-print(f"[DEBUG] После установки: account_id={getattr(configuration, 'account_id', None)}, secret_key={getattr(configuration, 'secret_key', None)}")
 SUBSCRIPTION_AMOUNT = 299
 
 
