@@ -490,6 +490,51 @@ async def send_results(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     else:
         await update.message.reply_text('Пришлите изображение или текст после команды.')
 
+# --- Управление челленджами (список/удаление) ---
+async def list_challenges(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await admin_only(update, context):
+        return
+    try:
+        rows = db.get_all_challenges()
+        if not rows:
+            await update.message.reply_text('В базе нет челленджей.')
+            return
+        lines = []
+        for r in rows:
+            # ожидаемые поля: id, start_date, deadline, end_date, image_filename, status[, image_file_id]
+            ch_id = r[0]
+            start_date = r[1]
+            deadline = r[2]
+            end_date = r[3]
+            image_filename = r[4] if len(r) > 4 else ''
+            status = r[5] if len(r) > 5 else ''
+            lines.append(
+                f"id={ch_id} | {status}\nstart: {start_date}\ndeadline: {deadline}\nend: {end_date}\nimage: {image_filename}\n—"
+            )
+        msg = "\n".join(lines)
+        # Telegram ограничение на длину сообщения ~4096
+        for i in range(0, len(msg), 3500):
+            await update.message.reply_text(msg[i:i+3500])
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка получения списка челленджей: {e}")
+
+async def delete_challenge_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await admin_only(update, context):
+        return
+    args = getattr(context, 'args', []) or []
+    if not args or not args[0].isdigit():
+        await update.message.reply_text('Использование: /delete_challenge <id>')
+        return
+    ch_id = int(args[0])
+    try:
+        deleted = db.delete_challenge(ch_id)
+        if deleted:
+            await update.message.reply_text(f'Челлендж id={ch_id} удалён.')
+        else:
+            await update.message.reply_text(f'Челлендж id={ch_id} не найден.')
+    except Exception as e:
+        await update.message.reply_text(f'Ошибка удаления челленджа: {e}')
+
 # --- Управление турами (admin) ---
 from telegram.ext import CommandHandler, MessageHandler, filters, ConversationHandler
 import json
