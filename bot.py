@@ -22,6 +22,7 @@ from handlers.user_handlers import start, hc, IMAGES_DIR, \
     premium_add_pool_callback, premium_team_input, premium_position_selected, \
     challenge_command, challenge_level_callback
 from handlers.admin_handlers import addhc, send_results, show_users
+from handlers.admin_handlers import list_challenges, delete_challenge_cmd
 from handlers.admin_handlers import (
     send_challenge_image_start,
     challenge_input_start_date,
@@ -118,6 +119,8 @@ async def on_startup(app):
         BotCommand("send_challenge_image", "Загрузить картинку челленджа (админ)"),
         BotCommand("addhc", "Начислить HC пользователю (админ)"),
         BotCommand("send_results", "Разослать результаты тура (админ)"),
+        BotCommand("list_challenges", "Список челленджей (админ)"),
+        BotCommand("delete_challenge", "Удалить челлендж по id (админ)"),
     ]
     try:
         # Очистим команды на всякий случай (default и ru)
@@ -233,6 +236,8 @@ if __name__ == '__main__':
     app.add_handler(send_challenge_image_conv)
     app.add_handler(CommandHandler('addhc', addhc))
     app.add_handler(CommandHandler('send_results', send_results))
+    app.add_handler(CommandHandler('list_challenges', list_challenges))
+    app.add_handler(CommandHandler('delete_challenge', delete_challenge_cmd))
     app.add_handler(CommandHandler('get_tour_roster', get_tour_roster))
 
     # --- ConversationHandler для /tour ---

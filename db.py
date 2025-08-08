@@ -262,6 +262,16 @@ def get_latest_challenge():
         row = conn.execute('SELECT id, start_date, deadline, end_date, image_filename, status, image_file_id FROM challenges ORDER BY id DESC LIMIT 1').fetchone()
         return row
 
+def get_all_challenges():
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        return conn.execute('SELECT id, start_date, deadline, end_date, image_filename, status FROM challenges ORDER BY id DESC').fetchall()
+
+def delete_challenge(ch_id: int) -> int:
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            cur = conn.execute('DELETE FROM challenges WHERE id = ?', (ch_id,))
+            return cur.rowcount
+
 # --- Игроки ---
 def add_player(name, position, club, nation, age, price):
     with closing(sqlite3.connect(DB_NAME)) as conn:
