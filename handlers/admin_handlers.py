@@ -446,7 +446,8 @@ async def send_challenge_image_photo(update: Update, context: ContextTypes.DEFAU
         start_date = context.user_data.get('challenge_start')
         deadline = context.user_data.get('challenge_deadline')
         end_date = context.user_data.get('challenge_end')
-        ch_id = db.create_challenge(start_date, deadline, end_date, filename)
+        image_file_id = getattr(photo, 'file_id', '') or ''
+        ch_id = db.create_challenge(start_date, deadline, end_date, filename, image_file_id)
 
         await update.message.reply_text(
             f'✅ Челлендж зарегистрирован (id={ch_id}). Картинка сохранена как `{filename}`.'

@@ -137,9 +137,15 @@ def init_db():
                     deadline TEXT NOT NULL,
                     end_date TEXT NOT NULL,
                     image_filename TEXT NOT NULL,
-                    status TEXT NOT NULL
+                    status TEXT NOT NULL,
+                    image_file_id TEXT DEFAULT ''
                 )
             ''')
+            # Миграция: добавить колонку image_file_id при отсутствии
+            try:
+                conn.execute('ALTER TABLE challenges ADD COLUMN image_file_id TEXT DEFAULT \"\"')
+            except Exception:
+                pass
 
 def register_user(telegram_id, username, name):
     with closing(sqlite3.connect(DB_NAME)) as conn:
@@ -223,7 +229,7 @@ def record_subscription_notification(user_id: int, notify_date: str, kind: str) 
             )
 
 # --- Челленджи ---
-def create_challenge(start_date: str, deadline: str, end_date: str, image_filename: str) -> int:
+def create_challenge(start_date: str, deadline: str, end_date: str, image_filename: str, image_file_id: str = "") -> int:
     """Создаёт запись челленджа и возвращает его id. Статус вычисляется относительно текущего времени."""
     import datetime
     now = datetime.datetime.utcnow()
@@ -246,14 +252,14 @@ def create_challenge(start_date: str, deadline: str, end_date: str, image_filena
     with closing(sqlite3.connect(DB_NAME)) as conn:
         with conn:
             cur = conn.execute(
-                'INSERT INTO challenges (start_date, deadline, end_date, image_filename, status) VALUES (?, ?, ?, ?, ?)',
-                (start_date, deadline, end_date, image_filename, status)
+                'INSERT INTO challenges (start_date, deadline, end_date, image_filename, status, image_file_id) VALUES (?, ?, ?, ?, ?, ?)',
+                (start_date, deadline, end_date, image_filename, status, image_file_id or "")
             )
             return cur.lastrowid
 
 def get_latest_challenge():
     with closing(sqlite3.connect(DB_NAME)) as conn:
-        row = conn.execute('SELECT id, start_date, deadline, end_date, image_filename, status FROM challenges ORDER BY id DESC LIMIT 1').fetchone()
+        row = conn.execute('SELECT id, start_date, deadline, end_date, image_filename, status, image_file_id FROM challenges ORDER BY id DESC LIMIT 1').fetchone()
         return row
 
 # --- Игроки ---

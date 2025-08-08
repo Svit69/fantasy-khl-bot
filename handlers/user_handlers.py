@@ -152,19 +152,46 @@ async def challenge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     # Пытаемся отправить последнюю картинку челленджа
     photo_sent = False
+    # 1) Попробуем отправить по file_id из БД
     try:
-        if os.path.exists(CHALLENGE_IMAGE_PATH_FILE):
-            with open(CHALLENGE_IMAGE_PATH_FILE, 'r') as f:
-                fname = f.read().strip()
-            fpath = os.path.join(IMAGES_DIR, fname)
-            if os.path.exists(fpath):
-                await context.bot.send_photo(chat_id=update.effective_chat.id, photo=InputFile(fpath))
-                photo_sent = True
-    except Exception as e:
+        ch = db.get_latest_challenge()
+        if ch:
+            # ch: (id, start, deadline, end, image_filename, status, image_file_id)
+            image_file_id = ch[6] if len(ch) >= 7 else ''
+            if image_file_id:
+                try:
+                    await context.bot.send_photo(chat_id=update.effective_chat.id, photo=image_file_id)
+                    photo_sent = True
+                except Exception:
+                    photo_sent = False
+    except Exception:
+        pass
+    # 2) Если не получилось — попробуем локальный файл из CHALLENGE_IMAGE_PATH_FILE
+    if not photo_sent:
         try:
-            await update.message.reply_text(f"[WARN] Не удалось отправить картинку челленджа: {e}")
+            if os.path.exists(CHALLENGE_IMAGE_PATH_FILE):
+                with open(CHALLENGE_IMAGE_PATH_FILE, 'r') as f:
+                    fname = f.read().strip()
+                fpath = os.path.join(IMAGES_DIR, fname)
+                if os.path.exists(fpath):
+                    try:
+                        await context.bot.send_photo(chat_id=update.effective_chat.id, photo=InputFile(fpath))
+                        photo_sent = True
+                    except Exception:
+                        photo_sent = False
         except Exception:
             pass
+    # 3) Если не получилось фото — попробуем отправить как документ
+    if not photo_sent:
+        try:
+            if 'fpath' in locals() and os.path.exists(fpath):
+                await context.bot.send_document(chat_id=update.effective_chat.id, document=InputFile(fpath))
+                photo_sent = True
+        except Exception as e:
+            try:
+                await update.message.reply_text(f"[WARN] Не удалось отправить картинку челленджа: {e}")
+            except Exception:
+                pass
 
     text = (
         "Челлендж против редакции Голевой\n"
