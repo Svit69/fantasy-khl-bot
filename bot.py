@@ -239,10 +239,6 @@ if __name__ == '__main__':
         BotCommand("send_results", "Разослать результаты тура (админ)"),
     ]
 
-    # Запуск фонового опроса платежей YooKassa
-    import utils
-    asyncio.create_task(utils.poll_yookassa_payments(app.bot, 60))
-
     # Запуск приложения
     app.add_handler(CommandHandler('start', start))
     app.add_handler(CommandHandler('tour', tour_start))
