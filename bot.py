@@ -103,16 +103,17 @@ if __name__ == '__main__':
 
     # Создание и настройка приложения    
     async def post_init_poll_payments(app):
+        print("[DEBUG] post_init_poll_payments called")
         import utils
         import asyncio
+        asyncio.create_task(utils.poll_yookassa_payments(app.bot, 60))
 
     app = Application.builder().token(TELEGRAM_TOKEN).post_init(on_startup).post_init(post_init_poll_payments).build()
 
     # ЯВНЫЙ запуск poll_yookassa_payments для отладки
     import asyncio
     import utils
-    print("[DEBUG] Явный запуск poll_yookassa_payments через create_task")
-    asyncio.create_task(utils.poll_yookassa_payments(app.bot, 60))
+
     
     # Регистрация обработчиков
     app.add_handler(CommandHandler('start', start))
