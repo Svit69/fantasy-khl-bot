@@ -42,14 +42,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                     if referrer_id != user.id:
                         # Вставим запись реферала, если для этого user_id её ещё не было
                         if db.add_referral_if_new(user.id, referrer_id):
-                            db.update_hc_balance(referrer_id, 50)
+                            # Бонус зависит от активности подписки у реферера
+                            try:
+                                from db import is_subscription_active
+                                bonus = 100 if is_subscription_active(referrer_id) else 50
+                            except Exception:
+                                bonus = 50
+                            db.update_hc_balance(referrer_id, bonus)
                             # Уведомим реферера (если можно)
                             try:
                                 new_balance = db.get_user_by_id(referrer_id)
                                 new_balance = new_balance[3] if new_balance else '—'
                                 await context.bot.send_message(
                                     chat_id=referrer_id,
-                                    text=f'🎉 По вашей реферальной ссылке зарегистрировался новый участник!\n+50 HC начислено. Текущий баланс: {new_balance} HC.'
+                                    text=f'🎉 По вашей реферальной ссылке зарегистрировался новый участник!\n+{bonus} HC начислено. Текущий баланс: {new_balance} HC.'
                                 )
                             except Exception:
                                 pass
@@ -101,10 +107,16 @@ async def referral(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     bot_username = (await context.bot.get_me()).username
     link = f"https://t.me/{bot_username}?start=ref_{user.id}"
+    # Определим текущий бонус: 100 HC при активной подписке, иначе 50 HC
+    try:
+        from db import is_subscription_active
+        bonus = 100 if is_subscription_active(user.id) else 50
+    except Exception:
+        bonus = 50
     text = (
         f"🔗 Ваша реферальная ссылка:\n"
         f"{link}\n\n"
-        f"Приглашайте друзей! За каждого нового участника вы получите +50 HC после его регистрации."
+        f"Приглашайте друзей! За каждого нового участника вы получите +{bonus} HC после его регистрации."
     )
     keyboard = [[InlineKeyboardButton('Скопировать ссылку', url=link)]]
     await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
