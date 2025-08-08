@@ -166,6 +166,8 @@ if __name__ == '__main__':
         import utils
         import asyncio
         asyncio.create_task(utils.poll_yookassa_payments(app.bot, 60))
+        # Запускаем напоминания о подписке (каждый час)
+        asyncio.create_task(utils.poll_subscription_reminders(app.bot, 3600))
 
     # Создаем приложение с persistence для сохранения состояний
     persistence = PicklePersistence(filepath='bot_persistence.pickle')

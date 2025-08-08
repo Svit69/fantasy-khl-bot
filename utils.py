@@ -65,6 +65,61 @@ async def poll_yookassa_payments(bot, interval=60):
             print(f"Ошибка при polling ЮKassa: {e}")
         await asyncio.sleep(interval)
 
+
+async def poll_subscription_reminders(bot, interval=3600):
+    """Периодически проверяет подписки и отправляет напоминания:
+    - за 7 дней
+    - за 3 дня
+    - в день окончания (0 дней)
+    Отправки дедуплицируются таблицей subscription_notifications.
+    """
+    print("[DEBUG] poll_subscription_reminders started")
+    while True:
+        try:
+            subs = db.get_all_subscriptions()  # [(user_id, paid_until)]
+            today = datetime.datetime.utcnow().date()
+            for user_id, paid_until in subs:
+                if not paid_until:
+                    continue
+                try:
+                    dt = datetime.datetime.fromisoformat(paid_until)
+                except Exception:
+                    continue
+                remain = (dt.date() - today).days
+                if remain in (7, 3):
+                    kind = f"{remain}d"
+                    notify_date = today.isoformat()
+                    if not db.has_subscription_notification(user_id, notify_date, kind):
+                        try:
+                            await bot.send_message(
+                                chat_id=user_id,
+                                text=(
+                                    f"⏰ Напоминание: подписка истекает через {remain} дн.\n"
+                                    f"Продлите подписку командой /subscribe."
+                                )
+                            )
+                            db.record_subscription_notification(user_id, notify_date, kind)
+                        except Exception as e:
+                            logger.warning(f"Не удалось отправить напоминание ({kind}) пользователю {user_id}: {e}")
+                elif remain == 0:
+                    kind = "expired"
+                    notify_date = dt.date().isoformat()  # фиксируем на дате окончания, чтобы не дублировать на след. дни
+                    if not db.has_subscription_notification(user_id, notify_date, kind):
+                        try:
+                            await bot.send_message(
+                                chat_id=user_id,
+                                text=(
+                                    "⚠️ Срок вашей подписки истёк сегодня. \n"
+                                    "Оформите продление с помощью /subscribe."
+                                )
+                            )
+                            db.record_subscription_notification(user_id, notify_date, kind)
+                        except Exception as e:
+                            logger.warning(f"Не удалось отправить уведомление об окончании подписки пользователю {user_id}: {e}")
+        except Exception as e:
+            print(f"Ошибка в poll_subscription_reminders: {e}")
+        await asyncio.sleep(interval)
+
 IMAGES_DIR = 'images'
 __all__ = ['IMAGES_DIR']
 

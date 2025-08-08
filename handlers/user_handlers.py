@@ -135,6 +135,22 @@ async def tour_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif message is None and hasattr(update, "callback_query"):
         message = update.callback_query.message
 
+    # Проверяем активную подписку
+    try:
+        from db import is_subscription_active
+        user = update.effective_user
+        if not is_subscription_active(user.id):
+            await message.reply_text(
+                "Подписка не активна. Оформите или продлите подписку командой /subscribe, затем повторите попытку."
+            )
+            return ConversationHandler.END
+    except Exception:
+        # При ошибке проверки не блокируем, но даём подсказку
+        try:
+            await message.reply_text("Не удалось проверить подписку. Если доступ ограничен, используйте /subscribe.")
+        except Exception:
+            pass
+
     # --- Определяем активный тур ---
     from db import get_active_tour
     active_tour = get_active_tour()

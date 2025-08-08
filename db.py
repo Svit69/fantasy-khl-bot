@@ -120,6 +120,16 @@ def init_db():
                 )
             ''')
 
+            # Таблица отправленных уведомлений по подписке (для дедупликации)
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS subscription_notifications (
+                    user_id INTEGER NOT NULL,
+                    notify_date TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    UNIQUE(user_id, notify_date, kind)
+                )
+            ''')
+
 def register_user(telegram_id, username, name):
     with closing(sqlite3.connect(DB_NAME)) as conn:
         with conn:
@@ -153,6 +163,25 @@ def add_or_update_subscription(user_id, paid_until, last_payment_id):
                 ON CONFLICT(user_id) DO UPDATE SET paid_until=excluded.paid_until, last_payment_id=excluded.last_payment_id
             ''', (user_id, paid_until, last_payment_id))
 
+def is_subscription_active(user_id: int) -> bool:
+    """Возвращает True, если у пользователя есть подписка и paid_until > сейчас (UTC)."""
+    try:
+        row = get_subscription(user_id)
+        if not row:
+            return False
+        # row: (user_id, paid_until, last_payment_id)
+        paid_until = row[1]
+        if not paid_until:
+            return False
+        import datetime
+        try:
+            dt = datetime.datetime.fromisoformat(paid_until)
+        except Exception:
+            return False
+        return dt > datetime.datetime.utcnow()
+    except Exception:
+        return False
+
 def update_hc_balance(telegram_id, amount):
     with closing(sqlite3.connect(DB_NAME)) as conn:
         with conn:
@@ -161,6 +190,26 @@ def update_hc_balance(telegram_id, amount):
 def get_all_users():
     with closing(sqlite3.connect(DB_NAME)) as conn:
         return conn.execute('SELECT telegram_id FROM users').fetchall()
+
+def get_all_subscriptions():
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        return conn.execute('SELECT user_id, paid_until FROM subscriptions').fetchall()
+
+def has_subscription_notification(user_id: int, notify_date: str, kind: str) -> bool:
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        row = conn.execute(
+            'SELECT 1 FROM subscription_notifications WHERE user_id=? AND notify_date=? AND kind=?',
+            (user_id, notify_date, kind)
+        ).fetchone()
+        return bool(row)
+
+def record_subscription_notification(user_id: int, notify_date: str, kind: str) -> None:
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            conn.execute(
+                'INSERT OR IGNORE INTO subscription_notifications (user_id, notify_date, kind) VALUES (?, ?, ?)',
+                (user_id, notify_date, kind)
+            )
 
 # --- Игроки ---
 def add_player(name, position, club, nation, age, price):
