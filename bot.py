@@ -105,7 +105,6 @@ if __name__ == '__main__':
     async def post_init_poll_payments(app):
         import utils
         import asyncio
-        asyncio.create_task(utils.poll_yookassa_payments(app.bot, 60))
 
     app = Application.builder().token(TELEGRAM_TOKEN).post_init(on_startup).post_init(post_init_poll_payments).build()
     
