@@ -519,6 +519,7 @@ async def tour_forward_callback(update: Update, context: ContextTypes.DEFAULT_TY
         # Получаем игрока по id
         roster = context.user_data['tour_roster']
         player = next((p for p in roster if p[1] == pid), None)
+        added_personal = False
         if not player:
             # Fallback: ищем в общей БД игроков
             try:
@@ -526,6 +527,15 @@ async def tour_forward_callback(update: Update, context: ContextTypes.DEFAULT_TY
                 if pdb:
                     # Преобразуем к формату: (tr.cost, p.id, p.name, p.position, p.club, p.nation, p.age, p.price)
                     player = (pdb[6], pdb[0], pdb[1], pdb[2], pdb[3], pdb[4], pdb[5], pdb[6])
+                    # Добавим этого игрока в персональный туровый список пользователя, если ещё нет
+                    try:
+                        if not any(p_[1] == pdb[0] for p_ in roster):
+                            context.user_data['tour_roster'].append(player)
+                        added_personal = True
+                        # Пометим использование премиум-бонуса
+                        context.user_data['premium_extra_available'] = False
+                    except Exception:
+                        pass
                 else:
                     await query.edit_message_text('Игрок не найден.')
                     return TOUR_FORWARD_1
@@ -595,12 +605,20 @@ async def tour_defender_callback(update: Update, context: ContextTypes.DEFAULT_T
         pid = int(data.split('_')[1])
         roster = context.user_data['tour_roster']
         player = next((p for p in roster if p[1] == pid), None)
+        added_personal = False
         if not player:
             # Fallback: ищем в общей БД игроков
             try:
                 pdb = db.get_player_by_id(pid)
                 if pdb:
                     player = (pdb[6], pdb[0], pdb[1], pdb[2], pdb[3], pdb[4], pdb[5], pdb[6])
+                    try:
+                        if not any(p_[1] == pdb[0] for p_ in roster):
+                            context.user_data['tour_roster'].append(player)
+                        added_personal = True
+                        context.user_data['premium_extra_available'] = False
+                    except Exception:
+                        pass
                 else:
                     await query.edit_message_text('Игрок не найден.')
                     return TOUR_DEFENDER_1
@@ -664,12 +682,20 @@ async def tour_goalie_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         pid = int(data.split('_')[1])
         roster = context.user_data['tour_roster']
         player = next((p for p in roster if p[1] == pid), None)
+        added_personal = False
         if not player:
             # Fallback: ищем в общей БД игроков
             try:
                 pdb = db.get_player_by_id(pid)
                 if pdb:
                     player = (pdb[6], pdb[0], pdb[1], pdb[2], pdb[3], pdb[4], pdb[5], pdb[6])
+                    try:
+                        if not any(p_[1] == pdb[0] for p_ in roster):
+                            context.user_data['tour_roster'].append(player)
+                        added_personal = True
+                        context.user_data['premium_extra_available'] = False
+                    except Exception:
+                        pass
                 else:
                     await query.edit_message_text('Игрок не найден.')
                     return TOUR_GOALIE
