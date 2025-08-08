@@ -11,6 +11,7 @@ SUBSCRIPTION_AMOUNT = 299
 
 
 def create_yookassa_payment(user_id: int):
+    Payment.configure(YOOKASSA_SHOP_ID, YOOKASSA_SECRET_KEY)
     payment = Payment.create({
         "amount": {
             "value": f"{SUBSCRIPTION_AMOUNT}.00",
@@ -23,8 +24,7 @@ def create_yookassa_payment(user_id: int):
         "capture": True,
         "description": f"Подписка на Fantasy KHL для user_{user_id}",
         "metadata": {"user_id": str(user_id)}
-    },
-    shop_id=YOOKASSA_SHOP_ID, api_key=YOOKASSA_SECRET_KEY)
+    })
     from db import save_payment_id
     save_payment_id(user_id, payment.id, status='pending')
     return payment.confirmation.confirmation_url, payment.id
