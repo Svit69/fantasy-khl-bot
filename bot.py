@@ -85,6 +85,8 @@ async def on_startup(app):
     app.create_task(utils.poll_yookassa_payments(app.bot, interval=60))
 
 if __name__ == '__main__':
+    from db import init_payments_table
+    init_payments_table()
     import platform
     import sys
     import asyncio
