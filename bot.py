@@ -211,6 +211,7 @@ if __name__ == '__main__':
         entry_points=[CommandHandler('tour', tour_start)],
         states={
             TOUR_FORWARD_1: [
+                CallbackQueryHandler(premium_add_pool_callback, pattern=r"^premium_add_pool$"),
                 CallbackQueryHandler(tour_forward_callback, pattern=r"^pick_\d+_нападающий$"),
                 CallbackQueryHandler(restart_tour_callback, pattern=r"^restart_tour$")
             ],

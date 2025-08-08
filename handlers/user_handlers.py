@@ -297,8 +297,35 @@ async def tour_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pass
 
     await message.reply_text(intro, parse_mode="MarkdownV2")
+    # Для премиум-пользователей — показать кнопку активации бонуса
+    try:
+        from db import is_subscription_active
+        if is_subscription_active(update.effective_user.id):
+            kb = InlineKeyboardMarkup(
+                [[InlineKeyboardButton('Добавить игрока в пул', callback_data='premium_add_pool')]]
+            )
+            await message.reply_text(' ', reply_markup=kb)
+    except Exception:
+        pass
     # Сразу показываем выбор первого нападающего!
     return await tour_forward_1(update, context)
+
+
+async def premium_add_pool_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Обработка нажатия премиум-кнопки: фиксируем флаг в user_data
+    query = update.callback_query
+    await query.answer()
+    try:
+        from db import is_subscription_active
+        if not is_subscription_active(update.effective_user.id):
+            await query.message.reply_text("Премиум недоступен. Оформите /subscribe, чтобы активировать бонус.")
+            return TOUR_FORWARD_1
+    except Exception:
+        pass
+    # Установим флаг: доступен +1 игрок в пул
+    context.user_data['premium_extra_available'] = True
+    await query.message.reply_text("💎 Персональный бонус активирован: +1 игрок в пул.")
+    return TOUR_FORWARD_1
 
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton
 
