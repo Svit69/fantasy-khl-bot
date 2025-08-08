@@ -50,7 +50,7 @@ async def poll_yookassa_payments(bot, interval=60):
             pending = db.get_pending_payments()
             print("[DEBUG] pending payments:", pending)
             for payment_id, user_id in pending:
-                payment = Payment.find_one(payment_id, shop_id=YOOKASSA_SHOP_ID, api_key=YOOKASSA_SECRET_KEY)
+                payment = Payment.find_one(payment_id)
                 print(f"[DEBUG] payment_id={payment_id}, status={payment.status}")
                 if payment.status == "succeeded":
                     # Продлить подписку
