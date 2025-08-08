@@ -3,7 +3,6 @@ from telegram import Update, InputFile
 from telegram.ext import ContextTypes
 from config import ADMIN_ID
 import os
-from yookassa import Payment
 
 YOOKASSA_SHOP_ID = "1141033"
 YOOKASSA_SECRET_KEY = "test_NnIZ_gFbddTpDQQNphx0KuZFqBWHd6PVoB1KxVtWOHw"
