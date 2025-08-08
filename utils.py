@@ -42,16 +42,16 @@ import datetime
 import asyncio
 
 async def poll_yookassa_payments(bot, interval=60):
-    """
-    Периодически проверяет статус платежей в ЮKassa и активирует подписку при успешной оплате.
-    """
+    print("[DEBUG] poll_yookassa_payments started")
     from yookassa import Payment
     import db
     while True:
         try:
             pending = db.get_pending_payments()
+            print("[DEBUG] pending payments:", pending)
             for payment_id, user_id in pending:
                 payment = Payment.find_one(payment_id, shop_id=YOOKASSA_SHOP_ID, api_key=YOOKASSA_SECRET_KEY)
+                print(f"[DEBUG] payment_id={payment_id}, status={payment.status}")
                 if payment.status == "succeeded":
                     # Продлить подписку
                     paid_until = datetime.datetime.utcnow() + datetime.timedelta(days=31)
