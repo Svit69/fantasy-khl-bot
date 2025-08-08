@@ -18,7 +18,7 @@ from handlers.user_handlers import start, hc, IMAGES_DIR, \
     tour_defender_1, tour_defender_2, tour_goalie, tour_captain, \
     tour_forward_callback, tour_defender_callback, tour_goalie_callback, \
     restart_tour_callback, tour_captain_callback, rules, referral, subscribe
-from handlers.admin_handlers import addhc, send_results
+from handlers.admin_handlers import addhc, send_results, show_users
 from handlers.admin_handlers import (
     add_player_start, add_player_name, add_player_position, add_player_club,
     add_player_nation, add_player_age, add_player_price, add_player_cancel, list_players, find_player,
@@ -121,6 +121,7 @@ if __name__ == '__main__':
 
     app.add_handler(CommandHandler('hc', hc))
     app.add_handler(CommandHandler('referral', referral))
+    app.add_handler(CommandHandler('show_users', show_users))  # Только для админа
     app.add_handler(CommandHandler('subscribe', subscribe))
     
     send_tour_image_conv = ConversationHandler(

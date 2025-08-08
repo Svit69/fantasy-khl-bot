@@ -59,6 +59,40 @@ async def add_player_cancel(update, context):
     await update.message.reply_text("Добавление отменено.")
     return ConversationHandler.END
 
+# --- Список пользователей и их подписок ---
+async def show_users(update, context):
+    if not await admin_only(update, context):
+        return
+    import db
+    import datetime
+    users = []
+    # Получаем всех пользователей
+    with db.closing(db.sqlite3.connect(db.DB_NAME)) as conn:
+        users = conn.execute('SELECT telegram_id, username, name FROM users').fetchall()
+        # Получаем все подписки
+        subs = {row[0]: row[1] for row in conn.execute('SELECT user_id, paid_until FROM subscriptions').fetchall()}
+    now = datetime.datetime.utcnow()
+    lines = []
+    for user_id, username, name in users:
+        paid_until = subs.get(user_id)
+        if paid_until:
+            try:
+                dt = datetime.datetime.fromisoformat(paid_until)
+                active = dt > now
+            except Exception:
+                active = False
+        else:
+            active = False
+        status = '✅ подписка активна' if active else '❌ нет подписки'
+        lines.append(f"{user_id} | {username or '-'} | {name or '-'} | {status}")
+    if not lines:
+        await update.message.reply_text("Нет пользователей.")
+    else:
+        msg = 'Пользователи и подписки:\n\n' + '\n'.join(lines)
+        # Если слишком длинно — разбить на части
+        for i in range(0, len(msg), 4000):
+            await update.message.reply_text(msg[i:i+4000])
+
 # --- Список игроков ---
 async def list_players(update, context):
     if not await admin_only(update, context):
