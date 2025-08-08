@@ -223,32 +223,44 @@ if __name__ == '__main__':
                 CallbackQueryHandler(premium_position_selected, pattern=r"^premium_pos_(нападающий|защитник|вратарь)$")
             ],
             TOUR_FORWARD_2: [
+                CallbackQueryHandler(premium_add_pool_callback, pattern=r"^premium_add_pool$"),
                 CallbackQueryHandler(tour_forward_callback, pattern=r"^pick_\d+_нападающий$"),
                 CallbackQueryHandler(restart_tour_callback, pattern=r"^restart_tour$")
             ],
             TOUR_FORWARD_3: [
+                CallbackQueryHandler(premium_add_pool_callback, pattern=r"^premium_add_pool$"),
                 CallbackQueryHandler(tour_forward_callback, pattern=r"^pick_\d+_нападающий$"),
                 CallbackQueryHandler(restart_tour_callback, pattern=r"^restart_tour$")
             ],
             TOUR_DEFENDER_1: [
+                CallbackQueryHandler(premium_add_pool_callback, pattern=r"^premium_add_pool$"),
                 CallbackQueryHandler(tour_defender_callback, pattern=r"^pick_\d+_защитник$"),
                 CallbackQueryHandler(restart_tour_callback, pattern=r"^restart_tour$")
             ],
             TOUR_DEFENDER_2: [
+                CallbackQueryHandler(premium_add_pool_callback, pattern=r"^premium_add_pool$"),
                 CallbackQueryHandler(tour_defender_callback, pattern=r"^pick_\d+_защитник$"),
                 CallbackQueryHandler(restart_tour_callback, pattern=r"^restart_tour$")
             ],
             TOUR_GOALIE: [
+                CallbackQueryHandler(premium_add_pool_callback, pattern=r"^premium_add_pool$"),
                 CallbackQueryHandler(tour_goalie_callback, pattern=r"^pick_\d+_вратарь$"),
                 CallbackQueryHandler(restart_tour_callback, pattern=r"^restart_tour$")
             ],
             TOUR_CAPTAIN: [
+                CallbackQueryHandler(premium_add_pool_callback, pattern=r"^premium_add_pool$"),
                 CallbackQueryHandler(tour_captain_callback, pattern=r"^pick_captain_\d+$"),
                 CallbackQueryHandler(restart_tour_callback, pattern=r"^restart_tour$"),
                 MessageHandler(filters.ALL, tour_captain)
             ],
         },
-        fallbacks=[],
+        fallbacks=[CommandHandler('tour', tour_start)],
+        per_chat=True,
+        per_user=True,
+        per_message=False,
+        allow_reentry=True,
+        name="tour_conv",
+        persistent=False,
     )
     app.add_handler(tour_conv)
     # Глобальный обработчик для кнопки "Пересобрать состав"
