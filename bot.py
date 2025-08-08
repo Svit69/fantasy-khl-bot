@@ -86,7 +86,24 @@ async def send_tour_image_cancel(update, context):
 import utils
 
 async def on_startup(app):
-    pass
+    from telegram import BotCommand, BotCommandScopeChat
+    from config import ADMIN_ID
+    user_commands = [
+        BotCommand("start", "Регистрация и приветствие"),
+        BotCommand("tour", "Показать состав игроков на тур"),
+        BotCommand("hc", "Показать баланс HC"),
+        BotCommand("subscribe", "Оформить подписку"),
+        BotCommand("rules", "Правила сборки составов"),
+    ]
+    admin_commands = user_commands + [
+        BotCommand("show_users", "Список пользователей и подписок (админ)"),
+        BotCommand("send_tour_image", "Разослать изображение тура (админ)"),
+        BotCommand("addhc", "Начислить HC пользователю (админ)"),
+        BotCommand("send_results", "Разослать результаты тура (админ)"),
+    ]
+    await app.bot.set_my_commands(user_commands)
+    await app.bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=ADMIN_ID))
+
 
 
 if __name__ == '__main__':
@@ -238,14 +255,18 @@ if __name__ == '__main__':
         BotCommand("start", "Регистрация и приветствие"),
         BotCommand("tour", "Показать состав игроков на тур"),
         BotCommand("hc", "Показать баланс HC"),
+        BotCommand("subscribe", "Оформить подписку"),
         BotCommand("rules", "Правила сборки составов"),
     ]
-    
     admin_commands = user_commands + [
+        BotCommand("show_users", "Список пользователей и подписок (админ)"),
         BotCommand("send_tour_image", "Разослать изображение тура (админ)"),
         BotCommand("addhc", "Начислить HC пользователю (админ)"),
         BotCommand("send_results", "Разослать результаты тура (админ)"),
     ]
+
+    # Установить команды для всех пользователей
+    # await здесь нельзя, переносим в post_init
 
     # Запуск приложения
     app.add_handler(CommandHandler('start', start))
