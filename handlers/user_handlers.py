@@ -180,19 +180,26 @@ async def challenge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await update.message.reply_text("Сейчас нет доступных челленджей. Загляните позже.")
         return
 
-    lines = ["Доступные челленджи:"]
+    lines = ["*Доступные челленджи:*"]
     buttons = []
     for c in list_to_show:
         # c: (id, start, deadline, end, image_filename, status, [image_file_id])
         cid = c[0]
-        start = c[1]
         deadline = c[2]
         end = c[3]
         status = c[5] if len(c) > 5 else ''
-        lines.append(f"#{cid} | {status} | старт: {start} | дедлайн: {deadline} | конец: {end}")
+        if status == 'завершен':
+            line = f"🔺 №{cid} [завершен] посмотреть результаты"
+        elif status == 'в игре':
+            line = f"🔹 №{cid} [начался] подведение итогов: {end} (мск)"
+        elif status == 'активен':
+            line = f"🔸 №{cid} [сбор составов] дедлайн сборки состава: {deadline} (мск)"
+        else:
+            line = f"№{cid} [{status}]"
+        lines.append(line)
         buttons.append([InlineKeyboardButton(f"Открыть #{cid}", callback_data=f"challenge_open_{cid}")])
 
-    await update.message.reply_text("\n".join(lines), reply_markup=InlineKeyboardMarkup(buttons))
+    await update.message.reply_text("\n\n".join(lines), reply_markup=InlineKeyboardMarkup(buttons), parse_mode='Markdown')
 
 
 async def challenge_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
