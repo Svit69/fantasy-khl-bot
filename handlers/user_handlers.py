@@ -181,6 +181,35 @@ async def challenge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
 
     lines = ["*Доступные челленджи:*"]
+    # Вспомогательная функция: ISO -> текст в МСК (Europe/Moscow)
+    def iso_to_msk_text(dt_str: str) -> str:
+        import datetime as _dt
+        months = [
+            "января", "февраля", "марта", "апреля", "мая", "июня",
+            "июля", "августа", "сентября", "октября", "ноября", "декабря"
+        ]
+        if not dt_str:
+            return ""
+        try:
+            dt = _dt.datetime.fromisoformat(str(dt_str))
+        except Exception:
+            return str(dt_str)
+        # Считаем, что хранимое время — UTC (наивное -> проставим UTC)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=_dt.timezone.utc)
+        else:
+            dt = dt.astimezone(_dt.timezone.utc)
+        # Перевод в МСК
+        try:
+            from zoneinfo import ZoneInfo  # Python 3.9+
+            msk = dt.astimezone(ZoneInfo("Europe/Moscow"))
+        except Exception:
+            # Фолбэк: фиксированный UTC+3 (Москва без перехода)
+            msk = dt.astimezone(_dt.timezone(_dt.timedelta(hours=3)))
+        day = msk.day
+        month_name = months[msk.month - 1]
+        time_part = msk.strftime("%H:%M")
+        return f"{day} {month_name} {time_part} (мск)"
     buttons = []
     for c in list_to_show:
         # c: (id, start, deadline, end, image_filename, status, [image_file_id])
@@ -191,9 +220,9 @@ async def challenge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         if status == 'завершен':
             line = f"🔺 №{cid} [завершен] посмотреть результаты"
         elif status == 'в игре':
-            line = f"🔹 №{cid} [начался] подведение итогов: {end} (мск)"
+            line = f"🔹 №{cid} [начался] подведение итогов: {iso_to_msk_text(end)}"
         elif status == 'активен':
-            line = f"🔸 №{cid} [сбор составов] дедлайн сборки состава: {deadline} (мск)"
+            line = f"🔸 №{cid} [сбор составов] дедлайн сборки состава: {iso_to_msk_text(deadline)}"
         else:
             line = f"№{cid} [{status}]"
         lines.append(line)
