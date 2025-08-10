@@ -114,14 +114,8 @@ async def on_startup(app):
         BotCommand("rules", "Правила сборки составов"),
         BotCommand("challenge", "Челлендж против редакции"),
     ]
+    # Для меню админа показываем только одну команду справки
     admin_commands = user_commands + [
-        BotCommand("show_users", "Список пользователей и подписок (админ)"),
-        BotCommand("send_tour_image", "Разослать изображение тура (админ)"),
-        BotCommand("send_challenge_image", "Загрузить картинку челленджа (админ)"),
-        BotCommand("addhc", "Начислить HC пользователю (админ)"),
-        BotCommand("send_results", "Разослать результаты тура (админ)"),
-        BotCommand("list_challenges", "Список челленджей (админ)"),
-        BotCommand("delete_challenge", "Удалить челлендж по id (админ)"),
         BotCommand("admin_help", "Справка по админ-командам"),
     ]
     try:
