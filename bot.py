@@ -222,32 +222,32 @@ if __name__ == '__main__':
         if uid != ADMIN_ID:
             return
         text = (
-            "**Админские команды**\n\n"
-            "**Управление пользователями:**\n"
-            "• /show_users — список пользователей и подписок\n"
-            "• /addhc — начислить HC пользователю \n\n"
-            "**Управление турами:**\n"
-            "• /send_tour_image — загрузить и разослать картинку тура\n"
-            "• /send_results — разослать результаты тура\n"
-            "• /set_budget — установить бюджет тура\n"
-            "• /set_tour_roster — задать состав тура\n"
-            "• /list_tours\n"
-            "• /activate_tour\n\n"
-            "**Управление хоккеистами:**\n"
-            "• /list_players — список игроков\n"
-            "• /find_player — поиск игрока\n"
-            "• /add_player — добавить игрока\n"
-            "• /edit_player — отредактировать игрока\n"
-            "• /remove_player — удалить игрока\n\n"
-            "**Управление челленджами:**\n"
-            "• /list_challenges — список челленджей\n"
-            "• /delete_challenge <id> — удалить челлендж по id\n"
-            "• /send_challenge_image — зарегистрировать челлендж (даты + картинка)\n"
+            "<b>Админские команды</b>\n\n"
+            "<b>Управление пользователями:</b>\n"
+            "• <code>/show_users</code> — список пользователей и подписок\n"
+            "• <code>/addhc</code> — начислить HC пользователю \n\n"
+            "<b>Управление турами:</b>\n"
+            "• <code>/send_tour_image</code> — загрузить и разослать картинку тура\n"
+            "• <code>/send_results</code> — разослать результаты тура\n"
+            "• <code>/set_budget</code> — установить бюджет тура\n"
+            "• <code>/set_tour_roster</code> — задать состав тура\n"
+            "• <code>/list_tours</code>\n"
+            "• <code>/activate_tour</code>\n\n"
+            "<b>Управление хоккеистами:</b>\n"
+            "• <code>/list_players</code> — список игроков\n"
+            "• <code>/find_player</code> — поиск игрока\n"
+            "• <code>/add_player</code> — добавить игрока\n"
+            "• <code>/edit_player</code> — отредактировать игрока\n"
+            "• <code>/remove_player</code> — удалить игрока\n\n"
+            "<b>Управление челленджами:</b>\n"
+            "• <code>/list_challenges</code> — список челленджей\n"
+            "• <code>/delete_challenge &lt;id&gt;</code> — удалить челлендж по id\n"
+            "• <code>/send_challenge_image</code> — зарегистрировать челлендж (даты + картинка)\n"
         )
         try:
-            await update.message.reply_text(text, parse_mode='Markdown')
+            await update.message.reply_text(text, parse_mode='HTML')
         except Exception:
-            await context.bot.send_message(chat_id=update.effective_chat.id, text=text, parse_mode='Markdown')
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=text, parse_mode='HTML')
 
     app.add_handler(CommandHandler('admin_help', admin_help))
     
