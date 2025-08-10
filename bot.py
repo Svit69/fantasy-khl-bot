@@ -122,6 +122,7 @@ async def on_startup(app):
         BotCommand("send_results", "Разослать результаты тура (админ)"),
         BotCommand("list_challenges", "Список челленджей (админ)"),
         BotCommand("delete_challenge", "Удалить челлендж по id (админ)"),
+        BotCommand("admin_help", "Справка по админ-командам"),
     ]
     try:
         # Очистим команды на всякий случай (default и ru)
@@ -212,6 +213,39 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('show_users', show_users))  # Только для админа
     app.add_handler(CommandHandler('subscribe', subscribe))
     app.add_handler(CommandHandler('challenge', challenge_command))
+    
+    async def admin_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        try:
+            uid = update.effective_user.id if update.effective_user else None
+        except Exception:
+            uid = None
+        if uid != ADMIN_ID:
+            return
+        text = (
+            "*Админ-команды:*\n"
+            "• /show_users — список пользователей и подписок\n"
+            "• /send_tour_image — загрузить и разослать картинку тура\n"
+            "• /send_challenge_image — зарегистрировать челлендж (даты + картинка)\n"
+            "• /list_challenges — список челленджей\n"
+            "• /delete_challenge <id> — удалить челлендж по id\n"
+            "• /addhc — начислить HC пользователю\n"
+            "• /send_results — разослать результаты тура\n"
+            "• /set_budget — установить бюджет тура\n"
+            "• /set_tour_roster — задать состав тура\n"
+            "• /list_players — список игроков\n"
+            "• /find_player — поиск игрока\n"
+            "• /add_player — добавить игрока\n"
+            "• /edit_player — отредактировать игрока\n"
+            "• /remove_player — удалить игрока\n"
+            "• /list_tours — список туров\n"
+            "• /activate_tour — активировать тур\n"
+        )
+        try:
+            await update.message.reply_text(text, parse_mode='Markdown')
+        except Exception:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=text, parse_mode='Markdown')
+
+    app.add_handler(CommandHandler('admin_help', admin_help))
     
     send_tour_image_conv = ConversationHandler(
         entry_points=[CommandHandler('send_tour_image', send_tour_image_start)],
