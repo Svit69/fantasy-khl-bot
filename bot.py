@@ -222,23 +222,27 @@ if __name__ == '__main__':
         if uid != ADMIN_ID:
             return
         text = (
-            "*Админ-команды:*\n"
+            "*Админские команды*\n\n"
+            "*Управление пользователями:*\n"
             "• /show_users — список пользователей и подписок\n"
+            "• /addhc — начислить HC пользователю \n\n"
+            "*Управление турами:*\n"
             "• /send_tour_image — загрузить и разослать картинку тура\n"
-            "• /send_challenge_image — зарегистрировать челлендж (даты + картинка)\n"
-            "• /list_challenges — список челленджей\n"
-            "• /delete_challenge <id> — удалить челлендж по id\n"
-            "• /addhc — начислить HC пользователю\n"
             "• /send_results — разослать результаты тура\n"
             "• /set_budget — установить бюджет тура\n"
             "• /set_tour_roster — задать состав тура\n"
+            "• /list_tours\n"
+            "• /activate_tour\n\n"
+            "*Управление хоккеистами:*\n"
             "• /list_players — список игроков\n"
             "• /find_player — поиск игрока\n"
             "• /add_player — добавить игрока\n"
             "• /edit_player — отредактировать игрока\n"
-            "• /remove_player — удалить игрока\n"
-            "• /list_tours — список туров\n"
-            "• /activate_tour — активировать тур\n"
+            "• /remove_player — удалить игрока\n\n"
+            "*Управление челленджами:*\n"
+            "• /list_challenges — список челленджей\n"
+            "• /delete_challenge <id> — удалить челлендж по id\n"
+            "• /send_challenge_image — зарегистрировать челлендж (даты + картинка)\n"
         )
         try:
             await update.message.reply_text(text, parse_mode='Markdown')
