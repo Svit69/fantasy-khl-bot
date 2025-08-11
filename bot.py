@@ -22,7 +22,7 @@ from handlers.user_handlers import start, hc, IMAGES_DIR, \
     premium_add_pool_callback, premium_team_input, premium_position_selected, \
     challenge_command, challenge_level_callback, \
     challenge_open_callback, challenge_info_callback, challenge_build_callback
-from handlers.user_handlers import shop
+from handlers.user_handlers import shop, shop_item_callback
 from handlers.admin_handlers import addhc, send_results, show_users
 from handlers.admin_handlers import list_challenges, delete_challenge_cmd
 from handlers.admin_handlers import (
@@ -213,6 +213,7 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('show_users', show_users))  # Только для админа
     app.add_handler(CommandHandler('subscribe', subscribe))
     app.add_handler(CommandHandler('shop', shop))
+    app.add_handler(CallbackQueryHandler(shop_item_callback, pattern=r"^shop_item_\d+$"))
     app.add_handler(CommandHandler('challenge', challenge_command))
     
     async def admin_help(update: Update, context: ContextTypes.DEFAULT_TYPE):

@@ -319,8 +319,30 @@ async def challenge_info_callback(update: Update, context: ContextTypes.DEFAULT_
     )
     await query.edit_message_text(txt)
 
+def _parse_shop_items(text: str):
+    items = []
+    if not text:
+        return items
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    for line in lines:
+        if not (line.startswith('🔸') or line.startswith('•') or line.startswith('-')):
+            continue
+        # Убираем маркер
+        raw = line.lstrip('🔸').lstrip('•').lstrip('-').strip()
+        # Разделитель — может быть длинное тире или дефис
+        sep = '—' if '—' in raw else (' - ' if ' - ' in raw else '-')
+        if sep not in raw:
+            # Пропускаем некорректные строки
+            continue
+        name, price = raw.split(sep, 1)
+        name = name.strip()
+        price = price.strip()
+        if name:
+            items.append((name, price))
+    return items
+
 async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Показать содержимое магазина: текст + картинка (если есть)."""
+    """Показать содержимое магазина: текст + картинка + инлайн-кнопки товаров."""
     try:
         text, image_filename, image_file_id = db.get_shop_content()
     except Exception as e:
@@ -329,11 +351,18 @@ async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not text and not image_filename and not image_file_id:
         await update.message.reply_text("Магазин пока пуст. Загляните позже.")
         return
+    # Построим инлайн-кнопки из текста
+    items = _parse_shop_items(text or '')
+    buttons = []
+    for idx, (name, price) in enumerate(items, start=1):
+        label = f"{name} — {price}"
+        buttons.append([InlineKeyboardButton(label, callback_data=f"shop_item_{idx}")])
+    reply_markup = InlineKeyboardMarkup(buttons) if buttons else None
     caption = text if text else None
     # Попытаемся отправить фото по file_id
     if image_file_id:
         try:
-            await context.bot.send_photo(chat_id=update.effective_chat.id, photo=image_file_id, caption=caption)
+            await context.bot.send_photo(chat_id=update.effective_chat.id, photo=image_file_id, caption=caption, reply_markup=reply_markup)
             return
         except Exception:
             logger.warning("send_photo by file_id failed in /shop", exc_info=True)
@@ -343,15 +372,27 @@ async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if os.path.exists(fpath):
             try:
                 with open(fpath, 'rb') as fp:
-                    await context.bot.send_photo(chat_id=update.effective_chat.id, photo=InputFile(fp, filename=image_filename), caption=caption)
+                    await context.bot.send_photo(chat_id=update.effective_chat.id, photo=InputFile(fp, filename=image_filename), caption=caption, reply_markup=reply_markup)
                     return
             except Exception:
                 logger.error("send_photo from local file failed in /shop", exc_info=True)
     # Если фото не получилось — отправим просто текст
     if caption:
-        await update.message.reply_text(caption)
+        await update.message.reply_text(caption, reply_markup=reply_markup)
     else:
         await update.message.reply_text("Магазин недоступен.")
+
+async def shop_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data  # shop_item_<n>
+    await query.edit_message_reply_markup(reply_markup=query.message.reply_markup)
+    try:
+        idx = int(data.replace('shop_item_', ''))
+    except Exception:
+        idx = None
+    # На данном этапе просто подтвердим выбор товара.
+    await context.bot.send_message(chat_id=update.effective_chat.id, text="Спасибо! Вы выбрали товар. Оформление заказа скоро добавим.")
 
 
 async def challenge_build_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
