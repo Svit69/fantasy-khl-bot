@@ -443,7 +443,7 @@ async def shop_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
             )
         )
         return
-    # Баланса достаточно — подтверждаем и оставляем логистику покупки на следующий шаг
+    # Баланса достаточно — подтверждаем и уведомляем админа
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
         text=(
@@ -451,6 +451,18 @@ async def shop_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
             f"У вас достаточно HC (баланс: {balance} HC). Подтверждение и оформление заказа скоро добавим."
         )
     )
+    # Уведомление админа(ов)
+    try:
+        admin_text = (
+            "🛒 Запрос на покупку\n\n"
+            f"Пользователь: {user.full_name} (@{user.username or '-'}, id={user.id})\n"
+            f"Товар: {name}\n"
+            f"Цена: {price_str}\n"
+            f"Баланс: {balance} HC\n"
+        )
+        await context.bot.send_message(chat_id=ADMIN_ID, text=admin_text)
+    except Exception:
+        logger.warning("Failed to notify admin about shop purchase", exc_info=True)
 
 
 async def challenge_build_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
