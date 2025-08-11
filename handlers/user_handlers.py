@@ -1,4 +1,5 @@
 from telegram import Update, InputFile, ReplyKeyboardMarkup, MessageEntity, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram.error import BadRequest
 from telegram.constants import MessageEntityType
 from telegram.ext import ContextTypes, ConversationHandler
 from config import ADMIN_ID
@@ -386,7 +387,12 @@ async def shop_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     query = update.callback_query
     await query.answer()
     data = query.data  # shop_item_<n>
-    await query.edit_message_reply_markup(reply_markup=query.message.reply_markup)
+    try:
+        await query.edit_message_reply_markup(reply_markup=query.message.reply_markup)
+    except BadRequest as e:
+        # Игнорируем 'Message is not modified'
+        if 'Message is not modified' not in str(e):
+            raise
     try:
         idx = int(data.replace('shop_item_', ''))
     except Exception:
