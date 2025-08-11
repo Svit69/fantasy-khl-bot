@@ -1,8 +1,9 @@
 from telegram import Update, InputFile
-from telegram.ext import ContextTypes, ConversationHandler
+from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, MessageHandler, filters
 from config import ADMIN_ID
 import db
 import os
+import json
 from utils import is_admin, send_message_to_users, IMAGES_DIR, TOUR_IMAGE_PATH_FILE, CHALLENGE_IMAGE_PATH_FILE, logger
 
 # --- Добавление игрока ---
@@ -88,6 +89,35 @@ async def get_tour_roster(update, context):
     for cost, pid, name, pos, club, nation, age, price in roster:
         msg += f"{cost}: {pid}. {name} | {pos} | {club} | {nation} | {age} лет | {price} HC\n"
     await update.message.reply_text(msg)
+
+# --- Список пользователей и подписок ---
+async def show_users(update, context):
+    if not await admin_only(update, context):
+        return
+    import datetime
+    # Получаем всех пользователей и их подписки
+    with db.closing(db.sqlite3.connect(db.DB_NAME)) as conn:
+        users = conn.execute('SELECT telegram_id, username, name FROM users').fetchall()
+        subs = {row[0]: row[1] for row in conn.execute('SELECT user_id, paid_until FROM subscriptions').fetchall()}
+    now = datetime.datetime.utcnow()
+    lines = []
+    for user_id, username, name in users:
+        paid_until = subs.get(user_id)
+        active = False
+        if paid_until:
+            try:
+                dt = datetime.datetime.fromisoformat(str(paid_until))
+                active = dt > now
+            except Exception:
+                active = False
+        status = '✅ подписка активна' if active else '❌ нет подписки'
+        lines.append(f"{user_id} | {username or '-'} | {name or '-'} | {status}")
+    if not lines:
+        await update.message.reply_text("Нет пользователей.")
+    else:
+        msg = 'Пользователи и подписки:\n\n' + '\n'.join(lines)
+        for i in range(0, len(msg), 4000):
+            await update.message.reply_text(msg[i:i+4000])
 
 async def admin_only(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     user_id = update.effective_user.id if update.effective_user else None
