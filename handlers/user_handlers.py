@@ -443,12 +443,20 @@ async def shop_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
             )
         )
         return
-    # Баланса достаточно — подтверждаем и уведомляем админа
+    # Баланса достаточно — пробуем списать HC
+    try:
+        db.update_hc_balance(user.id, -price)
+        new_balance = max(0, balance - price)
+    except Exception as e:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Не удалось списать HC: {e}")
+        return
+    # Сообщение пользователю
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
         text=(
             f"Товар: {name}\nЦена: {price_str}\n\n"
-            f"У вас достаточно HC (баланс: {balance} HC). Подтверждение и оформление заказа скоро добавим."
+            f"Покупка принята! С вашего баланса списано {price} HC.\n"
+            f"Текущий баланс: {new_balance} HC."
         )
     )
     # Уведомление админа(ов)
@@ -458,7 +466,8 @@ async def shop_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
             f"Пользователь: {user.full_name} (@{user.username or '-'}, id={user.id})\n"
             f"Товар: {name}\n"
             f"Цена: {price_str}\n"
-            f"Баланс: {balance} HC\n"
+            f"Списано: {price} HC\n"
+            f"Новый баланс: {new_balance} HC\n"
         )
         await context.bot.send_message(chat_id=ADMIN_ID, text=admin_text)
     except Exception:
