@@ -22,6 +22,7 @@ from handlers.user_handlers import start, hc, IMAGES_DIR, \
     premium_add_pool_callback, premium_team_input, premium_position_selected, \
     challenge_command, challenge_level_callback, \
     challenge_open_callback, challenge_info_callback, challenge_build_callback
+from handlers.user_handlers import shop
 from handlers.admin_handlers import addhc, send_results, show_users
 from handlers.admin_handlers import list_challenges, delete_challenge_cmd
 from handlers.admin_handlers import (
@@ -44,6 +45,10 @@ from handlers.admin_handlers import (
     set_tour_roster_start, set_tour_roster_process, get_tour_roster,
     set_budget_start, set_budget_process,
     create_tour_conv, list_tours, activate_tour
+)
+from handlers.admin_handlers import (
+    add_image_shop_start, add_image_shop_text, add_image_shop_photo, add_image_shop_cancel,
+    SHOP_TEXT_WAIT, SHOP_IMAGE_WAIT
 )
 
 ADD_NAME, ADD_POSITION, ADD_CLUB, ADD_NATION, ADD_AGE, ADD_PRICE = range(6)
@@ -113,6 +118,7 @@ async def on_startup(app):
         BotCommand("subscribe", "Оформить подписку"),
         BotCommand("rules", "Правила сборки составов"),
         BotCommand("challenge", "Челлендж против редакции"),
+        BotCommand("shop", "Магазин призов"),
     ]
     # Для меню админа показываем только одну команду справки
     admin_commands = user_commands + [
@@ -206,6 +212,7 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('referral', referral))
     app.add_handler(CommandHandler('show_users', show_users))  # Только для админа
     app.add_handler(CommandHandler('subscribe', subscribe))
+    app.add_handler(CommandHandler('shop', shop))
     app.add_handler(CommandHandler('challenge', challenge_command))
     
     async def admin_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -217,7 +224,7 @@ if __name__ == '__main__':
             return
         text = (
             "<b>Админские команды</b>\n\n"
-            "<b>Управление пользователями:</b>\n"
+            "<b>Управление пользователями:</b>\n" 
             "• /show_users — список пользователей и подписок\n"
             "• /addhc — начислить HC пользователю \n\n"
             "<b>Управление турами:</b>\n"
@@ -236,7 +243,9 @@ if __name__ == '__main__':
             "<b>Управление челленджами:</b>\n"
             "• /list_challenges — список челленджей\n"
             "• /delete_challenge &lt;id&gt; — удалить челлендж по id\n"
-            "• /send_challenge_image — зарегистрировать челлендж (даты + картинка)\n"
+            "• /send_challenge_image — зарегистрировать челлендж (даты + картинка)\n\n"
+            "<b>Магазин:</b>\n"
+            "• /add_image_shop — задать текст и изображение магазина (диалог)\n"
         )
         try:
             await update.message.reply_text(text, parse_mode='HTML')
@@ -267,6 +276,17 @@ if __name__ == '__main__':
         allow_reentry=True
     )
     app.add_handler(send_challenge_image_conv)
+    # --- ConversationHandler для /add_image_shop (админ) ---
+    add_image_shop_conv = ConversationHandler(
+        entry_points=[CommandHandler('add_image_shop', add_image_shop_start)],
+        states={
+            SHOP_TEXT_WAIT: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_image_shop_text)],
+            SHOP_IMAGE_WAIT: [MessageHandler(filters.PHOTO, add_image_shop_photo)],
+        },
+        fallbacks=[CommandHandler('cancel', add_image_shop_cancel)],
+        allow_reentry=True
+    )
+    app.add_handler(add_image_shop_conv)
     app.add_handler(CommandHandler('addhc', addhc))
     app.add_handler(CommandHandler('send_results', send_results))
     app.add_handler(CommandHandler('list_challenges', list_challenges))
@@ -400,6 +420,7 @@ if __name__ == '__main__':
         BotCommand("hc", "Показать баланс HC"),
         BotCommand("subscribe", "Оформить подписку"),
         BotCommand("rules", "Правила сборки составов"),
+        BotCommand("shop", "Магазин призов"),
     ]
     admin_commands = user_commands + [
         BotCommand("show_users", "Список пользователей и подписок (админ)"),
@@ -416,6 +437,7 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('tour', tour_start))
     app.add_handler(CommandHandler('hc', hc))
     app.add_handler(CommandHandler('rules', rules))
+    app.add_handler(CommandHandler('shop', shop))
     app.run_polling()
 
 

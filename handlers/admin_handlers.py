@@ -11,198 +11,7 @@ ADD_NAME, ADD_POSITION, ADD_CLUB, ADD_NATION, ADD_AGE, ADD_PRICE = range(6)
 # --- Редактирование игрока ---
 EDIT_NAME, EDIT_POSITION, EDIT_CLUB, EDIT_NATION, EDIT_AGE, EDIT_PRICE = range(6, 12)
 
-async def add_player_start(update, context):
-    if not await admin_only(update, context):
-        return ConversationHandler.END
-    await update.message.reply_text("Введите имя и фамилию игрока:")
-    return ADD_NAME
-
-async def add_player_name(update, context):
-    context.user_data['name'] = update.message.text
-    await update.message.reply_text("Введите позицию (нападающий/защитник/вратарь):")
-    return ADD_POSITION
-
-async def add_player_position(update, context):
-    context.user_data['position'] = update.message.text
-    await update.message.reply_text("Введите клуб:")
-    return ADD_CLUB
-
-async def add_player_club(update, context):
-    context.user_data['club'] = update.message.text
-    await update.message.reply_text("Введите нацию:")
-    return ADD_NATION
-
-async def add_player_nation(update, context):
-    context.user_data['nation'] = update.message.text
-    await update.message.reply_text("Введите возраст:")
-    return ADD_AGE
-
-async def add_player_age(update, context):
-    context.user_data['age'] = update.message.text
-    await update.message.reply_text("Введите стоимость:")
-    return ADD_PRICE
-
-async def add_player_price(update, context):
-    context.user_data['price'] = update.message.text
-    db.add_player(
-        context.user_data['name'],
-        context.user_data['position'],
-        context.user_data['club'],
-        context.user_data['nation'],
-        int(context.user_data['age']),
-        int(context.user_data['price'])
-    )
-    await update.message.reply_text("Игрок добавлен!")
-    return ConversationHandler.END
-
-async def add_player_cancel(update, context):
-    await update.message.reply_text("Добавление отменено.")
-    return ConversationHandler.END
-
-# --- Список пользователей и их подписок ---
-async def show_users(update, context):
-    if not await admin_only(update, context):
-        return
-    import db
-    import datetime
-    users = []
-    # Получаем всех пользователей
-    with db.closing(db.sqlite3.connect(db.DB_NAME)) as conn:
-        users = conn.execute('SELECT telegram_id, username, name FROM users').fetchall()
-        # Получаем все подписки
-        subs = {row[0]: row[1] for row in conn.execute('SELECT user_id, paid_until FROM subscriptions').fetchall()}
-    now = datetime.datetime.utcnow()
-    lines = []
-    for user_id, username, name in users:
-        paid_until = subs.get(user_id)
-        if paid_until:
-            try:
-                dt = datetime.datetime.fromisoformat(paid_until)
-                active = dt > now
-            except Exception:
-                active = False
-        else:
-            active = False
-        status = '✅ подписка активна' if active else '❌ нет подписки'
-        lines.append(f"{user_id} | {username or '-'} | {name or '-'} | {status}")
-    if not lines:
-        await update.message.reply_text("Нет пользователей.")
-    else:
-        msg = 'Пользователи и подписки:\n\n' + '\n'.join(lines)
-        # Если слишком длинно — разбить на части
-        for i in range(0, len(msg), 4000):
-            await update.message.reply_text(msg[i:i+4000])
-
-# --- Список игроков ---
-async def list_players(update, context):
-    if not await admin_only(update, context):
-        return
-    players = db.get_all_players()
-    if not players:
-        await update.message.reply_text("Список игроков пуст.")
-        return
-    msg = "\n".join([f"{p[0]}. {p[1]} | {p[2]} | {p[3]} | {p[4]} | {p[5]} лет | {p[6]} HC" for p in players])
-    await update.message.reply_text(msg)
-
-async def find_player(update, context):
-    if not await admin_only(update, context):
-        return
-    if not context.args or not context.args[0].isdigit():
-        await update.message.reply_text("Использование: /find_player <id>")
-        return
-    player_id = int(context.args[0])
-    player = db.get_player_by_id(player_id)
-    if not player:
-        await update.message.reply_text("Игрок не найден.")
-        return
-    msg = f"{player[0]}. {player[1]} | {player[2]} | {player[3]} | {player[4]} | {player[5]} лет | {player[6]} HC"
-    await update.message.reply_text(msg)
-
-async def remove_player(update, context):
-    if not await admin_only(update, context):
-        return
-    if not context.args or not context.args[0].isdigit():
-        await update.message.reply_text("Использование: /remove_player <id>")
-        return
-    player_id = int(context.args[0])
-    player = db.get_player_by_id(player_id)
-    if not player:
-        await update.message.reply_text("Игрок не найден.")
-        return
-    
-    if db.remove_player(player_id):
-        await update.message.reply_text(f"Игрок {player[1]} (ID: {player_id}) удален.")
-    else:
-        await update.message.reply_text("Ошибка при удалении игрока.")
-
-# --- Редактирование игрока ---
-async def edit_player_start(update, context):
-    if not await admin_only(update, context):
-        return ConversationHandler.END
-    if not context.args or not context.args[0].isdigit():
-        await update.message.reply_text("Использование: /edit_player <id>")
-        return ConversationHandler.END
-    
-    player_id = int(context.args[0])
-    player = db.get_player_by_id(player_id)
-    if not player:
-        await update.message.reply_text("Игрок не найден.")
-        return ConversationHandler.END
-    
-    context.user_data['edit_player_id'] = player_id
-    context.user_data['current_player'] = player
-    
-    msg = f"Редактирование игрока:\n{player[0]}. {player[1]} | {player[2]} | {player[3]} | {player[4]} | {player[5]} лет | {player[6]} HC\n\nВведите новое имя и фамилию игрока:"
-    await update.message.reply_text(msg)
-    return EDIT_NAME
-
-async def edit_player_name(update, context):
-    context.user_data['edit_name'] = update.message.text
-    await update.message.reply_text("Введите новую позицию (нападающий/защитник/вратарь):")
-    return EDIT_POSITION
-
-async def edit_player_position(update, context):
-    context.user_data['edit_position'] = update.message.text
-    await update.message.reply_text("Введите новый клуб:")
-    return EDIT_CLUB
-
-async def edit_player_club(update, context):
-    context.user_data['edit_club'] = update.message.text
-    await update.message.reply_text("Введите новую нацию:")
-    return EDIT_NATION
-
-async def edit_player_nation(update, context):
-    context.user_data['edit_nation'] = update.message.text
-    await update.message.reply_text("Введите новый возраст:")
-    return EDIT_AGE
-
-async def edit_player_age(update, context):
-    context.user_data['edit_age'] = update.message.text
-    await update.message.reply_text("Введите новую стоимость:")
-    return EDIT_PRICE
-
-async def edit_player_price(update, context):
-    context.user_data['edit_price'] = update.message.text
-    
-    player_id = context.user_data['edit_player_id']
-    if db.update_player(
-        player_id,
-        context.user_data['edit_name'],
-        context.user_data['edit_position'],
-        context.user_data['edit_club'],
-        context.user_data['edit_nation'],
-        int(context.user_data['edit_age']),
-        int(context.user_data['edit_price'])
-    ):
-        await update.message.reply_text("Игрок успешно обновлен!")
-    else:
-        await update.message.reply_text("Ошибка при обновлении игрока.")
-    
-    return ConversationHandler.END
-
-async def edit_player_cancel(update, context):
-    await update.message.reply_text("Редактирование отменено.")
-    return ConversationHandler.END
+# (зарезервировано для будущих констант состояний 12-13)
 
 # --- Тур: добавить и вывести состав ---
 SET_BUDGET_WAIT = 21
@@ -460,6 +269,46 @@ async def send_challenge_image_photo(update: Update, context: ContextTypes.DEFAU
         # Очистим временные данные
         for k in ('challenge_start','challenge_deadline','challenge_end'):
             context.user_data.pop(k, None)
+    return ConversationHandler.END
+
+# --- Магазин: описание + картинка ---
+SHOP_TEXT_WAIT = 41
+SHOP_IMAGE_WAIT = 42
+
+async def add_image_shop_start(update, context):
+    if not await admin_only(update, context):
+        return ConversationHandler.END
+    await update.message.reply_text(
+        "Напишите текст описания магазина. Можете оформить аккуратно (обычный текст)."
+    )
+    return SHOP_TEXT_WAIT
+
+async def add_image_shop_text(update, context):
+    text = (update.message.text or '').strip()
+    try:
+        db.update_shop_text(text)
+    except Exception:
+        pass
+    await update.message.reply_text("Теперь отправьте картинку магазина одним фото сообщением.")
+    return SHOP_IMAGE_WAIT
+
+async def add_image_shop_photo(update, context):
+    if not update.message.photo:
+        await update.message.reply_text("Пожалуйста, отправьте одно фото.")
+        return SHOP_IMAGE_WAIT
+    try:
+        photo = update.message.photo[-1]
+        file = await photo.get_file()
+        filename = f"shop_{photo.file_unique_id}.jpg"
+        path = os.path.join(IMAGES_DIR, filename)
+        await file.download_to_drive(path)
+        # Сохраним file_id для быстрого повторного отправления
+        db.update_shop_image(filename, photo.file_id)
+        await update.message.reply_text("Готово. Магазин обновлён.")
+        logger.info(f"Магазин обновлён: text set, image {filename}")
+    except Exception as e:
+        logger.error(f"Ошибка при сохранении картинки магазина: {e}")
+        await update.message.reply_text(f"Ошибка при сохранении картинки: {e}")
     return ConversationHandler.END
 
 async def send_challenge_image_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):

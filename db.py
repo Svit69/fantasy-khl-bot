@@ -143,9 +143,18 @@ def init_db():
             ''')
             # Миграция: добавить колонку image_file_id при отсутствии
             try:
-                conn.execute('ALTER TABLE challenges ADD COLUMN image_file_id TEXT DEFAULT \"\"')
+                conn.execute('ALTER TABLE challenges ADD COLUMN image_file_id TEXT DEFAULT ""')
             except Exception:
                 pass
+            # Таблица описания магазина (единственная запись id=1)
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS shop_content (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    text TEXT DEFAULT '',
+                    image_filename TEXT DEFAULT '',
+                    image_file_id TEXT DEFAULT ''
+                )
+            ''')
 
 def register_user(telegram_id, username, name):
     with closing(sqlite3.connect(DB_NAME)) as conn:
@@ -328,6 +337,37 @@ def remove_player(player_id):
         with conn:
             cursor = conn.execute('DELETE FROM players WHERE id = ?', (player_id,))
             return cursor.rowcount > 0
+
+# --- Магазин ---
+def set_shop_content(text: str, image_filename: str = '', image_file_id: str = '') -> None:
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            conn.execute(
+                'INSERT INTO shop_content (id, text, image_filename, image_file_id) VALUES (1, ?, ?, ?)\n'
+                'ON CONFLICT(id) DO UPDATE SET text=excluded.text, image_filename=excluded.image_filename, image_file_id=excluded.image_file_id',
+                (text or '', image_filename or '', image_file_id or '')
+            )
+
+def update_shop_text(text: str) -> None:
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            conn.execute('INSERT INTO shop_content (id, text) VALUES (1, ?)\nON CONFLICT(id) DO UPDATE SET text=excluded.text', (text or '',))
+
+def update_shop_image(image_filename: str, image_file_id: str = '') -> None:
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            conn.execute(
+                'INSERT INTO shop_content (id, image_filename, image_file_id) VALUES (1, ?, ?)\n'
+                'ON CONFLICT(id) DO UPDATE SET image_filename=excluded.image_filename, image_file_id=excluded.image_file_id',
+                (image_filename or '', image_file_id or '')
+            )
+
+def get_shop_content():
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        row = conn.execute('SELECT text, image_filename, image_file_id FROM shop_content WHERE id = 1').fetchone()
+        if not row:
+            return ('', '', '')
+        return row
 
 def update_player(player_id, name, position, club, nation, age, price):
     with closing(sqlite3.connect(DB_NAME)) as conn:

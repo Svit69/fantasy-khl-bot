@@ -319,6 +319,40 @@ async def challenge_info_callback(update: Update, context: ContextTypes.DEFAULT_
     )
     await query.edit_message_text(txt)
 
+async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Показать содержимое магазина: текст + картинка (если есть)."""
+    try:
+        text, image_filename, image_file_id = db.get_shop_content()
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка получения данных магазина: {e}")
+        return
+    if not text and not image_filename and not image_file_id:
+        await update.message.reply_text("Магазин пока пуст. Загляните позже.")
+        return
+    caption = text if text else None
+    # Попытаемся отправить фото по file_id
+    if image_file_id:
+        try:
+            await context.bot.send_photo(chat_id=update.effective_chat.id, photo=image_file_id, caption=caption)
+            return
+        except Exception:
+            logger.warning("send_photo by file_id failed in /shop", exc_info=True)
+    # Попробуем отправить локальный файл
+    if image_filename:
+        fpath = os.path.join(IMAGES_DIR, image_filename)
+        if os.path.exists(fpath):
+            try:
+                with open(fpath, 'rb') as fp:
+                    await context.bot.send_photo(chat_id=update.effective_chat.id, photo=InputFile(fp, filename=image_filename), caption=caption)
+                    return
+            except Exception:
+                logger.error("send_photo from local file failed in /shop", exc_info=True)
+    # Если фото не получилось — отправим просто текст
+    if caption:
+        await update.message.reply_text(caption)
+    else:
+        await update.message.reply_text("Магазин недоступен.")
+
 
 async def challenge_build_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
