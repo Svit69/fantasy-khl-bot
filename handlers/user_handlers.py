@@ -391,8 +391,60 @@ async def shop_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         idx = int(data.replace('shop_item_', ''))
     except Exception:
         idx = None
-    # На данном этапе просто подтвердим выбор товара.
-    await context.bot.send_message(chat_id=update.effective_chat.id, text="Спасибо! Вы выбрали товар. Оформление заказа скоро добавим.")
+    # Получим список товаров заново из БД
+    try:
+        text, _, _ = db.get_shop_content()
+    except Exception as e:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Ошибка чтения магазина: {e}")
+        return
+    items = _parse_shop_items(text or '')
+    if not idx or idx < 1 or idx > len(items):
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="Некорректный выбор товара.")
+        return
+    name, price_str = items[idx - 1]
+    # Извлечём число из строки цены (например, '35 000 HC' -> 35000)
+    digits = ''.join(ch for ch in price_str if ch.isdigit())
+    try:
+        price = int(digits) if digits else 0
+    except Exception:
+        price = 0
+    # Баланс пользователя
+    user = update.effective_user
+    balance = 0
+    try:
+        row = db.get_user_by_id(user.id)
+        if row and len(row) > 3 and isinstance(row[3], (int, float)):
+            balance = int(row[3])
+        elif row and len(row) > 3:
+            # На случай, если хранится строкой
+            try:
+                balance = int(str(row[3]))
+            except Exception:
+                balance = 0
+    except Exception:
+        balance = 0
+    if price <= 0:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Товар: {name}\nЦена: {price_str}\n\nНе удалось распознать цену. Свяжитесь с администратором.")
+        return
+    if balance < price:
+        need = price - balance
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=(
+                f"Товар: {name}\nЦена: {price_str}\n\n"
+                f"Недостаточно средств: не хватает {need} HC.\n"
+                f"Вы можете подключить подписку /subscribe за 299 руб/месяц, чтобы быстрее накапливать HC."
+            )
+        )
+        return
+    # Баланса достаточно — подтверждаем и оставляем логистику покупки на следующий шаг
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=(
+            f"Товар: {name}\nЦена: {price_str}\n\n"
+            f"У вас достаточно HC (баланс: {balance} HC). Подтверждение и оформление заказа скоро добавим."
+        )
+    )
 
 
 async def challenge_build_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
