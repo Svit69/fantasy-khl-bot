@@ -14,6 +14,53 @@ EDIT_NAME, EDIT_POSITION, EDIT_CLUB, EDIT_NATION, EDIT_AGE, EDIT_PRICE = range(6
 
 # (зарезервировано для будущих констант состояний 12-13)
 
+# --- Магазин: состояния диалога ---
+SHOP_TEXT_WAIT = 30
+SHOP_IMAGE_WAIT = 31
+
+async def add_image_shop_start(update, context):
+    if not await admin_only(update, context):
+        return ConversationHandler.END
+    await update.message.reply_text("Отправьте текст описания магазина:")
+    return SHOP_TEXT_WAIT
+
+async def add_image_shop_text(update, context):
+    text = (update.message.text or '').strip()
+    try:
+        db.update_shop_text(text)
+        context.user_data['shop_text'] = text
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка сохранения текста: {e}")
+        return ConversationHandler.END
+    await update.message.reply_text("Теперь отправьте одно фото магазина в следующем сообщении.")
+    return SHOP_IMAGE_WAIT
+
+async def add_image_shop_photo(update, context):
+    if not update.message or not update.message.photo:
+        await update.message.reply_text("Пожалуйста, отправьте именно фото.")
+        return SHOP_IMAGE_WAIT
+    try:
+        photo = update.message.photo[-1]
+        file_id = photo.file_id
+        tg_file = await photo.get_file()
+        os.makedirs(IMAGES_DIR, exist_ok=True)
+        filename = 'shop.jpg'
+        file_path = os.path.join(IMAGES_DIR, filename)
+        # попытка универсальной загрузки для PTB v20
+        try:
+            await tg_file.download_to_drive(file_path)
+        except Exception:
+            await tg_file.download(custom_path=file_path)
+        db.update_shop_image(filename, file_id)
+        await update.message.reply_text("Готово. Магазин обновлён.")
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка сохранения фото: {e}")
+    return ConversationHandler.END
+
+async def add_image_shop_cancel(update, context):
+    await update.message.reply_text("Обновление магазина отменено.")
+    return ConversationHandler.END
+
 # --- Добавление игрока ---
 async def add_player_start(update, context):
     if not await admin_only(update, context):
