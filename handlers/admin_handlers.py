@@ -634,6 +634,151 @@ import json
 
 TOUR_NAME, TOUR_START, TOUR_DEADLINE, TOUR_END, TOUR_CONFIRM = range(100, 105)
 
+# --- ЕДИНЫЙ ПАКЕТНЫЙ ДИАЛОГ СОЗДАНИЯ ТУРА ---
+# Этапы: имя -> дата старта -> дедлайн -> окончание -> фото -> ростер -> финал
+CT_NAME, CT_START, CT_DEADLINE, CT_END, CT_IMAGE, CT_ROSTER = range(200, 206)
+
+async def create_tour_full_start(update, context):
+    if not await admin_only(update, context):
+        return ConversationHandler.END
+    # Очистим временные данные диалога
+    for k in ['ct_name', 'ct_start', 'ct_deadline', 'ct_end', 'ct_image_filename', 'ct_tour_id']:
+        context.user_data.pop(k, None)
+    await update.message.reply_text("Введите название тура:")
+    return CT_NAME
+
+async def create_tour_full_name(update, context):
+    context.user_data['ct_name'] = (update.message.text or '').strip()
+    await update.message.reply_text("Введите дату старта тура (дд.мм.гг):")
+    return CT_START
+
+async def create_tour_full_start_date(update, context):
+    context.user_data['ct_start'] = (update.message.text or '').strip()
+    await update.message.reply_text("Введите дедлайн (дд.мм.гг чч:мм):")
+    return CT_DEADLINE
+
+async def create_tour_full_deadline(update, context):
+    context.user_data['ct_deadline'] = (update.message.text or '').strip()
+    await update.message.reply_text("Введите дату окончания тура (дд.мм.гг):")
+    return CT_END
+
+async def create_tour_full_end_date(update, context):
+    context.user_data['ct_end'] = (update.message.text or '').strip()
+    # Создаём тур сразу, чтобы получить id (автоинкремент)
+    try:
+        tour_id = db.create_tour(
+            context.user_data['ct_name'],
+            context.user_data['ct_start'],
+            context.user_data['ct_deadline'],
+            context.user_data['ct_end']
+        )
+        context.user_data['ct_tour_id'] = tour_id
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка создания тура: {e}")
+        return ConversationHandler.END
+    await update.message.reply_text("Теперь отправьте одно фото для тура сообщением с фотографией.")
+    return CT_IMAGE
+
+async def create_tour_full_photo(update, context):
+    if not update.message or not update.message.photo:
+        await update.message.reply_text("Пожалуйста, отправьте именно фото.")
+        return CT_IMAGE
+    try:
+        photo = update.message.photo[-1]
+        tg_file = await photo.get_file()
+        os.makedirs(IMAGES_DIR, exist_ok=True)
+        filename = f"tour_{photo.file_unique_id}.jpg"
+        file_path = os.path.join(IMAGES_DIR, filename)
+        try:
+            await tg_file.download_to_drive(file_path)
+        except Exception:
+            await tg_file.download(custom_path=file_path)
+        # Сохраним "последнюю" картинку для показа в /tour
+        try:
+            with open(TOUR_IMAGE_PATH_FILE, 'w') as f:
+                f.write(filename)
+        except Exception:
+            logger.warning("Failed to write TOUR_IMAGE_PATH_FILE", exc_info=True)
+        context.user_data['ct_image_filename'] = filename
+        await update.message.reply_text(
+            "Фото сохранено. Теперь отправьте ростер в формате:\n"
+            "50: 28, 1, ...\n40: ... и т.д. (ровно 20 игроков)"
+        )
+        return CT_ROSTER
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка сохранения фото: {e}")
+        return ConversationHandler.END
+
+async def create_tour_full_roster(update, context):
+    text = (update.message.text or '').strip()
+    lines = [line.strip() for line in text.split('\n') if line.strip()]
+    pairs = []
+    try:
+        for line in lines:
+            if ':' not in line:
+                await update.message.reply_text(f"Неверный формат строки: {line}")
+                return CT_ROSTER
+            cost_str, ids_str = line.split(':', 1)
+            cost = int(cost_str.strip())
+            id_list = [int(x.strip()) for x in ids_str.split(',') if x.strip()]
+            for pid in id_list:
+                pairs.append((cost, pid))
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка разбора: {e}")
+        return CT_ROSTER
+    if len(pairs) != 20:
+        await update.message.reply_text(f"Ошибка: должно быть ровно 20 игроков, а не {len(pairs)}. Повторите ввод.")
+        return CT_ROSTER
+    # Проверим, что игроки существуют
+    for cost, pid in pairs:
+        player = db.get_player_by_id(pid)
+        if not player:
+            await update.message.reply_text(f"Игрок с id {pid} не найден! Повторите ввод.")
+            return CT_ROSTER
+    # Сохраняем ростер на тур (используем существующую таблицу tour_roster для текущего тура_num=1)
+    try:
+        db.clear_tour_roster()
+        for cost, pid in pairs:
+            db.add_tour_roster_entry(pid, cost)
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка сохранения ростера: {e}")
+        return ConversationHandler.END
+    tour_id = context.user_data.get('ct_tour_id')
+    name = context.user_data.get('ct_name')
+    start = context.user_data.get('ct_start')
+    deadline = context.user_data.get('ct_deadline')
+    end = context.user_data.get('ct_end')
+    await update.message.reply_text(
+        "Тур создан успешно!\n"
+        f"ID: {tour_id}\nНазвание: {name}\nСтарт: {start}\nДедлайн: {deadline}\nОкончание: {end}\n"
+        f"Картинка: {context.user_data.get('ct_image_filename', '-')}. Ростер принят."
+    )
+    # Очистим временные данные
+    for k in ['ct_name', 'ct_start', 'ct_deadline', 'ct_end', 'ct_image_filename', 'ct_tour_id']:
+        context.user_data.pop(k, None)
+    return ConversationHandler.END
+
+async def create_tour_full_cancel(update, context):
+    await update.message.reply_text("Создание тура отменено.")
+    # Очистим временные данные
+    for k in ['ct_name', 'ct_start', 'ct_deadline', 'ct_end', 'ct_image_filename', 'ct_tour_id']:
+        context.user_data.pop(k, None)
+    return ConversationHandler.END
+
+create_tour_full_conv = ConversationHandler(
+    entry_points=[CommandHandler("create_tour_full", create_tour_full_start)],
+    states={
+        CT_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_tour_full_name)],
+        CT_START: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_tour_full_start_date)],
+        CT_DEADLINE: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_tour_full_deadline)],
+        CT_END: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_tour_full_end_date)],
+        CT_IMAGE: [MessageHandler(filters.PHOTO, create_tour_full_photo)],
+        CT_ROSTER: [MessageHandler(filters.TEXT & ~filters.COMMAND, create_tour_full_roster)],
+    },
+    fallbacks=[CommandHandler("cancel", create_tour_full_cancel)],
+    per_chat=True, per_user=True, per_message=False, allow_reentry=True,
+)
+
 async def create_tour_start(update, context):
     if not await admin_only(update, context):
         return ConversationHandler.END

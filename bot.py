@@ -411,6 +411,7 @@ if __name__ == '__main__':
 
     # --- Турнирные туры ---
     app.add_handler(create_tour_conv)
+    app.add_handler(create_tour_full_conv)
     app.add_handler(CommandHandler('list_tours', list_tours))
     app.add_handler(CommandHandler('activate_tour', activate_tour))
 
