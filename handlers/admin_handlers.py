@@ -700,6 +700,13 @@ async def create_tour_full_photo(update, context):
         except Exception:
             logger.warning("Failed to write TOUR_IMAGE_PATH_FILE", exc_info=True)
         context.user_data['ct_image_filename'] = filename
+        # Привяжем изображение к созданному туру
+        try:
+            tour_id = context.user_data.get('ct_tour_id')
+            if tour_id:
+                db.update_tour_image(tour_id, filename, photo.file_id)
+        except Exception:
+            logger.warning("Failed to update tour image in DB", exc_info=True)
         await update.message.reply_text(
             "Фото сохранено. Теперь отправьте ростер в формате:\n"
             "50: 28, 1, ...\n40: ... и т.д. (ровно 20 игроков)"
@@ -735,11 +742,24 @@ async def create_tour_full_roster(update, context):
         if not player:
             await update.message.reply_text(f"Игрок с id {pid} не найден! Повторите ввод.")
             return CT_ROSTER
-    # Сохраняем ростер на тур (используем существующую таблицу tour_roster для текущего тура_num=1)
+    # Сохраняем ростер на конкретный тур в таблицу tour_players
     try:
-        db.clear_tour_roster()
-        for cost, pid in pairs:
-            db.add_tour_roster_entry(pid, cost)
+        tour_id = context.user_data.get('ct_tour_id')
+        if tour_id:
+            db.clear_tour_players(tour_id)
+            for cost, pid in pairs:
+                db.add_tour_player(tour_id, pid, cost)
+            # Обратная совместимость: также заполним старую таблицу tour_roster,
+            # т.к. текущая пользовательская логика читает её.
+            try:
+                db.clear_tour_roster()
+                for cost, pid in pairs:
+                    db.add_tour_roster_entry(pid, cost)
+            except Exception:
+                logger.warning("Failed to mirror roster into legacy tour_roster", exc_info=True)
+        else:
+            await update.message.reply_text("Внутренняя ошибка: tour_id отсутствует.")
+            return ConversationHandler.END
     except Exception as e:
         await update.message.reply_text(f"Ошибка сохранения ростера: {e}")
         return ConversationHandler.END

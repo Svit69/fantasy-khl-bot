@@ -90,6 +90,15 @@ def init_db():
                     winners TEXT DEFAULT ''
                 )
             ''')
+            # Миграции для таблицы туров: добавить поля для изображения тура
+            try:
+                conn.execute('ALTER TABLE tours ADD COLUMN image_filename TEXT DEFAULT ""')
+            except Exception:
+                pass
+            try:
+                conn.execute('ALTER TABLE tours ADD COLUMN image_file_id TEXT DEFAULT ""')
+            except Exception:
+                pass
             # Таблица финальных составов пользователей на тур
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS user_tour_roster (
@@ -127,6 +136,17 @@ def init_db():
                     notify_date TEXT NOT NULL,
                     kind TEXT NOT NULL,
                     UNIQUE(user_id, notify_date, kind)
+                )
+            ''')
+            # Таблица состава игроков, привязанного к конкретному туру
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS tour_players (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tour_id INTEGER NOT NULL,
+                    cost INTEGER NOT NULL,
+                    player_id INTEGER NOT NULL,
+                    FOREIGN KEY(player_id) REFERENCES players(id),
+                    FOREIGN KEY(tour_id) REFERENCES tours(id)
                 )
             ''')
             # Таблица челленджей
@@ -396,6 +416,44 @@ def update_tour_status(tour_id, status):
     with closing(sqlite3.connect(DB_NAME)) as conn:
         with conn:
             conn.execute('UPDATE tours SET status = ? WHERE id = ?', (status, tour_id))
+
+def update_tour_image(tour_id: int, image_filename: str, image_file_id: str = "") -> None:
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            conn.execute(
+                'UPDATE tours SET image_filename = ?, image_file_id = ? WHERE id = ?',
+                (image_filename or '', image_file_id or '', tour_id)
+            )
+
+def get_tour_by_id(tour_id: int):
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        return conn.execute(
+            'SELECT id, name, start_date, deadline, end_date, status, winners, image_filename, image_file_id FROM tours WHERE id = ?',
+            (tour_id,)
+        ).fetchone()
+
+def clear_tour_players(tour_id: int) -> None:
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            conn.execute('DELETE FROM tour_players WHERE tour_id = ?', (tour_id,))
+
+def add_tour_player(tour_id: int, player_id: int, cost: int) -> None:
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            conn.execute(
+                'INSERT INTO tour_players (tour_id, cost, player_id) VALUES (?, ?, ?)',
+                (tour_id, cost, player_id)
+            )
+
+def get_tour_players_with_info(tour_id: int):
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        return conn.execute('''
+            SELECT tp.cost, p.id, p.name, p.position, p.club, p.nation, p.age, p.price
+            FROM tour_players tp
+            JOIN players p ON tp.player_id = p.id
+            WHERE tp.tour_id = ?
+            ORDER BY tp.cost DESC, tp.id ASC
+        ''', (tour_id,)).fetchall()
 
 # --- Реферальная система ---
 def init_referrals_table():
