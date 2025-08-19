@@ -267,6 +267,28 @@ def create_challenge(start_date: str, deadline: str, end_date: str, image_filena
             return datetime.datetime.fromisoformat(s)
         except Exception:
             return None
+
+# --- Менеджеры, зарегистрировавшие состав на тур ---
+def get_tour_managers(tour_id: int):
+    """Возвращает список менеджеров, у которых сохранён финальный состав на указанный тур.
+    Элементы списка — словари: { user_id, username, name, spent, timestamp }.
+    """
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            '''
+            SELECT utr.user_id AS user_id,
+                   u.username AS username,
+                   u.name     AS name,
+                   utr.spent  AS spent,
+                   utr.timestamp AS timestamp
+            FROM user_tour_roster AS utr
+            LEFT JOIN users AS u ON u.telegram_id = utr.user_id
+            WHERE utr.tour_id = ?
+            ORDER BY utr.timestamp DESC
+            ''', (tour_id,)
+        ).fetchall()
+        return [dict(r) for r in rows]
     sd = _parse(start_date)
     dl = _parse(deadline)
     ed = _parse(end_date)

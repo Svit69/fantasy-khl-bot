@@ -238,7 +238,8 @@ if __name__ == '__main__':
             "• /create_tour_full — создать тур (пакетный диалог: название, даты, картинка, ростер)\n"
             "• /list_tours\n"
             "• /activate_tour\n"
-            "• /purge_tours — удалить все туры (по паролю)\n\n"
+            "• /purge_tours — удалить все туры (по паролю)\n"
+            "• /tour_managers [tour_id] — список менеджеров с зарегистрированными составами на тур\n\n"
             "<b>Управление хоккеистами:</b>\n"
             "• /list_players — список игроков\n"
             "• /find_player — поиск игрока\n"
@@ -258,6 +259,54 @@ if __name__ == '__main__':
             await context.bot.send_message(chat_id=update.effective_chat.id, text=text, parse_mode='HTML')
 
     app.add_handler(CommandHandler('admin_help', admin_help))
+
+    # --- /tour_managers [tour_id] ---
+    async def tour_managers_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        uid = update.effective_user.id if update.effective_user else None
+        if uid != ADMIN_ID:
+            return
+        # Определяем tour_id
+        tour_id = None
+        try:
+            if context.args and len(context.args) >= 1:
+                tour_id = int(context.args[0])
+        except Exception:
+            tour_id = None
+        if not tour_id:
+            try:
+                from db import get_active_tour
+                at = get_active_tour()
+                tour_id = at['id'] if at else None
+            except Exception:
+                tour_id = None
+        if not tour_id:
+            await update.message.reply_text("Тур не найден. Укажи id: /tour_managers <id>")
+            return
+        # Забираем менеджеров
+        try:
+            from db import get_tour_managers
+            rows = get_tour_managers(tour_id)
+        except Exception as e:
+            await update.message.reply_text(f"Ошибка БД: {e}")
+            return
+        if not rows:
+            await update.message.reply_text(f"Для тура #{tour_id} составы не найдены.")
+            return
+        # Форматируем вывод
+        lines = [f"Менеджеры с составами для тура #{tour_id}:", ""]
+        for r in rows:
+            uname = ("@" + r['username']) if r.get('username') else "—"
+            name = r.get('name') or "—"
+            spent = r.get('spent')
+            ts = r.get('timestamp')
+            lines.append(f"• {uname} | {name} — потрачено: {spent}, время: {ts}")
+        text = "\n".join(lines)
+        try:
+            await update.message.reply_text(text)
+        except Exception:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
+
+    app.add_handler(CommandHandler('tour_managers', tour_managers_cmd))
     
     send_tour_image_conv = ConversationHandler(
         entry_points=[CommandHandler('send_tour_image', send_tour_image_start)],
