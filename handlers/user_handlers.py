@@ -146,8 +146,22 @@ async def tours(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     except Exception as e:
         await update.message.reply_text(f"Ошибка получения списка туров: {e}")
         return
+    # Отфильтруем будущие туры (start_date > now)
+    import datetime
+    now = datetime.datetime.now()
+    filtered = []
+    for r in rows:
+        # r: (id, name, start, deadline, end, status, winners)
+        try:
+            start_dt = datetime.datetime.strptime(str(r[2]), "%d.%m.%y")
+            if start_dt <= now:
+                filtered.append(r)
+        except Exception:
+            # если не удалось распарсить дату — перестрахуемся и не показываем такой тур
+            continue
+    rows = filtered
     if not rows:
-        await update.message.reply_text("Туры пока не созданы.")
+        await update.message.reply_text("Нет активных туров. Загляните позже!")
         return
     # Формируем список и кнопки
     lines = ["*Доступные туры:*"]
@@ -178,6 +192,15 @@ async def tour_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if not row:
         await query.edit_message_text("Тур не найден.")
         return
+    # Блокируем просмотр будущих туров
+    try:
+        import datetime
+        start_dt = datetime.datetime.strptime(str(row[2]), "%d.%m.%y")
+        if datetime.datetime.now() < start_dt:
+            await query.edit_message_text("Тур ещё не начался. Загляните позже!")
+            return
+    except Exception:
+        pass
     # row: (id, name, start, deadline, end, status, winners, image_filename, image_file_id)
     text = (
         f"Тур #{row[0]} — {row[1]}\n"
