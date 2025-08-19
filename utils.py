@@ -53,12 +53,29 @@ async def poll_yookassa_payments(bot, interval=60):
                 payment = Payment.find_one(payment_id)
                 print(f"[DEBUG] payment_id={payment_id}, status={payment.status}")
                 if payment.status == "succeeded":
-                    # Продлить подписку
-                    paid_until = datetime.datetime.utcnow() + datetime.timedelta(days=31)
-                    db.add_or_update_subscription(user_id, paid_until.isoformat(), payment_id)
+                    # Продлить подписку: отталкиваемся от максимума между текущей датой и текущим paid_until
+                    try:
+                        current = None
+                        sub = db.get_subscription(user_id)  # (user_id, paid_until, last_payment_id)
+                        if sub and sub[1]:
+                            try:
+                                current = datetime.datetime.fromisoformat(sub[1])
+                            except Exception:
+                                current = None
+                        base = datetime.datetime.utcnow()
+                        if current and current > base:
+                            base = current
+                        new_paid_until = base + datetime.timedelta(days=31)
+                    except Exception:
+                        new_paid_until = datetime.datetime.utcnow() + datetime.timedelta(days=31)
+
+                    db.add_or_update_subscription(user_id, new_paid_until.isoformat(), payment_id)
                     db.update_payment_status(payment_id, "succeeded")
                     try:
-                        await bot.send_message(chat_id=user_id, text=f"✅ Ваша подписка успешно продлена до {paid_until.strftime('%d.%m.%Y')}!")
+                        await bot.send_message(
+                            chat_id=user_id,
+                            text=f"✅ Оплата прошла. Подписка активна до {new_paid_until.strftime('%d.%m.%Y %H:%M')} (MSK)."
+                        )
                     except Exception as e:
                         print(f"Не удалось уведомить пользователя {user_id}: {e}")
         except Exception as e:
