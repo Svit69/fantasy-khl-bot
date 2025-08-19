@@ -266,20 +266,21 @@ async def tour_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
         return ConversationHandler.END if 'ConversationHandler' in globals() else None
     else:
-        # Состава нет — показать инфо и запустить логику сборки
+        # Состава нет — показать инфо и предложить начать сборку через entry-point кнопкой
+        from telegram import InlineKeyboardMarkup, InlineKeyboardButton
         text = (
             f"Тур #{row[0]} — {row[1]}\n"
             f"Статус: {row[5]}\n"
             f"Старт: {row[2]}\nДедлайн: {row[3]}\nОкончание: {row[4]}\n\n"
-            f"Начинаем сборку состава..."
+            f"Нажмите кнопку ниже, чтобы начать сборку состава."
         )
+        keyboard = [[InlineKeyboardButton("Собрать состав", callback_data=f"tour_build_{row[0]}")]]
         try:
-            await query.edit_message_text(text)
+            await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
         except Exception:
-            await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
-        # Сохраним выбранный тур и делегируем в сценарий
-        context.user_data['selected_tour_id'] = row[0]
-        return await tour_start(update, context)
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=text, reply_markup=InlineKeyboardMarkup(keyboard))
+        # Не активируем CH напрямую — вход через кнопку 'tour_build_<id>'
+        return
 
 
 async def tour_build_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1328,7 +1329,8 @@ async def tour_goalie_callback(update: Update, context: ContextTypes.DEFAULT_TYP
                 if context.user_data['tour_selected']['goalie']:
                     picked = [context.user_data['tour_selected']['goalie']]
                 await query.edit_message_text(f"Добавлен в ваш пул: {player[2]} ({player[4]}). Теперь выберите вратаря.")
-                return await send_player_choice(update, context, 'вратарь', picked, TOUR_CAPTAIN, left)
+                # Важно: остаёмся в состоянии выбора вратаря, иначе pick_..._вратарь не будет сопоставляться
+                return await send_player_choice(update, context, 'вратарь', picked, TOUR_GOALIE, left)
             except Exception as e:
                 await query.edit_message_text(f"Ошибка добавления в пул: {e}")
                 return TOUR_GOALIE
