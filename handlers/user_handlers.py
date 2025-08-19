@@ -233,33 +233,67 @@ async def tour_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         user_roster = None
 
     if user_roster and isinstance(user_roster, dict) and user_roster.get('roster'):
-        # Показать состав пользователя
+        # Показать состав пользователя в запрошенном формате
         roster = user_roster['roster']
-        lines = [
-            f"Тур #{row[0]} — {row[1]}",
-            f"Статус: {row[5]}",
-            f"Старт: {row[2]}",
-            f"Дедлайн: {row[3]}",
-            f"Окончание: {row[4]}",
-            "",
-            "Ваш состав:",
-        ]
-        # roster ожидается как dict с ключами позиций и списками id игроков
+        captain_id = user_roster.get('captain_id')
+        spent = user_roster.get('spent', 0)
         try:
-            for pos, ids in roster.items():
-                if isinstance(ids, list):
-                    for pid in ids:
-                        p = db.get_player_by_id(int(pid))
-                        if p:
-                            lines.append(f"• {pos}: {p[1]} ({p[2]}, {p[3]})")
-                else:
-                    # одиночный id
-                    p = db.get_player_by_id(int(ids))
-                    if p:
-                        lines.append(f"• {pos}: {p[1]} ({p[2]}, {p[3]})")
+            budget = db.get_budget() or 0
+        except Exception:
+            budget = 0
+
+        def name_club(pid):
+            try:
+                p = db.get_player_by_id(int(pid))
+                if p:
+                    # p: (id, name, position, club, nation, age, price)
+                    return f"{p[1]} ({p[3]})"
+            except Exception:
+                pass
+            return str(pid)
+
+        # Вратарь
+        goalie_line = ""
+        try:
+            gid = roster.get('goalie')
+            if gid:
+                goalie_line = name_club(gid)
         except Exception:
             pass
-        text = "\n".join(lines)
+
+        # Защитники
+        defenders_line = ""
+        try:
+            dids = roster.get('defenders', []) or []
+            defenders_line = " - ".join([name_club(x) for x in dids if x])
+        except Exception:
+            pass
+
+        # Нападающие
+        forwards_line = ""
+        try:
+            fids = roster.get('forwards', []) or []
+            forwards_line = " - ".join([name_club(x) for x in fids if x])
+        except Exception:
+            pass
+
+        # Капитан
+        captain_line = ""
+        try:
+            if captain_id:
+                captain_line = name_club(captain_id)
+        except Exception:
+            pass
+
+        lines = [
+            goalie_line,
+            defenders_line,
+            forwards_line,
+            "",
+            f"Капитан: {captain_line}" if captain_line else "Капитан: —",
+            f"Потрачено: {spent}/{budget}",
+        ]
+        text = "\n".join([l for l in lines if l is not None])
         try:
             await query.edit_message_text(text)
         except Exception:
