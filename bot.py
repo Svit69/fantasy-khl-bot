@@ -44,7 +44,7 @@ from handlers.admin_handlers import (
     edit_player_nation, edit_player_age, edit_player_price, edit_player_cancel,
     set_tour_roster_start, set_tour_roster_process, get_tour_roster,
     set_budget_start, set_budget_process,
-    create_tour_conv, list_tours, activate_tour
+    create_tour_conv, create_tour_full_conv, list_tours, activate_tour
 )
 from handlers.admin_handlers import (
     add_image_shop_start, add_image_shop_text, add_image_shop_photo, add_image_shop_cancel,
