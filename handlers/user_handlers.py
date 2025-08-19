@@ -202,12 +202,7 @@ async def tour_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     except Exception:
         pass
     # row: (id, name, start, deadline, end, status, winners, image_filename, image_file_id)
-    text = (
-        f"Тур #{row[0]} — {row[1]}\n"
-        f"Статус: {row[5]}\n"
-        f"Старт: {row[2]}\nДедлайн: {row[3]}\nОкончание: {row[4]}"
-    )
-    # Попробуем отправить фото (отдельным сообщением)
+    # 1) Всегда пытаемся отправить картинку тура
     image_sent = False
     image_file_id = row[8] if len(row) >= 9 else ''
     if image_file_id:
@@ -227,15 +222,64 @@ async def tour_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
                         image_sent = True
         except Exception:
             logger.error("send_photo from local file failed in tour_open_callback", exc_info=True)
-    # Кнопки действий
-    buttons = [[InlineKeyboardButton("Инфо", callback_data=f"tour_open_{row[0]}")]]
-    if str(row[5]).strip() == 'активен':
-        buttons.append([InlineKeyboardButton("Собрать состав", callback_data=f"tour_build_{row[0]}")])
+
+    # 2) Проверяем, собран ли уже состав пользователя для этого тура
+    user_id = update.effective_user.id if update.effective_user else None
+    user_roster = None
     try:
-        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+        if user_id:
+            user_roster = db.get_user_tour_roster(user_id, row[0])
     except Exception:
-        # Если нельзя редактировать (старое сообщение), отправим новое
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=text, reply_markup=InlineKeyboardMarkup(buttons))
+        user_roster = None
+
+    if user_roster and isinstance(user_roster, dict) and user_roster.get('roster'):
+        # Показать состав пользователя
+        roster = user_roster['roster']
+        lines = [
+            f"Тур #{row[0]} — {row[1]}",
+            f"Статус: {row[5]}",
+            f"Старт: {row[2]}",
+            f"Дедлайн: {row[3]}",
+            f"Окончание: {row[4]}",
+            "",
+            "Ваш состав:",
+        ]
+        # roster ожидается как dict с ключами позиций и списками id игроков
+        try:
+            for pos, ids in roster.items():
+                if isinstance(ids, list):
+                    for pid in ids:
+                        p = db.get_player_by_id(int(pid))
+                        if p:
+                            lines.append(f"• {pos}: {p[1]} ({p[2]}, {p[3]})")
+                else:
+                    # одиночный id
+                    p = db.get_player_by_id(int(ids))
+                    if p:
+                        lines.append(f"• {pos}: {p[1]} ({p[2]}, {p[3]})")
+        except Exception:
+            pass
+        text = "\n".join(lines)
+        try:
+            await query.edit_message_text(text)
+        except Exception:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
+        return ConversationHandler.END if 'ConversationHandler' in globals() else None
+    else:
+        # Состава нет — показать инфо и запустить логику сборки
+        text = (
+            f"Тур #{row[0]} — {row[1]}\n"
+            f"Статус: {row[5]}\n"
+            f"Старт: {row[2]}\nДедлайн: {row[3]}\nОкончание: {row[4]}\n\n"
+            f"Начинаем сборку состава..."
+        )
+        try:
+            await query.edit_message_text(text)
+        except Exception:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
+        # Сохраним выбранный тур и делегируем в сценарий
+        context.user_data['selected_tour_id'] = row[0]
+        return await tour_start(update, context)
 
 
 async def tour_build_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
