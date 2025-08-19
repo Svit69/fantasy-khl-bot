@@ -21,7 +21,8 @@ from handlers.user_handlers import start, hc, IMAGES_DIR, \
     restart_tour_callback, tour_captain_callback, rules, referral, subscribe, \
     premium_add_pool_callback, premium_team_input, premium_position_selected, \
     challenge_command, challenge_level_callback, \
-    challenge_open_callback, challenge_info_callback, challenge_build_callback
+    challenge_open_callback, challenge_info_callback, challenge_build_callback, \
+    tours, tour_open_callback, tour_build_callback
 from handlers.user_handlers import shop, shop_item_callback
 from handlers.admin_handlers import addhc, send_results, show_users
 from handlers.admin_handlers import list_challenges, delete_challenge_cmd
@@ -289,16 +290,20 @@ if __name__ == '__main__':
         allow_reentry=True
     )
     app.add_handler(add_image_shop_conv)
+    # Список туров и колбэки
+    app.add_handler(CommandHandler('tours', tours))
+    app.add_handler(CommandHandler('tour', tours))  # для совместимости и удобства
+    app.add_handler(CallbackQueryHandler(tour_open_callback, pattern=r"^tour_open_\d+$"))
     app.add_handler(CommandHandler('addhc', addhc))
     app.add_handler(CommandHandler('send_results', send_results))
     app.add_handler(CommandHandler('list_challenges', list_challenges))
     app.add_handler(CommandHandler('delete_challenge', delete_challenge_cmd))
     app.add_handler(CommandHandler('get_tour_roster', get_tour_roster))
 
-    # --- ConversationHandler для /tour ---
+    # --- ConversationHandler для выбора состава (запускается из кнопки "Собрать состав") ---
     TOUR_START, TOUR_FORWARD_1, TOUR_FORWARD_2, TOUR_FORWARD_3, TOUR_DEFENDER_1, TOUR_DEFENDER_2, TOUR_GOALIE, TOUR_CAPTAIN, PREMIUM_TEAM, PREMIUM_POSITION = range(10)
     tour_conv = ConversationHandler(
-        entry_points=[CommandHandler('tour', tour_start)],
+        entry_points=[CallbackQueryHandler(tour_build_callback, pattern=r"^tour_build_\d+$")],
         states={
             TOUR_FORWARD_1: [
                 CallbackQueryHandler(premium_add_pool_callback, pattern=r"^premium_add_pool$"),
@@ -343,7 +348,7 @@ if __name__ == '__main__':
                 MessageHandler(filters.ALL, tour_captain)
             ],
         },
-        fallbacks=[CommandHandler('tour', tour_start)],
+        fallbacks=[],
         per_chat=True,
         per_user=True,
         per_message=False,
@@ -437,7 +442,7 @@ if __name__ == '__main__':
 
     # Запуск приложения
     app.add_handler(CommandHandler('start', start))
-    app.add_handler(CommandHandler('tour', tour_start))
+    # Убрано: отдельная регистрация /tour для сборки. Теперь /tour показывает список туров.
     app.add_handler(CommandHandler('hc', hc))
     app.add_handler(CommandHandler('rules', rules))
     app.add_handler(CommandHandler('shop', shop))

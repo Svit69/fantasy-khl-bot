@@ -138,6 +138,97 @@ async def subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
 
+# --- TOURS LIST (/tours) ---
+async def tours(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Показать список всех туров с кнопками для открытия подробностей."""
+    try:
+        rows = db.get_all_tours() or []
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка получения списка туров: {e}")
+        return
+    if not rows:
+        await update.message.reply_text("Туры пока не созданы.")
+        return
+    # Формируем список и кнопки
+    lines = ["*Доступные туры:*"]
+    buttons = []
+    for r in rows:
+        # r: (id, name, start, deadline, end, status, winners)
+        tid, name, start, deadline, end, status, winners = r
+        lines.append(f"• #{tid} — {name} [{status}]")
+        buttons.append([InlineKeyboardButton(f"Открыть #{tid}", callback_data=f"tour_open_{tid}")])
+    await update.message.reply_text("\n".join(lines), reply_markup=InlineKeyboardMarkup(buttons), parse_mode='Markdown')
+
+
+async def tour_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Открыть информацию по выбранному туру: даты, статус, картинка (если есть)."""
+    query = update.callback_query
+    await query.answer()
+    data = query.data  # tour_open_<id>
+    try:
+        tid = int(data.replace('tour_open_', ''))
+    except Exception:
+        await query.edit_message_text("Некорректный запрос тура.")
+        return
+    row = None
+    try:
+        row = db.get_tour_by_id(tid)
+    except Exception:
+        row = None
+    if not row:
+        await query.edit_message_text("Тур не найден.")
+        return
+    # row: (id, name, start, deadline, end, status, winners, image_filename, image_file_id)
+    text = (
+        f"Тур #{row[0]} — {row[1]}\n"
+        f"Статус: {row[5]}\n"
+        f"Старт: {row[2]}\nДедлайн: {row[3]}\nОкончание: {row[4]}"
+    )
+    # Попробуем отправить фото (отдельным сообщением)
+    image_sent = False
+    image_file_id = row[8] if len(row) >= 9 else ''
+    if image_file_id:
+        try:
+            await context.bot.send_photo(chat_id=update.effective_chat.id, photo=image_file_id)
+            image_sent = True
+        except Exception:
+            logger.warning("send_photo by file_id failed in tour_open_callback", exc_info=True)
+    if not image_sent:
+        try:
+            fname = row[7] if len(row) > 7 else ''
+            if fname:
+                fpath = os.path.join(IMAGES_DIR, fname)
+                if os.path.exists(fpath):
+                    with open(fpath, 'rb') as fp:
+                        await context.bot.send_photo(chat_id=update.effective_chat.id, photo=InputFile(fp, filename=fname))
+                        image_sent = True
+        except Exception:
+            logger.error("send_photo from local file failed in tour_open_callback", exc_info=True)
+    # Кнопки действий
+    buttons = [[InlineKeyboardButton("Инфо", callback_data=f"tour_open_{row[0]}")]]
+    if str(row[5]).strip() == 'активен':
+        buttons.append([InlineKeyboardButton("Собрать состав", callback_data=f"tour_build_{row[0]}")])
+    try:
+        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+    except Exception:
+        # Если нельзя редактировать (старое сообщение), отправим новое
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=text, reply_markup=InlineKeyboardMarkup(buttons))
+
+
+async def tour_build_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Старт сборки состава по выбранному туру: делегируем в tour_start как entry-point."""
+    query = update.callback_query
+    await query.answer()
+    # Можно сохранить выбранный tour_id, если понадобится в будущем
+    try:
+        tid = int(query.data.replace('tour_build_', ''))
+        context.user_data['selected_tour_id'] = tid
+    except Exception:
+        tid = None
+    # Запускаем сценарий сборки состава
+    return await tour_start(update, context)
+
+
 # --- CHALLENGE ---
 async def challenge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
