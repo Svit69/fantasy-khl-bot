@@ -51,6 +51,9 @@ from handlers.admin_handlers import (
     add_image_shop_start, add_image_shop_text, add_image_shop_photo, add_image_shop_cancel,
     SHOP_TEXT_WAIT, SHOP_IMAGE_WAIT
 )
+from handlers.admin_handlers import (
+    purge_tours_start, purge_tours_password, purge_tours_cancel, PURGE_WAIT_PASSWORD
+)
 
 ADD_NAME, ADD_POSITION, ADD_CLUB, ADD_NATION, ADD_AGE, ADD_PRICE = range(6)
 EDIT_NAME, EDIT_POSITION, EDIT_CLUB, EDIT_NATION, EDIT_AGE, EDIT_PRICE = range(6, 12)
@@ -299,6 +302,24 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('list_challenges', list_challenges))
     app.add_handler(CommandHandler('delete_challenge', delete_challenge_cmd))
     app.add_handler(CommandHandler('get_tour_roster', get_tour_roster))
+
+    # --- ConversationHandler: /purge_tours ---
+    purge_tours_conv = ConversationHandler(
+        entry_points=[CommandHandler('purge_tours', purge_tours_start)],
+        states={
+            PURGE_WAIT_PASSWORD: [
+                MessageHandler(filters.TEXT & (~filters.COMMAND), purge_tours_password)
+            ]
+        },
+        fallbacks=[CommandHandler('cancel', purge_tours_cancel)],
+        per_chat=True,
+        per_user=True,
+        per_message=False,
+        allow_reentry=False,
+        name="purge_tours_conv",
+        persistent=False,
+    )
+    app.add_handler(purge_tours_conv)
 
     # --- ConversationHandler для выбора состава (запускается из кнопки "Собрать состав") ---
     TOUR_START, TOUR_FORWARD_1, TOUR_FORWARD_2, TOUR_FORWARD_3, TOUR_DEFENDER_1, TOUR_DEFENDER_2, TOUR_GOALIE, TOUR_CAPTAIN, PREMIUM_TEAM, PREMIUM_POSITION = range(10)

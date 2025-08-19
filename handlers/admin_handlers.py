@@ -61,6 +61,59 @@ async def add_image_shop_cancel(update, context):
     await update.message.reply_text("Обновление магазина отменено.")
     return ConversationHandler.END
 
+# --- PURGE TOURS (запароленная команда) ---
+PURGE_WAIT_PASSWORD = 9991
+
+def _get_purge_password_checker():
+    """Возвращает функцию checker(pw:str)->bool, не раскрывая пароль в коде.
+    Проверяется сначала переменная окружения PURGE_TOURS_PASSWORD_HASH (sha256),
+    иначе PURGE_TOURS_PASSWORD (plain)."""
+    import hashlib
+    env_hash = os.getenv('PURGE_TOURS_PASSWORD_HASH', '').strip()
+    env_plain = os.getenv('PURGE_TOURS_PASSWORD', '').strip()
+    if env_hash:
+        def check(pw: str) -> bool:
+            try:
+                return hashlib.sha256((pw or '').encode('utf-8')).hexdigest() == env_hash
+            except Exception:
+                return False
+        return check
+    else:
+        secret = env_plain
+        def check(pw: str) -> bool:
+            return (pw or '') == secret and secret != ''
+        return check
+
+async def purge_tours_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    from utils import is_admin
+    user = update.effective_user
+    if not is_admin(user.id):
+        await update.message.reply_text("Команда доступна только администратору.")
+        return ConversationHandler.END
+    await update.message.reply_text("Введите пароль для подтверждения удаления ВСЕХ туров:")
+    return PURGE_WAIT_PASSWORD
+
+async def purge_tours_password(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    pw = (update.message.text or '').strip()
+    checker = _get_purge_password_checker()
+    if not checker(pw):
+        await update.message.reply_text("Неверный пароль. Отмена.")
+        return ConversationHandler.END
+    try:
+        deleted = db.purge_all_tours()
+        await update.message.reply_text(f"Удалено туров: {deleted}. Составы и связанные данные также очищены.")
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка удаления: {e}")
+    return ConversationHandler.END
+
+async def purge_tours_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Отменено.")
+    return ConversationHandler.END
+
+async def add_image_shop_cancel(update, context):
+    await update.message.reply_text("Обновление магазина отменено.")
+    return ConversationHandler.END
+
 # --- Добавление игрока ---
 async def add_player_start(update, context):
     if not await admin_only(update, context):

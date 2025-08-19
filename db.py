@@ -455,6 +455,21 @@ def get_tour_players_with_info(tour_id: int):
             ORDER BY tp.cost DESC, tp.id ASC
         ''', (tour_id,)).fetchall()
 
+def purge_all_tours() -> int:
+    """Удаляет все туры и связанные с ними данные. Возвращает количество удалённых туров."""
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            # Посчитаем количество туров до удаления
+            cur = conn.execute('SELECT COUNT(*) FROM tours')
+            count = cur.fetchone()[0] or 0
+            # Удаляем зависимые данные
+            conn.execute('DELETE FROM tour_players')
+            conn.execute('DELETE FROM tour_roster')
+            conn.execute('DELETE FROM user_tour_roster')
+            # Удаляем туры
+            conn.execute('DELETE FROM tours')
+            return count
+
 # --- Реферальная система ---
 def init_referrals_table():
     with closing(sqlite3.connect(DB_NAME)) as conn:
