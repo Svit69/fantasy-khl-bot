@@ -129,10 +129,40 @@ async def subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     payment_url, payment_id = create_yookassa_payment(user.id)
     # Сохраняем payment_id в БД (можно добавить функцию)
     # db.save_payment_id(user.id, payment_id)
+    # Проверим статус подписки и дату окончания
+    end_line = ""
+    try:
+        from db import is_subscription_active, get_subscription
+        import datetime
+        if is_subscription_active(user.id):
+            row = get_subscription(user.id)  # (user_id, paid_until, last_payment_id)
+            pu = row[1] if row else None
+            dt = None
+            try:
+                dt = datetime.datetime.fromisoformat(pu) if pu else None
+            except Exception:
+                dt = None
+            if dt:
+                # Преобразуем к локальному времени для удобства
+                local_dt = dt.astimezone() if dt.tzinfo else dt
+                end_line = f"\n<b>Подписка активна</b> до: <b>{local_dt.strftime('%d.%m.%Y %H:%M')}</b>"
+    except Exception:
+        pass
+
+    benefits = (
+        "\n\n<b>Преимущества подписки:</b>\n"
+        "• Дополнительный игрок в пул на тур\n"
+        "• Повышенные реферальные бонусы\n"
+        "• Приоритетная поддержка\n"
+        "• Новые фичи раньше всех"
+    )
+
     text = (
         f"💳 <b>Подписка на Fantasy KHL</b>\n\n"
-        f"Стоимость: <b>299 руб/месяц</b>\n\n"
+        f"Стоимость: <b>299 руб/месяц</b>"
+        f"{end_line}\n\n"
         f"Нажмите кнопку ниже для оплаты через ЮKassa. После успешной оплаты подписка активируется автоматически."
+        f"{benefits}"
     )
     keyboard = [[InlineKeyboardButton('Оплатить 299₽ через ЮKassa', url=payment_url)]]
     await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
