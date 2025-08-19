@@ -294,10 +294,23 @@ async def tour_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
             f"Потрачено: {spent}/{budget}",
         ]
         text = "\n".join([l for l in lines if l is not None])
+        # Если дедлайн ещё не истёк — показать кнопку "Пересобрать состав"
+        reply_markup = None
         try:
-            await query.edit_message_text(text)
+            import datetime
+            from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+            deadline_dt = datetime.datetime.strptime(str(row[3]), "%d.%m.%y %H:%M")
+            now = datetime.datetime.now()
+            if now < deadline_dt:
+                reply_markup = InlineKeyboardMarkup(
+                    [[InlineKeyboardButton('Пересобрать состав', callback_data='restart_tour')]]
+                )
         except Exception:
-            await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
+            reply_markup = None
+        try:
+            await query.edit_message_text(text, reply_markup=reply_markup)
+        except Exception:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=text, reply_markup=reply_markup)
         return ConversationHandler.END if 'ConversationHandler' in globals() else None
     else:
         # Состава нет — показать инфо и предложить начать сборку через entry-point кнопкой
