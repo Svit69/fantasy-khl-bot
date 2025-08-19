@@ -239,6 +239,8 @@ if __name__ == '__main__':
             "• /list_tours\n"
             "• /activate_tour\n"
             "• /purge_tours — удалить все туры (по паролю)\n"
+            "• /delete_sub_by_username — удалить подписку у пользователя (по паролю)\n"
+            "• /purge_subscriptions — удалить все подписки (по паролю)\n"
             "• /tour_managers [tour_id] — список менеджеров с зарегистрированными составами на тур\n\n"
             "<b>Управление хоккеистами:</b>\n"
             "• /list_players — список игроков\n"
@@ -259,6 +261,38 @@ if __name__ == '__main__':
             await context.bot.send_message(chat_id=update.effective_chat.id, text=text, parse_mode='HTML')
 
     app.add_handler(CommandHandler('admin_help', admin_help))
+
+    # --- ConversationHandlers: удаление подписок ---
+    from handlers.admin_handlers import (
+        delete_sub_by_username_start, delete_sub_by_username_password, delete_sub_by_username_username,
+        delete_sub_by_username_cancel, DEL_SUB_WAIT_PASSWORD, DEL_SUB_WAIT_USERNAME,
+        purge_subscriptions_start, purge_subscriptions_password, PURGE_SUBS_WAIT_PASSWORD,
+    )
+
+    del_sub_conv = ConversationHandler(
+        entry_points=[CommandHandler('delete_sub_by_username', delete_sub_by_username_start)],
+        states={
+            DEL_SUB_WAIT_PASSWORD: [MessageHandler(filters.TEXT & (~filters.COMMAND), delete_sub_by_username_password)],
+            DEL_SUB_WAIT_USERNAME: [MessageHandler(filters.TEXT & (~filters.COMMAND), delete_sub_by_username_username)],
+        },
+        fallbacks=[CommandHandler('cancel', delete_sub_by_username_cancel)],
+        allow_reentry=True,
+        name="delete_sub_by_username_conv",
+        persistent=False,
+    )
+    app.add_handler(del_sub_conv)
+
+    purge_subs_conv = ConversationHandler(
+        entry_points=[CommandHandler('purge_subscriptions', purge_subscriptions_start)],
+        states={
+            PURGE_SUBS_WAIT_PASSWORD: [MessageHandler(filters.TEXT & (~filters.COMMAND), purge_subscriptions_password)],
+        },
+        fallbacks=[CommandHandler('cancel', purge_tours_cancel)],
+        allow_reentry=True,
+        name="purge_subscriptions_conv",
+        persistent=False,
+    )
+    app.add_handler(purge_subs_conv)
 
     # --- /tour_managers [tour_id] ---
     async def tour_managers_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):

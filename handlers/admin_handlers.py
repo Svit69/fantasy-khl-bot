@@ -61,6 +61,69 @@ async def add_image_shop_cancel(update, context):
     await update.message.reply_text("Обновление магазина отменено.")
     return ConversationHandler.END
 
+# --- Удаление подписок (запароленные команды) ---
+DEL_SUB_WAIT_PASSWORD = 10010
+DEL_SUB_WAIT_USERNAME = 10011
+
+async def delete_sub_by_username_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    if not is_admin(user.id):
+        await update.message.reply_text("Команда доступна только администратору.")
+        return ConversationHandler.END
+    await update.message.reply_text("Введите пароль для удаления подписки пользователя:")
+    return DEL_SUB_WAIT_PASSWORD
+
+async def delete_sub_by_username_password(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    pw = (update.message.text or '').strip()
+    checker = _get_purge_password_checker()
+    if not checker(pw):
+        await update.message.reply_text("Неверный пароль. Отмена.")
+        return ConversationHandler.END
+    await update.message.reply_text("Введите @username пользователя (без пробелов):")
+    return DEL_SUB_WAIT_USERNAME
+
+async def delete_sub_by_username_username(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    username = (update.message.text or '').strip()
+    if username.startswith('@'):
+        username = username[1:]
+    try:
+        row = db.get_user_by_username(username)
+        if not row:
+            await update.message.reply_text("Пользователь не найден.")
+            return ConversationHandler.END
+        user_id = row[0] if isinstance(row, tuple) else row['telegram_id'] if isinstance(row, dict) else row[0]
+        deleted = db.delete_subscription_by_user_id(user_id)
+        await update.message.reply_text(f"Удалено подписок: {deleted} у пользователя @{username}.")
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка: {e}")
+    return ConversationHandler.END
+
+async def delete_sub_by_username_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Отменено.")
+    return ConversationHandler.END
+
+PURGE_SUBS_WAIT_PASSWORD = 10020
+
+async def purge_subscriptions_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    if not is_admin(user.id):
+        await update.message.reply_text("Команда доступна только администратору.")
+        return ConversationHandler.END
+    await update.message.reply_text("Введите пароль для подтверждения удаления ВСЕХ подписок:")
+    return PURGE_SUBS_WAIT_PASSWORD
+
+async def purge_subscriptions_password(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    pw = (update.message.text or '').strip()
+    checker = _get_purge_password_checker()
+    if not checker(pw):
+        await update.message.reply_text("Неверный пароль. Отмена.")
+        return ConversationHandler.END
+    try:
+        deleted = db.purge_all_subscriptions()
+        await update.message.reply_text(f"Удалено подписок: {deleted}.")
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка удаления: {e}")
+    return ConversationHandler.END
 # --- PURGE TOURS (запароленная команда) ---
 PURGE_WAIT_PASSWORD = 9991
 

@@ -249,6 +249,21 @@ def has_subscription_notification(user_id: int, notify_date: str, kind: str) -> 
         ).fetchone()
         return bool(row)
 
+# --- Удаление подписок ---
+def delete_subscription_by_user_id(user_id: int) -> int:
+    """Удаляет подписку конкретного пользователя. Возвращает число удалённых строк (0 или 1)."""
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            cur = conn.execute('DELETE FROM subscriptions WHERE user_id = ?', (user_id,))
+            return cur.rowcount or 0
+
+def purge_all_subscriptions() -> int:
+    """Удаляет все подписки. Возвращает число удалённых строк."""
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            cur = conn.execute('DELETE FROM subscriptions')
+            return cur.rowcount or 0
+
 def record_subscription_notification(user_id: int, notify_date: str, kind: str) -> None:
     with closing(sqlite3.connect(DB_NAME)) as conn:
         with conn:
