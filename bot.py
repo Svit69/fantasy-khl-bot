@@ -292,19 +292,80 @@ if __name__ == '__main__':
         if not rows:
             await update.message.reply_text(f"Для тура #{tour_id} составы не найдены.")
             return
-        # Форматируем вывод
-        lines = [f"Менеджеры с составами для тура #{tour_id}:", ""]
+        # Форматируем подробный вывод с полным составом каждого менеджера
+        def name_club(pid):
+            try:
+                from db import get_player_by_id
+                p = get_player_by_id(int(pid))
+                if p:
+                    return f"{p[1]} ({p[3]})"
+            except Exception:
+                pass
+            return str(pid)
+
+        chunks = []
+        cur = [f"Менеджеры с составами для тура #{tour_id}:", ""]
         for r in rows:
+            try:
+                from db import get_user_tour_roster
+                ut = get_user_tour_roster(r['user_id'], tour_id)
+            except Exception:
+                ut = None
+            roster = ut.get('roster') if (ut and isinstance(ut, dict)) else None
+            captain_id = ut.get('captain_id') if ut else None
             uname = ("@" + r['username']) if r.get('username') else "—"
             name = r.get('name') or "—"
             spent = r.get('spent')
             ts = r.get('timestamp')
-            lines.append(f"• {uname} | {name} — потрачено: {spent}, время: {ts}")
-        text = "\n".join(lines)
-        try:
-            await update.message.reply_text(text)
-        except Exception:
-            await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
+
+            # Шапка для менеджера
+            cur.append(f"• {uname} | {name}")
+            # Состав
+            if roster:
+                try:
+                    gid = roster.get('goalie')
+                    goalie_line = name_club(gid) if gid else "—"
+                except Exception:
+                    goalie_line = "—"
+                try:
+                    dids = roster.get('defenders', []) or []
+                    defenders_line = " - ".join([name_club(x) for x in dids if x])
+                except Exception:
+                    defenders_line = ""
+                try:
+                    fids = roster.get('forwards', []) or []
+                    forwards_line = " - ".join([name_club(x) for x in fids if x])
+                except Exception:
+                    forwards_line = ""
+                try:
+                    captain_line = name_club(captain_id) if captain_id else "—"
+                except Exception:
+                    captain_line = "—"
+
+                cur.append(goalie_line)
+                cur.append(defenders_line)
+                cur.append(forwards_line)
+                cur.append(f"Капитан: {captain_line}")
+            else:
+                cur.append("(состав не найден)")
+
+            cur.append(f"Потрачено: {spent} | Время: {ts}")
+            cur.append("")
+
+            # Разбиение по ограничению Telegram (примерно 4096 символов)
+            joined = "\n".join(cur)
+            if len(joined) > 3500:  # небольшой запас
+                chunks.append(joined)
+                cur = []
+        if cur:
+            chunks.append("\n".join(cur))
+
+        # Отправляем по частям
+        for part in chunks:
+            try:
+                await update.message.reply_text(part)
+            except Exception:
+                await context.bot.send_message(chat_id=update.effective_chat.id, text=part)
 
     app.add_handler(CommandHandler('tour_managers', tour_managers_cmd))
     
