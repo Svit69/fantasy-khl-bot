@@ -239,6 +239,7 @@ if __name__ == '__main__':
             "• /list_tours\n"
             "• /activate_tour\n"
             "• /purge_tours — удалить все туры (по паролю)\n"
+            "• /delete_tour — удалить один тур по id (по паролю)\n"
             "• /delete_sub_by_username — удалить подписку у пользователя (по паролю)\n"
             "• /purge_subscriptions — удалить все подписки (по паролю)\n"
             "• /tour_managers [tour_id] — список менеджеров с зарегистрированными составами на тур\n\n"
@@ -267,6 +268,8 @@ if __name__ == '__main__':
         delete_sub_by_username_start, delete_sub_by_username_password, delete_sub_by_username_username,
         delete_sub_by_username_cancel, DEL_SUB_WAIT_PASSWORD, DEL_SUB_WAIT_USERNAME,
         purge_subscriptions_start, purge_subscriptions_password, PURGE_SUBS_WAIT_PASSWORD,
+        delete_tour_start, delete_tour_password, delete_tour_id, delete_tour_cancel,
+        DEL_TOUR_WAIT_PASSWORD, DEL_TOUR_WAIT_ID,
     )
 
     del_sub_conv = ConversationHandler(
@@ -293,6 +296,20 @@ if __name__ == '__main__':
         persistent=False,
     )
     app.add_handler(purge_subs_conv)
+
+    # --- ConversationHandler: /delete_tour ---
+    delete_tour_conv = ConversationHandler(
+        entry_points=[CommandHandler('delete_tour', delete_tour_start)],
+        states={
+            DEL_TOUR_WAIT_PASSWORD: [MessageHandler(filters.TEXT & (~filters.COMMAND), delete_tour_password)],
+            DEL_TOUR_WAIT_ID: [MessageHandler(filters.TEXT & (~filters.COMMAND), delete_tour_id)],
+        },
+        fallbacks=[CommandHandler('cancel', delete_tour_cancel)],
+        allow_reentry=True,
+        name="delete_tour_conv",
+        persistent=False,
+    )
+    app.add_handler(delete_tour_conv)
 
     # --- /tour_managers [tour_id] ---
     async def tour_managers_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):

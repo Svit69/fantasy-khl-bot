@@ -496,7 +496,6 @@ def purge_all_tours() -> int:
     """Удаляет все туры и связанные с ними данные. Возвращает количество удалённых туров."""
     with closing(sqlite3.connect(DB_NAME)) as conn:
         with conn:
-            # Посчитаем количество туров до удаления
             cur = conn.execute('SELECT COUNT(*) FROM tours')
             count = cur.fetchone()[0] or 0
             # Удаляем зависимые данные
@@ -506,6 +505,22 @@ def purge_all_tours() -> int:
             # Удаляем туры
             conn.execute('DELETE FROM tours')
             return count
+
+# --- Удаление одного тура по id ---
+def delete_tour_by_id(tour_id: int) -> int:
+    """Удаляет конкретный тур и связанные данные. Возвращает 1 если тур удалён, иначе 0."""
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            # Удаляем зависимые данные
+            conn.execute('DELETE FROM tour_players WHERE tour_id = ?', (tour_id,))
+            conn.execute('DELETE FROM user_tour_roster WHERE tour_id = ?', (tour_id,))
+            # Возможная старая таблица по номеру тура
+            try:
+                conn.execute('DELETE FROM tour_roster WHERE tour_num = ?', (tour_id,))
+            except Exception:
+                pass
+            cur = conn.execute('DELETE FROM tours WHERE id = ?', (tour_id,))
+            return cur.rowcount or 0
 
 # --- Реферальная система ---
 def init_referrals_table():
