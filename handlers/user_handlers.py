@@ -1307,13 +1307,14 @@ async def tour_defender_callback(update: Update, context: ContextTypes.DEFAULT_T
                 budget = context.user_data['tour_budget']
                 spent = context.user_data['tour_selected']['spent']
                 left = budget - spent
-                picked = context.user_data['tour_selected']['defenders']
-                await query.edit_message_text(f"Добавлен в ваш пул: {player[2]} ({player[4]}). Теперь выберите защитника.")
-                next_state = TOUR_DEFENDER_2
-                return await send_player_choice(update, context, 'защитник', picked, next_state, left)
+                # После добавления в пул всегда возвращаемся к выбору нападающих
+                forwards_picked = context.user_data['tour_selected']['forwards']
+                await query.edit_message_text(f"Добавлен в ваш пул: {player[2]} ({player[4]}). Теперь выберите нападающего.")
+                next_state = TOUR_FORWARD_2 if len(forwards_picked) == 0 else TOUR_FORWARD_3
+                return await send_player_choice(update, context, 'нападающий', forwards_picked, next_state, left)
             except Exception as e:
                 await query.edit_message_text(f"Ошибка добавления в пул: {e}")
-                return TOUR_DEFENDER_1
+                return TOUR_FORWARD_1
         budget = context.user_data['tour_budget']
         spent = context.user_data['tour_selected']['spent']
         if spent + player[7] > budget:
@@ -1402,15 +1403,14 @@ async def tour_goalie_callback(update: Update, context: ContextTypes.DEFAULT_TYP
                 budget = context.user_data['tour_budget']
                 spent = context.user_data['tour_selected']['spent']
                 left = budget - spent
-                picked = []
-                if context.user_data['tour_selected']['goalie']:
-                    picked = [context.user_data['tour_selected']['goalie']]
-                await query.edit_message_text(f"Добавлен в ваш пул: {player[2]} ({player[4]}). Теперь выберите вратаря.")
-                # Важно: остаёмся в состоянии выбора вратаря, иначе pick_..._вратарь не будет сопоставляться
-                return await send_player_choice(update, context, 'вратарь', picked, TOUR_GOALIE, left)
+                # После добавления в пул всегда возвращаемся к выбору нападающих
+                forwards_picked = context.user_data['tour_selected']['forwards']
+                await query.edit_message_text(f"Добавлен в ваш пул: {player[2]} ({player[4]}). Теперь выберите нападающего.")
+                next_state = TOUR_FORWARD_2 if len(forwards_picked) == 0 else TOUR_FORWARD_3
+                return await send_player_choice(update, context, 'нападающий', forwards_picked, next_state, left)
             except Exception as e:
                 await query.edit_message_text(f"Ошибка добавления в пул: {e}")
-                return TOUR_GOALIE
+                return TOUR_FORWARD_1
         budget = context.user_data['tour_budget']
         spent = context.user_data['tour_selected']['spent']
         if spent + player[7] > budget:
