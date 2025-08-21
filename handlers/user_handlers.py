@@ -513,8 +513,51 @@ async def challenge_open_callback(update: Update, context: ContextTypes.DEFAULT_
         except Exception:
             logger.error("send_photo from local file failed in open_callback", exc_info=True)
 
-    # Меню действий по челленджу
+    # Если у пользователя уже есть запись на этот челлендж — показать текущий состав и кнопки Отменить/Пересобрать
+    uid = update.effective_user.id if update.effective_user else None
+    entry = None
+    try:
+        if uid:
+            entry = db.challenge_get_entry(ch[0], uid)
+    except Exception:
+        entry = None
+
     status = ch[5] if len(ch) > 5 else ''
+    if entry:
+        # entry: (id, stake, forward_id, defender_id, goalie_id, status)
+        # Сохраним id челленджа в контекст для последующих действий (Отменить/Пересобрать)
+        context.user_data['challenge_id'] = ch[0]
+        fwd_id = entry[2]
+        d_id = entry[3]
+        g_id = entry[4]
+        try:
+            fwd = db.get_player_by_id(fwd_id) if fwd_id else None
+            d = db.get_player_by_id(d_id) if d_id else None
+            g = db.get_player_by_id(g_id) if g_id else None
+            def fmt(p):
+                return f"{p[1]} ({p[3]})" if p else "—"
+            picked_line = f"{fmt(fwd)} - {fmt(d)} - {fmt(g)}"
+        except Exception:
+            picked_line = "—"
+        stake = entry[1]
+        deadline = ch[2]
+        txt = (
+            f"Челлендж #{ch[0]}\n"
+            f"Статус: {status}\n"
+            f"Старт: {ch[1]}\nДедлайн: {deadline}\nОкончание: {ch[3]}\n\n"
+            f"Ваш состав: {picked_line}\n"
+            f"Уровень вызова: {stake} HC"
+        )
+        buttons = [
+            [InlineKeyboardButton('Отменить', callback_data='challenge_cancel')],
+            [InlineKeyboardButton('Пересобрать', callback_data='challenge_reshuffle')],
+        ]
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=txt, reply_markup=InlineKeyboardMarkup(buttons))
+        return
+
+    # Меню действий по челленджу (если записи нет)
+    # Сохраним id челленджа в контекст для возможного начала сборки
+    context.user_data['challenge_id'] = ch[0]
     text = (
         f"Челлендж #{ch[0]}\n"
         f"Статус: {status}\n"
@@ -925,7 +968,12 @@ async def challenge_cancel_callback(update: Update, context: ContextTypes.DEFAUL
         return
     refunded = db.challenge_cancel_and_refund(cid, update.effective_user.id)
     if refunded:
-        await query.edit_message_text("Заявка отменена, HC возвращены на баланс.")
+        # На всякий случай очистим пики
+        try:
+            db.challenge_reset_picks(cid, update.effective_user.id)
+        except Exception:
+            pass
+        await query.edit_message_text("Заявка отменена, состав очищен, HC возвращены на баланс.")
     else:
         await query.edit_message_text("Заявка уже завершена или отсутствует. Возврат невозможен.")
 
