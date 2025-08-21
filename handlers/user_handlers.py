@@ -524,6 +524,15 @@ async def challenge_open_callback(update: Update, context: ContextTypes.DEFAULT_
 
     status = ch[5] if len(ch) > 5 else ''
     if entry:
+        # Если запись отменена/возвращена — считаем, что записи нет
+        try:
+            st = (entry[5] or '').lower()
+            if st in ('canceled', 'refunded'):
+                entry = None
+        except Exception:
+            pass
+
+    if entry:
         # entry: (id, stake, forward_id, defender_id, goalie_id, status)
         # Сохраним id челленджа в контекст для последующих действий (Отменить/Пересобрать)
         context.user_data['challenge_id'] = ch[0]

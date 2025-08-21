@@ -431,6 +431,22 @@ def create_challenge_entry_and_charge(challenge_id: int, user_id: int, stake: in
             # Проверим существование
             row = conn.execute('SELECT id, status FROM challenge_entries WHERE challenge_id = ? AND user_id = ?', (challenge_id, user_id)).fetchone()
             if row:
+                cur_status = (row[1] or '').lower()
+                # Разрешаем повторный вход, если запись была отменена или возвращена
+                if cur_status in ('canceled', 'refunded'):
+                    u = conn.execute('SELECT hc_balance FROM users WHERE telegram_id = ?', (user_id,)).fetchone()
+                    bal = (u[0] if u else 0)
+                    if bal < stake:
+                        return False
+                    # Списываем и переоткрываем запись: обновляем ставку, очищаем пики и ставим статус in_progress
+                    conn.execute('UPDATE users SET hc_balance = hc_balance - ? WHERE telegram_id = ?', (stake, user_id))
+                    conn.execute('''
+                        UPDATE challenge_entries
+                        SET stake = ?, status = 'in_progress', forward_id = NULL, defender_id = NULL, goalie_id = NULL, created_at = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                    ''', (stake, row[0]))
+                    return True
+                # Иначе (in_progress/completed) — не создаём дубликат
                 return False
             # Проверим баланс
             u = conn.execute('SELECT hc_balance FROM users WHERE telegram_id = ?', (user_id,)).fetchone()
