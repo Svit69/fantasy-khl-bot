@@ -28,6 +28,7 @@ from handlers.user_handlers import start, hc, IMAGES_DIR, \
 from handlers.user_handlers import shop, shop_item_callback
 from handlers.admin_handlers import addhc, send_results, show_users
 from handlers.admin_handlers import list_challenges, delete_challenge_cmd
+from handlers.admin_handlers import challenge_rosters_cmd
 from handlers.admin_handlers import (
     send_challenge_image_start,
     challenge_input_start_date,
@@ -254,6 +255,7 @@ if __name__ == '__main__':
             "<b>Управление челленджами:</b>\n"
             "• /list_challenges — список челленджей\n"
             "• /delete_challenge &lt;id&gt; — удалить челлендж по id\n"
+            "• /challenge_rosters &lt;id&gt; — составы участников челленджа по id\n"
             "• /send_challenge_image — зарегистрировать челлендж (даты + картинка)\n\n"
             "<b>Магазин:</b>\n"
             "• /add_image_shop — задать текст и изображение магазина (диалог)\n"
@@ -463,6 +465,7 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('send_results', send_results))
     app.add_handler(CommandHandler('list_challenges', list_challenges))
     app.add_handler(CommandHandler('delete_challenge', delete_challenge_cmd))
+    app.add_handler(CommandHandler('challenge_rosters', challenge_rosters_cmd))
     app.add_handler(CommandHandler('get_tour_roster', get_tour_roster))
 
     # --- ConversationHandler: /purge_tours ---

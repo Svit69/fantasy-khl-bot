@@ -490,6 +490,103 @@ async def show_users(update, context):
         for i in range(0, len(msg), 4000):
             await update.message.reply_text(msg[i:i+4000])
 
+# --- Челлендж: вывод составов по id ---
+async def challenge_rosters_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Админ-команда: /challenge_rosters <challenge_id>
+    Показывает список пользователей, их статус заявки, ставку и выбранных игроков (нападающий/защитник/вратарь).
+    """
+    if not await admin_only(update, context):
+        return
+    # Разбор аргумента
+    challenge_id = None
+    try:
+        if context.args and len(context.args) >= 1:
+            challenge_id = int(context.args[0])
+    except Exception:
+        challenge_id = None
+    if not challenge_id:
+        await update.message.reply_text("Использование: /challenge_rosters <challenge_id>")
+        return
+
+    # Получаем записи заявок с юзерами
+    try:
+        with db.closing(db.sqlite3.connect(db.DB_NAME)) as conn:
+            conn.row_factory = db.sqlite3.Row
+            rows = conn.execute(
+                '''
+                SELECT ce.user_id,
+                       u.username,
+                       u.name,
+                       ce.stake,
+                       ce.forward_id,
+                       ce.defender_id,
+                       ce.goalie_id,
+                       ce.status,
+                       ce.created_at
+                FROM challenge_entries AS ce
+                LEFT JOIN users AS u ON u.telegram_id = ce.user_id
+                WHERE ce.challenge_id = ?
+                ORDER BY ce.created_at DESC
+                ''', (challenge_id,)
+            ).fetchall()
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка БД: {e}")
+        return
+
+    if not rows:
+        await update.message.reply_text(f"Для челленджа #{challenge_id} заявки не найдены.")
+        return
+
+    def name_club(pid):
+        if not pid:
+            return "—"
+        try:
+            p = db.get_player_by_id(int(pid))
+            if p:
+                return f"{p[1]} ({p[3]})"
+        except Exception:
+            pass
+        return str(pid)
+
+    # Формируем сообщение с разбиением на части
+    parts = []
+    cur_lines = [f"Составы участников челленджа #{challenge_id}:", ""]
+    for r in rows:
+        uname = ("@" + (r["username"] or "").strip()) if r["username"] else "—"
+        name = r["name"] or "—"
+        status = (r["status"] or "").lower()
+        stake = r["stake"] or 0
+        fwd = name_club(r["forward_id"]) if r["forward_id"] else "—"
+        dfd = name_club(r["defender_id"]) if r["defender_id"] else "—"
+        gk = name_club(r["goalie_id"]) if r["goalie_id"] else "—"
+
+        # Статус значком
+        status_icon = {
+            'in_progress': '🟡 in_progress',
+            'completed': '🟢 completed',
+            'canceled': '⚪ canceled',
+            'refunded': '⚪ refunded',
+        }.get(status, status or '—')
+
+        cur_lines.append(f"• {uname} | {name} | {status_icon} | Ставка: {stake} HC")
+        cur_lines.append(f"Нападающий: {fwd}")
+        cur_lines.append(f"Защитник: {dfd}")
+        cur_lines.append(f"Вратарь: {gk}")
+        cur_lines.append("")
+
+        joined = "\n".join(cur_lines)
+        if len(joined) > 3500:  # запас до лимита Telegram в 4096
+            parts.append(joined)
+            cur_lines = []
+    if cur_lines:
+        parts.append("\n".join(cur_lines))
+
+    for part in parts:
+        try:
+            await update.message.reply_text(part)
+        except Exception:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=part)
+
 async def admin_only(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     user_id = update.effective_user.id if update.effective_user else None
     if not is_admin(user_id):
