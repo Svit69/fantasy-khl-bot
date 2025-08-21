@@ -166,6 +166,22 @@ def init_db():
                 conn.execute('ALTER TABLE challenges ADD COLUMN image_file_id TEXT DEFAULT ""')
             except Exception:
                 pass
+            # Таблица заявок пользователей на челлендж
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS challenge_entries (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    challenge_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    stake INTEGER NOT NULL,
+                    forward_id INTEGER,
+                    defender_id INTEGER,
+                    goalie_id INTEGER,
+                    status TEXT NOT NULL DEFAULT 'in_progress',
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(challenge_id, user_id),
+                    FOREIGN KEY(challenge_id) REFERENCES challenges(id)
+                )
+            ''')
             # Таблица описания магазина (единственная запись id=1)
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS shop_content (
@@ -394,6 +410,103 @@ def remove_player(player_id):
         with conn:
             cursor = conn.execute('DELETE FROM players WHERE id = ?', (player_id,))
             return cursor.rowcount > 0
+
+# --- Challenge entries helpers ---
+def get_challenge_by_id(ch_id: int):
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        return conn.execute('SELECT id, start_date, deadline, end_date, image_filename, status, image_file_id FROM challenges WHERE id = ?', (ch_id,)).fetchone()
+
+def challenge_get_entry(challenge_id: int, user_id: int):
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        return conn.execute('SELECT id, stake, forward_id, defender_id, goalie_id, status FROM challenge_entries WHERE challenge_id = ? AND user_id = ?', (challenge_id, user_id)).fetchone()
+
+def create_challenge_entry_and_charge(challenge_id: int, user_id: int, stake: int) -> bool:
+    """Создаёт запись участия в челлендже и списывает HC. Возвращает True при успехе.
+    Если запись уже есть и статус in_progress/completed — возвращает False (не дублируем).
+    """
+    if stake <= 0:
+        return False
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            # Проверим существование
+            row = conn.execute('SELECT id, status FROM challenge_entries WHERE challenge_id = ? AND user_id = ?', (challenge_id, user_id)).fetchone()
+            if row:
+                return False
+            # Проверим баланс
+            u = conn.execute('SELECT hc_balance FROM users WHERE telegram_id = ?', (user_id,)).fetchone()
+            bal = (u[0] if u else 0)
+            if bal < stake:
+                return False
+            # Списываем и создаём запись
+            conn.execute('UPDATE users SET hc_balance = hc_balance - ? WHERE telegram_id = ?', (stake, user_id))
+            conn.execute('INSERT INTO challenge_entries (challenge_id, user_id, stake, status) VALUES (?, ?, ?, ?)', (challenge_id, user_id, stake, 'in_progress'))
+            return True
+
+def challenge_set_pick(challenge_id: int, user_id: int, position: str, player_id: int) -> None:
+    col = None
+    pos = (position or '').lower()
+    if pos == 'нападающий':
+        col = 'forward_id'
+    elif pos == 'защитник':
+        col = 'defender_id'
+    elif pos == 'вратарь':
+        col = 'goalie_id'
+    if not col:
+        return
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            conn.execute(f'UPDATE challenge_entries SET {col} = ? WHERE challenge_id = ? AND user_id = ?', (player_id, challenge_id, user_id))
+
+def challenge_reset_picks(challenge_id: int, user_id: int) -> None:
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            conn.execute('UPDATE challenge_entries SET forward_id = NULL, defender_id = NULL, goalie_id = NULL WHERE challenge_id = ? AND user_id = ?', (challenge_id, user_id))
+
+def challenge_finalize(challenge_id: int, user_id: int) -> None:
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            conn.execute('UPDATE challenge_entries SET status = ? WHERE challenge_id = ? AND user_id = ?', ('completed', challenge_id, user_id))
+
+def challenge_cancel_and_refund(challenge_id: int, user_id: int) -> bool:
+    """Если запись в статусе in_progress, возвращаем stake пользователю и помечаем как canceled, либо удаляем.
+    Возвращает True, если возврат произведён.
+    """
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            row = conn.execute('SELECT id, stake, status FROM challenge_entries WHERE challenge_id = ? AND user_id = ?', (challenge_id, user_id)).fetchone()
+            if not row:
+                return False
+            stake = row[1] or 0
+            status = row[2] or 'in_progress'
+            if status != 'in_progress':
+                return False
+            # Возврат и пометка
+            conn.execute('UPDATE users SET hc_balance = hc_balance + ? WHERE telegram_id = ?', (stake, user_id))
+            conn.execute('UPDATE challenge_entries SET status = ? WHERE id = ?', ('canceled', row[0]))
+            return True
+
+def refund_unfinished_after_deadline() -> int:
+    """Возвращает HC по незавершённым заявкам после дедлайна. Возвращает число обработанных записей."""
+    import datetime
+    now = datetime.datetime.utcnow().isoformat()
+    processed = 0
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            # Берём все активные/в игре челленджи, у которых дедлайн уже прошёл
+            rows = conn.execute('SELECT id, deadline FROM challenges').fetchall()
+            for ch in rows:
+                ch_id, deadline = ch[0], str(ch[1])
+                try:
+                    if deadline and deadline < now:
+                        # Возвращаем всем in_progress
+                        entries = conn.execute('SELECT id, user_id, stake FROM challenge_entries WHERE challenge_id = ? AND status = ?', (ch_id, 'in_progress')).fetchall()
+                        for e in entries:
+                            conn.execute('UPDATE users SET hc_balance = hc_balance + ? WHERE telegram_id = ?', (e[2] or 0, e[1]))
+                            conn.execute('UPDATE challenge_entries SET status = ? WHERE id = ?', ('refunded', e[0]))
+                            processed += 1
+                except Exception:
+                    continue
+    return processed
 
 # --- Магазин ---
 def set_shop_content(text: str, image_filename: str = '', image_file_id: str = '') -> None:

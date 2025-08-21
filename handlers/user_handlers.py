@@ -736,6 +736,8 @@ async def challenge_build_callback(update: Update, context: ContextTypes.DEFAULT
         await query.edit_message_text("Сбор состава недоступен: челлендж не активен.")
         return
 
+    # Сохраним id челленджа в user_data для дальнейших шагов
+    context.user_data['challenge_id'] = cid
     # Переиспользуем текущую механику: выбор уровня вызова
     text = (
         "Выберите уровень вызова для челленджа:\n\n"
@@ -779,11 +781,169 @@ async def challenge_level_callback(update: Update, context: ContextTypes.DEFAULT
         ]
         await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
         return
-    # Баланс достаточен — фиксируем выбор
+    # Баланс достаточен — списываем и создаём заявку
+    cid = context.user_data.get('challenge_id')
+    if not cid:
+        await query.edit_message_text("Ошибка: нет выбранного челленджа. Откройте заново через /challenge.")
+        return
+    ok = db.create_challenge_entry_and_charge(cid, user.id, level_int)
+    if not ok:
+        await query.edit_message_text("Не удалось создать заявку: возможно, запись уже существует или недостаточно HC.")
+        return
     context.user_data['challenge_level'] = level_int
+    context.user_data['challenge_remaining_positions'] = ['нападающий', 'защитник', 'вратарь']
+    # Показать выбор позиции
+    buttons = [
+        [InlineKeyboardButton('нападающий', callback_data='challenge_pick_pos_нападающий')],
+        [InlineKeyboardButton('защитник', callback_data='challenge_pick_pos_защитник')],
+        [InlineKeyboardButton('вратарь', callback_data='challenge_pick_pos_вратарь')],
+    ]
     await query.edit_message_text(
-        f"Уровень вызова выбран: {level_int} HC. Баланс: {balance} HC. Теперь выбери трёх игроков (функция подготавливается)."
+        f"Уровень вызова выбран: {level_int} HC. С вашего баланса списано {level_int} HC.\nВыберите позицию:",
+        reply_markup=InlineKeyboardMarkup(buttons)
     )
+
+
+async def challenge_pick_pos_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    pos = query.data.replace('challenge_pick_pos_', '')
+    remaining = context.user_data.get('challenge_remaining_positions', ['нападающий', 'защитник', 'вратарь'])
+    if pos not in remaining:
+        await query.edit_message_text("Эта позиция уже выбрана. Выберите другую.")
+        return
+    context.user_data['challenge_current_pos'] = pos
+    context.user_data['challenge_expect_team'] = True
+    await query.edit_message_text(f"Вы выбрали позицию: {pos}. Теперь введите название команды сообщением.")
+
+
+async def challenge_team_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Обрабатываем текст названия команды только если ожидаем
+    if not context.user_data.get('challenge_expect_team'):
+        return
+    team_text = (update.message.text or '').strip()
+    context.user_data['challenge_expect_team'] = False
+    context.user_data['challenge_team_query'] = team_text
+    pos = context.user_data.get('challenge_current_pos')
+    # Список игроков по позиции и названию команды
+    from db import get_all_players
+    all_players = get_all_players()
+    team_lower = team_text.lower()
+    filtered = [p for p in all_players if (p[2] or '').lower() == pos and team_lower in str(p[3] or '').lower()]
+    if not filtered:
+        await update.message.reply_text("Игроки не найдены по указанным фильтрам. Повторите выбор позиции.")
+        # Вернём меню позиций (оставшиеся)
+        remaining = context.user_data.get('challenge_remaining_positions', ['нападающий', 'защитник', 'вратарь'])
+        btns = [[InlineKeyboardButton(x, callback_data=f"challenge_pick_pos_{x}")] for x in remaining]
+        await update.message.reply_text("Выберите позицию:", reply_markup=InlineKeyboardMarkup(btns))
+        return
+    # Построить клавиатуру игроков
+    kb = []
+    for p in filtered:
+        kb.append([InlineKeyboardButton(f"{p[1]} ({p[3]})", callback_data=f"challenge_pick_player_{p[0]}")])
+    await update.message.reply_text("Выберите игрока:", reply_markup=InlineKeyboardMarkup(kb))
+
+
+async def challenge_pick_player_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    try:
+        pid = int(query.data.replace('challenge_pick_player_', ''))
+    except Exception:
+        await query.edit_message_text("Некорректный выбор игрока.")
+        return
+    cid = context.user_data.get('challenge_id')
+    pos = context.user_data.get('challenge_current_pos')
+    if not cid or not pos:
+        await query.edit_message_text("Контекст выбора утерян. Начните заново: /challenge")
+        return
+    # Сохраняем пик
+    try:
+        db.challenge_set_pick(cid, update.effective_user.id, pos, pid)
+        p = db.get_player_by_id(pid)
+        picked_name = f"{p[1]} ({p[3]})" if p else f"id={pid}"
+        await query.edit_message_text(f"Вы выбрали: {picked_name}")
+    except Exception as e:
+        await query.edit_message_text(f"Не удалось сохранить выбор: {e}")
+        return
+    # Обновляем список оставшихся позиций
+    remaining = context.user_data.get('challenge_remaining_positions', ['нападающий', 'защитник', 'вратарь'])
+    try:
+        remaining.remove(pos)
+    except ValueError:
+        pass
+    context.user_data['challenge_remaining_positions'] = remaining
+    if remaining:
+        # Показать оставшиеся позиции
+        btns = [[InlineKeyboardButton(x, callback_data=f"challenge_pick_pos_{x}")] for x in remaining]
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="Выберите следующую позицию:", reply_markup=InlineKeyboardMarkup(btns))
+        return
+    # Все три позиции выбраны — финализация
+    try:
+        db.challenge_finalize(cid, update.effective_user.id)
+    except Exception:
+        pass
+    # Сводка
+    try:
+        fwd_id = db.challenge_get_entry(cid, update.effective_user.id)[2]
+        d_id = db.challenge_get_entry(cid, update.effective_user.id)[3]
+        g_id = db.challenge_get_entry(cid, update.effective_user.id)[4]
+        fwd = db.get_player_by_id(fwd_id) if fwd_id else None
+        d = db.get_player_by_id(d_id) if d_id else None
+        g = db.get_player_by_id(g_id) if g_id else None
+        def fmt(p):
+            return f"{p[1]} ({p[3]})" if p else "-"
+        picked_line = f"{fmt(fwd)} - {fmt(d)} - {fmt(g)}"
+    except Exception:
+        picked_line = "-"
+    # Найдём дедлайн и ставку
+    ch = None
+    try:
+        ch = db.get_challenge_by_id(cid)
+    except Exception:
+        ch = None
+    deadline = ch[2] if ch else "—"
+    stake = context.user_data.get('challenge_level')
+    txt = (
+        f"{picked_line}\n"
+        f"Результат будет: {deadline}\n"
+        f"Ваш уровень вызова: {stake} HC"
+    )
+    buttons = [
+        [InlineKeyboardButton('Отменить', callback_data='challenge_cancel')],
+        [InlineKeyboardButton('Пересобрать', callback_data='challenge_reshuffle')],
+    ]
+    await context.bot.send_message(chat_id=update.effective_chat.id, text=txt, reply_markup=InlineKeyboardMarkup(buttons))
+
+
+async def challenge_cancel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    cid = context.user_data.get('challenge_id')
+    if not cid:
+        await query.edit_message_text("Отмена недоступна: нет активной записи.")
+        return
+    refunded = db.challenge_cancel_and_refund(cid, update.effective_user.id)
+    if refunded:
+        await query.edit_message_text("Заявка отменена, HC возвращены на баланс.")
+    else:
+        await query.edit_message_text("Заявка уже завершена или отсутствует. Возврат невозможен.")
+
+
+async def challenge_reshuffle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    cid = context.user_data.get('challenge_id')
+    if not cid:
+        await query.edit_message_text("Пересборка недоступна: нет активной записи.")
+        return
+    try:
+        db.challenge_reset_picks(cid, update.effective_user.id)
+        context.user_data['challenge_remaining_positions'] = ['нападающий', 'защитник', 'вратарь']
+        btns = [[InlineKeyboardButton(x, callback_data=f"challenge_pick_pos_{x}")] for x in context.user_data['challenge_remaining_positions']]
+        await query.edit_message_text("Сброс выполнен. Выберите позицию:", reply_markup=InlineKeyboardMarkup(btns))
+    except Exception as e:
+        await query.edit_message_text(f"Не удалось пересобрать: {e}")
 
 
 TOUR_START, TOUR_FORWARD_1, TOUR_FORWARD_2, TOUR_FORWARD_3, TOUR_DEFENDER_1, TOUR_DEFENDER_2, TOUR_GOALIE, TOUR_CAPTAIN, PREMIUM_TEAM, PREMIUM_POSITION = range(10)
