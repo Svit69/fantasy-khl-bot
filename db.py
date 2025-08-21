@@ -471,19 +471,32 @@ def challenge_cancel_and_refund(challenge_id: int, user_id: int) -> bool:
     """Если запись в статусе in_progress, возвращаем stake пользователю и помечаем как canceled, либо удаляем.
     Возвращает True, если возврат произведён.
     """
+    import datetime
     with closing(sqlite3.connect(DB_NAME)) as conn:
         with conn:
+            # Получаем запись и дедлайн челленджа
             row = conn.execute('SELECT id, stake, status FROM challenge_entries WHERE challenge_id = ? AND user_id = ?', (challenge_id, user_id)).fetchone()
             if not row:
                 return False
+            ch = conn.execute('SELECT deadline FROM challenges WHERE id = ?', (challenge_id,)).fetchone()
+            deadline = ch[0] if ch else None
+            now_iso = datetime.datetime.utcnow().isoformat()
+
             stake = row[1] or 0
-            status = row[2] or 'in_progress'
-            if status != 'in_progress':
+            status = (row[2] or 'in_progress').lower()
+
+            # Блокируем повторные возвраты/отмены
+            if status in ('canceled', 'refunded'):
                 return False
-            # Возврат и пометка
-            conn.execute('UPDATE users SET hc_balance = hc_balance + ? WHERE telegram_id = ?', (stake, user_id))
-            conn.execute('UPDATE challenge_entries SET status = ? WHERE id = ?', ('canceled', row[0]))
-            return True
+
+            # Разрешаем отмену ДО дедлайна даже если пользователь успел подтвердить (completed)
+            if deadline and now_iso < str(deadline):
+                conn.execute('UPDATE users SET hc_balance = hc_balance + ? WHERE telegram_id = ?', (stake, user_id))
+                conn.execute('UPDATE challenge_entries SET status = ? WHERE id = ?', ('canceled', row[0]))
+                return True
+
+            # После дедлайна отмена запрещена
+            return False
 
 def refund_unfinished_after_deadline() -> int:
     """Возвращает HC по незавершённым заявкам после дедлайна. Возвращает число обработанных записей."""
