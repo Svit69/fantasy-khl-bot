@@ -549,11 +549,41 @@ async def challenge_open_callback(update: Update, context: ContextTypes.DEFAULT_
         except Exception:
             picked_line = "—"
         stake = entry[1]
-        deadline = ch[2]
+        # Локальный форматтер МСК
+        def iso_to_msk_text(dt_str: str) -> str:
+            import datetime as _dt
+            months = [
+                "января", "февраля", "марта", "апреля", "мая", "июня",
+                "июля", "августа", "сентября", "октября", "ноября", "декабря"
+            ]
+            if not dt_str:
+                return "—"
+            try:
+                dt = _dt.datetime.fromisoformat(str(dt_str))
+            except Exception:
+                return str(dt_str)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=_dt.timezone.utc)
+            else:
+                dt = dt.astimezone(_dt.timezone.utc)
+            try:
+                from zoneinfo import ZoneInfo
+                msk = dt.astimezone(ZoneInfo("Europe/Moscow"))
+            except Exception:
+                msk = dt.astimezone(_dt.timezone(_dt.timedelta(hours=3)))
+            day = msk.day
+            month_name = months[msk.month - 1]
+            time_part = msk.strftime("%H:%M")
+            return f"{day} {month_name} в {time_part} (мск)"
+
+        deadline_text = iso_to_msk_text(ch[2])
+        end_text = iso_to_msk_text(ch[3])
+        status_display = 'регистрация составов' if (status == 'активен') else status
         txt = (
-            f"Челлендж #{ch[0]}\n"
-            f"Статус: {status}\n"
-            f"Старт: {ch[1]}\nДедлайн: {deadline}\nОкончание: {ch[3]}\n\n"
+            f"Челлендж №{ch[0]}\n"
+            f"Статус: {status_display}\n\n"
+            f"Дедлайн: {deadline_text}\n"
+            f"Подведение итогов: {end_text}\n\n"
             f"Ваш состав: {picked_line}\n"
             f"Уровень вызова: {stake} HC"
         )
