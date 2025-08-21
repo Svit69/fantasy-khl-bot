@@ -954,11 +954,40 @@ async def challenge_pick_player_callback(update: Update, context: ContextTypes.D
         ch = db.get_challenge_by_id(cid)
     except Exception:
         ch = None
-    deadline = ch[2] if ch else "—"
+    # Форматируем дату подведения итогов (используем конец челленджа ch[3])
+    def iso_to_msk_text(dt_str: str) -> str:
+        import datetime as _dt
+        months = [
+            "января", "февраля", "марта", "апреля", "мая", "июня",
+            "июля", "августа", "сентября", "октября", "ноября", "декабря"
+        ]
+        if not dt_str:
+            return "—"
+        try:
+            dt = _dt.datetime.fromisoformat(str(dt_str))
+        except Exception:
+            return str(dt_str)
+        # считаем, что хранится UTC
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=_dt.timezone.utc)
+        else:
+            dt = dt.astimezone(_dt.timezone.utc)
+        try:
+            from zoneinfo import ZoneInfo
+            msk = dt.astimezone(ZoneInfo("Europe/Moscow"))
+        except Exception:
+            msk = dt.astimezone(_dt.timezone(_dt.timedelta(hours=3)))
+        day = msk.day
+        month_name = months[msk.month - 1]
+        time_part = msk.strftime("%H:%M")
+        return f"{day} {month_name} в {time_part} (мск)"
+
+    end_iso = ch[3] if ch else ""
+    end_text = iso_to_msk_text(end_iso)
     stake = context.user_data.get('challenge_level')
     txt = (
         f"{picked_line}\n"
-        f"Результат будет: {deadline}\n"
+        f"Подведение итогов: {end_text}\n"
         f"Ваш уровень вызова: {stake} HC"
     )
     buttons = [
