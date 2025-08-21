@@ -282,6 +282,24 @@ def create_challenge(start_date: str, deadline: str, end_date: str, image_filena
             return datetime.datetime.fromisoformat(s)
         except Exception:
             return None
+    sd = _parse(start_date)
+    dl = _parse(deadline)
+    ed = _parse(end_date)
+    status = 'в ожидании'
+    if sd and dl and ed:
+        if sd <= now < dl:
+            status = 'активен'
+        elif dl <= now < ed:
+            status = 'в игре'
+        elif now >= ed:
+            status = 'завершен'
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            cur = conn.execute(
+                'INSERT INTO challenges (start_date, deadline, end_date, image_filename, status, image_file_id) VALUES (?, ?, ?, ?, ?, ?)',
+                (start_date, deadline, end_date, image_filename, status, image_file_id or "")
+            )
+            return cur.lastrowid
 
 # --- Менеджеры, зарегистрировавшие состав на тур ---
 def get_tour_managers(tour_id: int):
@@ -304,24 +322,6 @@ def get_tour_managers(tour_id: int):
             ''', (tour_id,)
         ).fetchall()
         return [dict(r) for r in rows]
-    sd = _parse(start_date)
-    dl = _parse(deadline)
-    ed = _parse(end_date)
-    status = 'в ожидании'
-    if sd and dl and ed:
-        if sd <= now < dl:
-            status = 'активен'
-        elif dl <= now < ed:
-            status = 'в игре'
-        elif now >= ed:
-            status = 'завершен'
-    with closing(sqlite3.connect(DB_NAME)) as conn:
-        with conn:
-            cur = conn.execute(
-                'INSERT INTO challenges (start_date, deadline, end_date, image_filename, status, image_file_id) VALUES (?, ?, ?, ?, ?, ?)',
-                (start_date, deadline, end_date, image_filename, status, image_file_id or "")
-            )
-            return cur.lastrowid
 
 def get_latest_challenge():
     with closing(sqlite3.connect(DB_NAME)) as conn:
