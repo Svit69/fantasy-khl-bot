@@ -58,8 +58,10 @@ from handlers.admin_handlers import (
     purge_tours_start, purge_tours_password, purge_tours_cancel, PURGE_WAIT_PASSWORD
 )
 
-ADD_NAME, ADD_POSITION, ADD_CLUB, ADD_NATION, ADD_AGE, ADD_PRICE = range(6)
-EDIT_NAME, EDIT_POSITION, EDIT_CLUB, EDIT_NATION, EDIT_AGE, EDIT_PRICE = range(6, 12)
+from handlers.admin_handlers import (
+    ADD_NAME, ADD_POSITION, ADD_CLUB, ADD_NATION, ADD_AGE, ADD_PRICE,
+    EDIT_NAME, EDIT_POSITION, EDIT_CLUB, EDIT_NATION, EDIT_AGE, EDIT_PRICE
+)
 
 # Настройка логирования: в файл и в консоль
 import sys
