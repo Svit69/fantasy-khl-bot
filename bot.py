@@ -306,6 +306,35 @@ if __name__ == '__main__':
             logger.error(f"[ERROR] in log_add_player_position: {str(e)}", exc_info=True)
             await update.message.reply_text("Произошла ошибка при обработке позиции игрока. Пожалуйста, попробуйте снова.")
             return ConversationHandler.END
+            
+    async def log_add_player_club(update, context):
+        logger.info(f"[log_add_player_club] Received club: {update.message.text}")
+        logger.info(f"[log_add_player_club] Current user_data: {context.user_data}")
+        logger.info(f"[log_add_player_club] Chat ID: {update.effective_chat.id}, User ID: {update.effective_user.id}")
+        
+        try:
+            # Log the current conversation state
+            current_state = await context.application.persistence.get_conversation('add_player_conversation', (update.effective_chat.id, update.effective_user.id))
+            logger.info(f"[log_add_player_club] Current conversation state: {current_state}")
+            
+            # Call the actual handler
+            logger.info("[log_add_player_club] Calling add_player_club...")
+            result = await add_player_club(update, context)
+            
+            # Log the result and updated state
+            logger.info(f"[log_add_player_club] add_player_club returned: {result}")
+            logger.info(f"[log_add_player_club] Updated user_data: {context.user_data}")
+            
+            # Verify the next state is valid
+            if result not in [ADD_NATION, ConversationHandler.END]:
+                logger.error(f"[log_add_player_club] Invalid state returned: {result}")
+                
+            return result
+            
+        except Exception as e:
+            logger.error(f"[ERROR] in log_add_player_club: {str(e)}", exc_info=True)
+            await update.message.reply_text("Произошла ошибка при обработке клуба игрока. Пожалуйста, попробуйте снова.")
+            return ConversationHandler.END
 
     # Определение ConversationHandler для добавления игрока
     add_player_conv = ConversationHandler(
@@ -716,17 +745,6 @@ if __name__ == '__main__':
         fallbacks=[],
     )
     app.add_handler(set_tour_roster_conv)
-
-    async def log_add_player_club(update, context):
-        logger.info(f"[add_player_club] Received club: {update.message.text}")
-        logger.info(f"[DEBUG] User data before club: {context.user_data}")
-        try:
-            result = await add_player_club(update, context)
-            logger.info(f"[DEBUG] add_player_club returned: {result}")
-            return result
-        except Exception as e:
-            logger.error(f"[ERROR] in add_player_club: {e}", exc_info=True)
-            raise
 
     async def log_add_player_nation(update, context):
         logger.info(f"[add_player_nation] Received nation: {update.message.text}")
