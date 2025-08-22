@@ -216,7 +216,7 @@ if __name__ == '__main__':
     persistence = PicklePersistence(
         filepath='bot_persistence.pickle',
         update_interval=5,
-        store_bot_data=True
+        single_file=True
     )
     
     # Добавляем логгирование для отладки
