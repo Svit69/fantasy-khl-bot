@@ -4,6 +4,7 @@ from config import ADMIN_ID
 import db
 import os
 import json
+import logging
 from utils import is_admin, send_message_to_users, IMAGES_DIR, TOUR_IMAGE_PATH_FILE, CHALLENGE_IMAGE_PATH_FILE, logger
 
 # --- Добавление игрока ---
@@ -220,13 +221,20 @@ async def add_image_shop_cancel(update, context):
 
 # --- Добавление игрока ---
 async def add_player_start(update, context):
+    logger.info("add_player_start called")
     if not await admin_only(update, context):
+        logger.warning("Admin check failed in add_player_start")
         return ConversationHandler.END
+    logger.info("Sending name prompt")
     await update.message.reply_text("Введите имя и фамилию игрока:")
+    logger.info(f"Returning ADD_NAME state: {ADD_NAME}")
     return ADD_NAME
 
 async def add_player_name(update, context):
+    logger.info(f"add_player_name called with text: {update.message.text}")
     context.user_data['name'] = (update.message.text or '').strip()
+    logger.info(f"Set name to: {context.user_data['name']}")
+    logger.info(f"Sending position prompt, will return ADD_POSITION: {ADD_POSITION}")
     await update.message.reply_text("Введите позицию (нападающий/защитник/вратарь):")
     return ADD_POSITION
 

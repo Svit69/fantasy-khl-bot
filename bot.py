@@ -42,6 +42,7 @@ from handlers.admin_handlers import (
     CHALLENGE_WAIT_IMAGE,
 )
 from handlers.admin_handlers import (
+    ADD_NAME, ADD_POSITION, ADD_CLUB, ADD_NATION, ADD_AGE, ADD_PRICE,
     add_player_start, add_player_name, add_player_position, add_player_club,
     add_player_nation, add_player_age, add_player_price, add_player_cancel, list_players, find_player,
     remove_player, edit_player_start, edit_player_name, edit_player_position, edit_player_club,
@@ -71,12 +72,24 @@ file_handler = logging.FileHandler('logs/bot.log', encoding='utf-8')
 file_handler.setFormatter(log_formatter)
 console_handler = logging.StreamHandler(sys.stdout)
 console_handler.setFormatter(log_formatter)
+
+# Настройка корневого логгера
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.DEBUG)
+root_logger.addHandler(file_handler)
+root_logger.addHandler(console_handler)
+
+# Логгер для этого модуля
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-logger.handlers = []  # Сбросить обработчики, если уже были
+logger.setLevel(logging.DEBUG)
 logger.addHandler(file_handler)
 logger.addHandler(console_handler)
 
+# Логгер для telegram
+logging.getLogger('telegram').setLevel(logging.INFO)
+logging.getLogger('httpx').setLevel(logging.WARNING)
+
+logger.info("=== Bot starting with enhanced logging ===")
 
 # Инициализация базы данных и создание директорий
 db.init_db()
@@ -200,13 +213,27 @@ if __name__ == '__main__':
         asyncio.create_task(utils.poll_subscription_reminders(app.bot, 3600))
 
     # Создаем приложение с persistence для сохранения состояний
-    persistence = PicklePersistence(filepath='bot_persistence.pickle')
-    app = Application.builder()\
-        .token(TELEGRAM_TOKEN)\
-        .persistence(persistence)\
-        .post_init(on_startup)\
-        .post_init(post_init_poll_payments)\
-        .build()
+    persistence = PicklePersistence(
+        filepath='bot_persistence.pickle',
+        update_interval=5,
+        store_chat_data=True,
+        store_user_data=True,
+        store_bot_data=True
+    )
+    
+    # Добавляем логгирование для отладки
+    logging.basicConfig(
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        level=logging.DEBUG
+    )
+    logger = logging.getLogger(__name__)
+    
+    app = (Application.builder()
+        .token(TELEGRAM_TOKEN)
+        .persistence(persistence)
+        .post_init(on_startup)
+        .post_init(post_init_poll_payments)
+        .build())
 
     # ЯВНЫЙ запуск poll_yookassa_payments для отладки
     import asyncio
@@ -215,6 +242,9 @@ if __name__ == '__main__':
     
     # Регистрация обработчиков
     app.add_handler(CommandHandler('start', start))
+    
+    # Регистрация ConversationHandler для добавления игрока
+    app.add_handler(add_player_conv)
 
 
     app.add_handler(CommandHandler('hc', hc))
@@ -578,17 +608,162 @@ if __name__ == '__main__':
     )
     app.add_handler(set_tour_roster_conv)
 
+     # Wrap handlers with detailed logging
+    async def log_add_player_start(update, context):
+        logger.info(f"[add_player_start] User {update.effective_user.id} started /add_player")
+        logger.info(f"[DEBUG] User data before start: {context.user_data}")
+        try:
+            result = await add_player_start(update, context)
+            logger.info(f"[DEBUG] add_player_start returned: {result}")
+            return result
+        except Exception as e:
+            logger.error(f"[ERROR] in add_player_start: {e}", exc_info=True)
+            raise
+
+    async def log_add_player_name(update, context):
+        logger.info(f"[log_add_player_name] Starting with message: {update.message.text}")
+        logger.info(f"[log_add_player_name] Current user_data: {context.user_data}")
+        logger.info(f"[log_add_player_name] Chat ID: {update.effective_chat.id}, User ID: {update.effective_user.id}")
+        
+        try:
+            # Log the current conversation state
+            current_state = await context.application.persistence.get_conversation('add_player_conversation', (update.effective_chat.id, update.effective_user.id))
+            logger.info(f"[log_add_player_name] Current conversation state: {current_state}")
+            
+            # Call the actual handler
+            logger.info("[log_add_player_name] Calling add_player_name...")
+            result = await add_player_name(update, context)
+            
+            # Log the result and updated state
+            logger.info(f"[log_add_player_name] add_player_name returned: {result}")
+            logger.info(f"[log_add_player_name] Updated user_data: {context.user_data}")
+            
+            # Verify the next state is valid
+            if result not in [ADD_POSITION, ConversationHandler.END]:
+                logger.error(f"[log_add_player_name] Invalid state returned: {result}")
+                
+            return result
+            
+        except Exception as e:
+            logger.error(f"[ERROR] in log_add_player_name: {str(e)}", exc_info=True)
+            await update.message.reply_text("Произошла ошибка при обработке имени игрока. Пожалуйста, попробуйте снова.")
+            return ConversationHandler.END
+
+    async def log_add_player_position(update, context):
+        logger.info(f"[log_add_player_position] Received position: {update.message.text}")
+        logger.info(f"[log_add_player_position] Current user_data: {context.user_data}")
+        logger.info(f"[log_add_player_position] Chat ID: {update.effective_chat.id}, User ID: {update.effective_user.id}")
+        
+        try:
+            # Log the current conversation state
+            current_state = await context.application.persistence.get_conversation('add_player_conversation', (update.effective_chat.id, update.effective_user.id))
+            logger.info(f"[log_add_player_position] Current conversation state: {current_state}")
+            
+            # Call the actual handler
+            logger.info("[log_add_player_position] Calling add_player_position...")
+            result = await add_player_position(update, context)
+            
+            # Log the result and updated state
+            logger.info(f"[log_add_player_position] add_player_position returned: {result}")
+            logger.info(f"[log_add_player_position] Updated user_data: {context.user_data}")
+            
+            # Verify the next state is valid
+            if result not in [ADD_CLUB, ConversationHandler.END]:
+                logger.error(f"[log_add_player_position] Invalid state returned: {result}")
+                
+            return result
+            
+        except Exception as e:
+            logger.error(f"[ERROR] in log_add_player_position: {str(e)}", exc_info=True)
+            await update.message.reply_text("Произошла ошибка при обработке позиции игрока. Пожалуйста, попробуйте снова.")
+            return ConversationHandler.END
+
+    async def log_add_player_club(update, context):
+        logger.info(f"[add_player_club] Received club: {update.message.text}")
+        logger.info(f"[DEBUG] User data before club: {context.user_data}")
+        try:
+            result = await add_player_club(update, context)
+            logger.info(f"[DEBUG] add_player_club returned: {result}")
+            return result
+        except Exception as e:
+            logger.error(f"[ERROR] in add_player_club: {e}", exc_info=True)
+            raise
+
+    async def log_add_player_nation(update, context):
+        logger.info(f"[add_player_nation] Received nation: {update.message.text}")
+        logger.info(f"[DEBUG] User data before nation: {context.user_data}")
+        try:
+            result = await add_player_nation(update, context)
+            logger.info(f"[DEBUG] add_player_nation returned: {result}")
+            return result
+        except Exception as e:
+            logger.error(f"[ERROR] in add_player_nation: {e}", exc_info=True)
+            raise
+        logger.info(f"[add_player_nation] Received nation: {update.message.text}")
+        return await add_player_nation(update, context)
+
+    async def log_add_player_age(update, context):
+        logger.info(f"[add_player_age] Received age: {update.message.text}")
+        logger.info(f"[DEBUG] User data before age: {context.user_data}")
+        try:
+            result = await add_player_age(update, context)
+            logger.info(f"[DEBUG] add_player_age returned: {result}")
+            return result
+        except Exception as e:
+            logger.error(f"[ERROR] in add_player_age: {e}", exc_info=True)
+            raise
+
+    async def log_add_player_price(update, context):
+        logger.info(f"[add_player_price] Received price: {update.message.text}")
+        logger.info(f"[DEBUG] User data before price: {context.user_data}")
+        try:
+            result = await add_player_price(update, context)
+            logger.info(f"[DEBUG] add_player_price returned: {result}")
+            return result
+        except Exception as e:
+            logger.error(f"[ERROR] in add_player_price: {e}", exc_info=True)
+            raise
+
     add_player_conv = ConversationHandler(
-        entry_points=[CommandHandler('add_player', add_player_start)],
+        entry_points=[
+            CommandHandler('add_player', log_add_player_start),
+            CommandHandler('addplayer', log_add_player_start),  # Альтернативная команда
+        ],
         states={
-            ADD_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_player_name)],
-            ADD_POSITION: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_player_position)],
-            ADD_CLUB: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_player_club)],
-            ADD_NATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_player_nation)],
-            ADD_AGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_player_age)],
-            ADD_PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_player_price)],
+            ADD_NAME: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, log_add_player_name),
+                CommandHandler('cancel', add_player_cancel)
+            ],
+            ADD_POSITION: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, log_add_player_position),
+                CommandHandler('cancel', add_player_cancel)
+            ],
+            ADD_CLUB: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, log_add_player_club),
+                CommandHandler('cancel', add_player_cancel)
+            ],
+            ADD_NATION: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, log_add_player_nation),
+                CommandHandler('cancel', add_player_cancel)
+            ],
+            ADD_AGE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, log_add_player_age),
+                CommandHandler('cancel', add_player_cancel)
+            ],
+            ADD_PRICE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, log_add_player_price),
+                CommandHandler('cancel', add_player_cancel)
+            ],
         },
-        fallbacks=[CommandHandler('cancel', add_player_cancel)],
+        fallbacks=[
+            CommandHandler('cancel', add_player_cancel),
+            MessageHandler(filters.ALL, lambda update, context: logger.warning(f"Unexpected message in conversation: {update.message.text}"))
+        ],
+        per_chat=True,
+        per_user=True,
+        per_message=False,
+        allow_reentry=True,
+        name="add_player_conversation"
     )
     app.add_handler(add_player_conv)
     app.add_handler(CommandHandler('list_players', list_players))
