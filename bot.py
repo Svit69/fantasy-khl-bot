@@ -238,12 +238,54 @@ if __name__ == '__main__':
     import utils
 
     
+    # Определение ConversationHandler для добавления игрока
+    add_player_conv = ConversationHandler(
+        entry_points=[
+            CommandHandler('add_player', log_add_player_start),
+            CommandHandler('addplayer', log_add_player_start),  # Альтернативная команда
+        ],
+        states={
+            ADD_NAME: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, log_add_player_name),
+                CommandHandler('cancel', add_player_cancel)
+            ],
+            ADD_POSITION: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, log_add_player_position),
+                CommandHandler('cancel', add_player_cancel)
+            ],
+            ADD_CLUB: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, log_add_player_club),
+                CommandHandler('cancel', add_player_cancel)
+            ],
+            ADD_NATION: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, log_add_player_nation),
+                CommandHandler('cancel', add_player_cancel)
+            ],
+            ADD_AGE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, log_add_player_age),
+                CommandHandler('cancel', add_player_cancel)
+            ],
+            ADD_PRICE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, log_add_player_price),
+                CommandHandler('cancel', add_player_cancel)
+            ],
+        },
+        fallbacks=[
+            CommandHandler('cancel', add_player_cancel),
+            MessageHandler(filters.ALL, lambda update, context: logger.warning(f"Unexpected message in conversation: {update.message.text}"))
+        ],
+        per_chat=True,
+        per_user=True,
+        per_message=False,
+        allow_reentry=True,
+        name="add_player_conversation"
+    )
+
     # Регистрация обработчиков
     app.add_handler(CommandHandler('start', start))
     
     # Регистрация ConversationHandler для добавления игрока
     app.add_handler(add_player_conv)
-
 
     app.add_handler(CommandHandler('hc', hc))
     app.add_handler(CommandHandler('referral', referral))
@@ -721,49 +763,6 @@ if __name__ == '__main__':
         except Exception as e:
             logger.error(f"[ERROR] in add_player_price: {e}", exc_info=True)
             raise
-
-    add_player_conv = ConversationHandler(
-        entry_points=[
-            CommandHandler('add_player', log_add_player_start),
-            CommandHandler('addplayer', log_add_player_start),  # Альтернативная команда
-        ],
-        states={
-            ADD_NAME: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, log_add_player_name),
-                CommandHandler('cancel', add_player_cancel)
-            ],
-            ADD_POSITION: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, log_add_player_position),
-                CommandHandler('cancel', add_player_cancel)
-            ],
-            ADD_CLUB: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, log_add_player_club),
-                CommandHandler('cancel', add_player_cancel)
-            ],
-            ADD_NATION: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, log_add_player_nation),
-                CommandHandler('cancel', add_player_cancel)
-            ],
-            ADD_AGE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, log_add_player_age),
-                CommandHandler('cancel', add_player_cancel)
-            ],
-            ADD_PRICE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, log_add_player_price),
-                CommandHandler('cancel', add_player_cancel)
-            ],
-        },
-        fallbacks=[
-            CommandHandler('cancel', add_player_cancel),
-            MessageHandler(filters.ALL, lambda update, context: logger.warning(f"Unexpected message in conversation: {update.message.text}"))
-        ],
-        per_chat=True,
-        per_user=True,
-        per_message=False,
-        allow_reentry=True,
-        name="add_player_conversation"
-    )
-    app.add_handler(add_player_conv)
     app.add_handler(CommandHandler('list_players', list_players))
     app.add_handler(CommandHandler('find_player', find_player))
     app.add_handler(CommandHandler('remove_player', remove_player))
