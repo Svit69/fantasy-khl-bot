@@ -237,7 +237,76 @@ if __name__ == '__main__':
     import asyncio
     import utils
 
-    
+    # Wrap handlers with detailed logging
+    async def log_add_player_start(update, context):
+        logger.info(f"[add_player_start] User {update.effective_user.id} started /add_player")
+        logger.info(f"[DEBUG] User data before start: {context.user_data}")
+        try:
+            result = await add_player_start(update, context)
+            logger.info(f"[DEBUG] add_player_start returned: {result}")
+            return result
+        except Exception as e:
+            logger.error(f"[ERROR] in add_player_start: {e}", exc_info=True)
+            raise
+
+    async def log_add_player_name(update, context):
+        logger.info(f"[log_add_player_name] Starting with message: {update.message.text}")
+        logger.info(f"[log_add_player_name] Current user_data: {context.user_data}")
+        logger.info(f"[log_add_player_name] Chat ID: {update.effective_chat.id}, User ID: {update.effective_user.id}")
+        
+        try:
+            # Log the current conversation state
+            current_state = await context.application.persistence.get_conversation('add_player_conversation', (update.effective_chat.id, update.effective_user.id))
+            logger.info(f"[log_add_player_name] Current conversation state: {current_state}")
+            
+            # Call the actual handler
+            logger.info("[log_add_player_name] Calling add_player_name...")
+            result = await add_player_name(update, context)
+            
+            # Log the result and updated state
+            logger.info(f"[log_add_player_name] add_player_name returned: {result}")
+            logger.info(f"[log_add_player_name] Updated user_data: {context.user_data}")
+            
+            # Verify the next state is valid
+            if result not in [ADD_POSITION, ConversationHandler.END]:
+                logger.error(f"[log_add_player_name] Invalid state returned: {result}")
+                
+            return result
+            
+        except Exception as e:
+            logger.error(f"[ERROR] in log_add_player_name: {str(e)}", exc_info=True)
+            await update.message.reply_text("Произошла ошибка при обработке имени игрока. Пожалуйста, попробуйте снова.")
+            return ConversationHandler.END
+
+    async def log_add_player_position(update, context):
+        logger.info(f"[log_add_player_position] Received position: {update.message.text}")
+        logger.info(f"[log_add_player_position] Current user_data: {context.user_data}")
+        logger.info(f"[log_add_player_position] Chat ID: {update.effective_chat.id}, User ID: {update.effective_user.id}")
+        
+        try:
+            # Log the current conversation state
+            current_state = await context.application.persistence.get_conversation('add_player_conversation', (update.effective_chat.id, update.effective_user.id))
+            logger.info(f"[log_add_player_position] Current conversation state: {current_state}")
+            
+            # Call the actual handler
+            logger.info("[log_add_player_position] Calling add_player_position...")
+            result = await add_player_position(update, context)
+            
+            # Log the result and updated state
+            logger.info(f"[log_add_player_position] add_player_position returned: {result}")
+            logger.info(f"[log_add_player_position] Updated user_data: {context.user_data}")
+            
+            # Verify the next state is valid
+            if result not in [ADD_CLUB, ConversationHandler.END]:
+                logger.error(f"[log_add_player_position] Invalid state returned: {result}")
+                
+            return result
+            
+        except Exception as e:
+            logger.error(f"[ERROR] in log_add_player_position: {str(e)}", exc_info=True)
+            await update.message.reply_text("Произошла ошибка при обработке позиции игрока. Пожалуйста, попробуйте снова.")
+            return ConversationHandler.END
+
     # Определение ConversationHandler для добавления игрока
     add_player_conv = ConversationHandler(
         entry_points=[
@@ -647,76 +716,6 @@ if __name__ == '__main__':
         fallbacks=[],
     )
     app.add_handler(set_tour_roster_conv)
-
-     # Wrap handlers with detailed logging
-    async def log_add_player_start(update, context):
-        logger.info(f"[add_player_start] User {update.effective_user.id} started /add_player")
-        logger.info(f"[DEBUG] User data before start: {context.user_data}")
-        try:
-            result = await add_player_start(update, context)
-            logger.info(f"[DEBUG] add_player_start returned: {result}")
-            return result
-        except Exception as e:
-            logger.error(f"[ERROR] in add_player_start: {e}", exc_info=True)
-            raise
-
-    async def log_add_player_name(update, context):
-        logger.info(f"[log_add_player_name] Starting with message: {update.message.text}")
-        logger.info(f"[log_add_player_name] Current user_data: {context.user_data}")
-        logger.info(f"[log_add_player_name] Chat ID: {update.effective_chat.id}, User ID: {update.effective_user.id}")
-        
-        try:
-            # Log the current conversation state
-            current_state = await context.application.persistence.get_conversation('add_player_conversation', (update.effective_chat.id, update.effective_user.id))
-            logger.info(f"[log_add_player_name] Current conversation state: {current_state}")
-            
-            # Call the actual handler
-            logger.info("[log_add_player_name] Calling add_player_name...")
-            result = await add_player_name(update, context)
-            
-            # Log the result and updated state
-            logger.info(f"[log_add_player_name] add_player_name returned: {result}")
-            logger.info(f"[log_add_player_name] Updated user_data: {context.user_data}")
-            
-            # Verify the next state is valid
-            if result not in [ADD_POSITION, ConversationHandler.END]:
-                logger.error(f"[log_add_player_name] Invalid state returned: {result}")
-                
-            return result
-            
-        except Exception as e:
-            logger.error(f"[ERROR] in log_add_player_name: {str(e)}", exc_info=True)
-            await update.message.reply_text("Произошла ошибка при обработке имени игрока. Пожалуйста, попробуйте снова.")
-            return ConversationHandler.END
-
-    async def log_add_player_position(update, context):
-        logger.info(f"[log_add_player_position] Received position: {update.message.text}")
-        logger.info(f"[log_add_player_position] Current user_data: {context.user_data}")
-        logger.info(f"[log_add_player_position] Chat ID: {update.effective_chat.id}, User ID: {update.effective_user.id}")
-        
-        try:
-            # Log the current conversation state
-            current_state = await context.application.persistence.get_conversation('add_player_conversation', (update.effective_chat.id, update.effective_user.id))
-            logger.info(f"[log_add_player_position] Current conversation state: {current_state}")
-            
-            # Call the actual handler
-            logger.info("[log_add_player_position] Calling add_player_position...")
-            result = await add_player_position(update, context)
-            
-            # Log the result and updated state
-            logger.info(f"[log_add_player_position] add_player_position returned: {result}")
-            logger.info(f"[log_add_player_position] Updated user_data: {context.user_data}")
-            
-            # Verify the next state is valid
-            if result not in [ADD_CLUB, ConversationHandler.END]:
-                logger.error(f"[log_add_player_position] Invalid state returned: {result}")
-                
-            return result
-            
-        except Exception as e:
-            logger.error(f"[ERROR] in log_add_player_position: {str(e)}", exc_info=True)
-            await update.message.reply_text("Произошла ошибка при обработке позиции игрока. Пожалуйста, попробуйте снова.")
-            return ConversationHandler.END
 
     async def log_add_player_club(update, context):
         logger.info(f"[add_player_club] Received club: {update.message.text}")
