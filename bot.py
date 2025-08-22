@@ -216,8 +216,6 @@ if __name__ == '__main__':
     persistence = PicklePersistence(
         filepath='bot_persistence.pickle',
         update_interval=5,
-        store_chat_data=True,
-        store_user_data=True,
         store_bot_data=True
     )
     
