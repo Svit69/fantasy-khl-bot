@@ -335,6 +335,93 @@ if __name__ == '__main__':
             logger.error(f"[ERROR] in log_add_player_club: {str(e)}", exc_info=True)
             await update.message.reply_text("Произошла ошибка при обработке клуба игрока. Пожалуйста, попробуйте снова.")
             return ConversationHandler.END
+            
+    async def log_add_player_nation(update, context):
+        logger.info(f"[log_add_player_nation] Received nation: {update.message.text}")
+        logger.info(f"[log_add_player_nation] Current user_data: {context.user_data}")
+        logger.info(f"[log_add_player_nation] Chat ID: {update.effective_chat.id}, User ID: {update.effective_user.id}")
+        
+        try:
+            # Log the current conversation state
+            current_state = await context.application.persistence.get_conversation('add_player_conversation', (update.effective_chat.id, update.effective_user.id))
+            logger.info(f"[log_add_player_nation] Current conversation state: {current_state}")
+            
+            # Call the actual handler
+            logger.info("[log_add_player_nation] Calling add_player_nation...")
+            result = await add_player_nation(update, context)
+            
+            # Log the result and updated state
+            logger.info(f"[log_add_player_nation] add_player_nation returned: {result}")
+            logger.info(f"[log_add_player_nation] Updated user_data: {context.user_data}")
+            
+            # Verify the next state is valid
+            if result not in [ADD_AGE, ConversationHandler.END]:
+                logger.error(f"[log_add_player_nation] Invalid state returned: {result}")
+                
+            return result
+            
+        except Exception as e:
+            logger.error(f"[ERROR] in log_add_player_nation: {str(e)}", exc_info=True)
+            await update.message.reply_text("Произошла ошибка при обработке национальности игрока. Пожалуйста, попробуйте снова.")
+            return ConversationHandler.END
+            
+    async def log_add_player_age(update, context):
+        logger.info(f"[log_add_player_age] Received age: {update.message.text}")
+        logger.info(f"[log_add_player_age] Current user_data: {context.user_data}")
+        logger.info(f"[log_add_player_age] Chat ID: {update.effective_chat.id}, User ID: {update.effective_user.id}")
+        
+        try:
+            # Log the current conversation state
+            current_state = await context.application.persistence.get_conversation('add_player_conversation', (update.effective_chat.id, update.effective_user.id))
+            logger.info(f"[log_add_player_age] Current conversation state: {current_state}")
+            
+            # Call the actual handler
+            logger.info("[log_add_player_age] Calling add_player_age...")
+            result = await add_player_age(update, context)
+            
+            # Log the result and updated state
+            logger.info(f"[log_add_player_age] add_player_age returned: {result}")
+            logger.info(f"[log_add_player_age] Updated user_data: {context.user_data}")
+            
+            # Verify the next state is valid
+            if result not in [ADD_PRICE, ConversationHandler.END]:
+                logger.error(f"[log_add_player_age] Invalid state returned: {result}")
+                
+            return result
+            
+        except Exception as e:
+            logger.error(f"[ERROR] in log_add_player_age: {str(e)}", exc_info=True)
+            await update.message.reply_text("Произошла ошибка при обработке возраста игрока. Пожалуйста, попробуйте снова.")
+            return ConversationHandler.END
+            
+    async def log_add_player_price(update, context):
+        logger.info(f"[log_add_player_price] Received price: {update.message.text}")
+        logger.info(f"[log_add_player_price] Current user_data: {context.user_data}")
+        logger.info(f"[log_add_player_price] Chat ID: {update.effective_chat.id}, User ID: {update.effective_user.id}")
+        
+        try:
+            # Log the current conversation state
+            current_state = await context.application.persistence.get_conversation('add_player_conversation', (update.effective_chat.id, update.effective_user.id))
+            logger.info(f"[log_add_player_price] Current conversation state: {current_state}")
+            
+            # Call the actual handler
+            logger.info("[log_add_player_price] Calling add_player_price...")
+            result = await add_player_price(update, context)
+            
+            # Log the result and updated state
+            logger.info(f"[log_add_player_price] add_player_price returned: {result}")
+            logger.info(f"[log_add_player_price] Updated user_data: {context.user_data}")
+            
+            # Verify the next state is valid
+            if result not in [ConversationHandler.END]:
+                logger.error(f"[log_add_player_price] Invalid state returned: {result}")
+                
+            return result
+            
+        except Exception as e:
+            logger.error(f"[ERROR] in log_add_player_price: {str(e)}", exc_info=True)
+            await update.message.reply_text("Произошла ошибка при обработке цены игрока. Пожалуйста, попробуйте снова.")
+            return ConversationHandler.END
 
     # Определение ConversationHandler для добавления игрока
     add_player_conv = ConversationHandler(
@@ -746,40 +833,6 @@ if __name__ == '__main__':
     )
     app.add_handler(set_tour_roster_conv)
 
-    async def log_add_player_nation(update, context):
-        logger.info(f"[add_player_nation] Received nation: {update.message.text}")
-        logger.info(f"[DEBUG] User data before nation: {context.user_data}")
-        try:
-            result = await add_player_nation(update, context)
-            logger.info(f"[DEBUG] add_player_nation returned: {result}")
-            return result
-        except Exception as e:
-            logger.error(f"[ERROR] in add_player_nation: {e}", exc_info=True)
-            raise
-        logger.info(f"[add_player_nation] Received nation: {update.message.text}")
-        return await add_player_nation(update, context)
-
-    async def log_add_player_age(update, context):
-        logger.info(f"[add_player_age] Received age: {update.message.text}")
-        logger.info(f"[DEBUG] User data before age: {context.user_data}")
-        try:
-            result = await add_player_age(update, context)
-            logger.info(f"[DEBUG] add_player_age returned: {result}")
-            return result
-        except Exception as e:
-            logger.error(f"[ERROR] in add_player_age: {e}", exc_info=True)
-            raise
-
-    async def log_add_player_price(update, context):
-        logger.info(f"[add_player_price] Received price: {update.message.text}")
-        logger.info(f"[DEBUG] User data before price: {context.user_data}")
-        try:
-            result = await add_player_price(update, context)
-            logger.info(f"[DEBUG] add_player_price returned: {result}")
-            return result
-        except Exception as e:
-            logger.error(f"[ERROR] in add_player_price: {e}", exc_info=True)
-            raise
     app.add_handler(CommandHandler('list_players', list_players))
     app.add_handler(CommandHandler('find_player', find_player))
     app.add_handler(CommandHandler('remove_player', remove_player))
