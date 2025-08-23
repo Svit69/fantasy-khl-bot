@@ -4,6 +4,7 @@ Configuration.configure(YOOKASSA_SHOP_ID, YOOKASSA_SECRET_KEY)
 print("[DEBUG] Ключи установлены через Configuration.configure:", Configuration.account_id, Configuration.secret_key)
 import os
 import logging
+import logging.handlers
 import asyncio
 
 from telegram import Update, InputFile, BotCommand, BotCommandScopeDefault, BotCommandScopeChat
@@ -219,11 +220,41 @@ if __name__ == '__main__':
         single_file=True
     )
     
-    # Добавляем логгирование для отладки
-    logging.basicConfig(
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        level=logging.DEBUG
+    # Настройка логгирования
+    log_formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
     )
+    
+    # Консольный вывод
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(log_formatter)
+    
+    # Файловый вывод с ротацией
+    os.makedirs('logs', exist_ok=True)
+    file_handler = logging.handlers.RotatingFileHandler(
+        'logs/bot.log',
+        maxBytes=5*1024*1024,  # 5 MB
+        backupCount=5,
+        encoding='utf-8'
+    )
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(log_formatter)
+    
+    # Настройка корневого логгера
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)
+    root_logger.addHandler(console_handler)
+    root_logger.addHandler(file_handler)
+    
+    # Установка уровня логирования для библиотек
+    logging.getLogger('httpcore').setLevel(logging.WARNING)
+    logging.getLogger('httpx').setLevel(logging.WARNING)
+    logging.getLogger('telegram').setLevel(logging.INFO)
+    
+    logger = logging.getLogger(__name__)
+    logger.info("Логгирование инициализировано")
     logger = logging.getLogger(__name__)
     
     app = (Application.builder()
