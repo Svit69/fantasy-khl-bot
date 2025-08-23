@@ -286,17 +286,29 @@ if __name__ == '__main__':
         logger.info(f"[log_add_player_name] Chat ID: {update.effective_chat.id}, User ID: {update.effective_user.id}")
         
         try:
-            # Log the current conversation state
-            current_state = await context.application.persistence.get_conversation('add_player_conversation', (update.effective_chat.id, update.effective_user.id))
-            logger.info(f"[log_add_player_name] Current conversation state: {current_state}")
+            # Safely get conversation state
+            current_state = None
+            try:
+                conversations = await context.application.persistence.get_conversations('add_player')
+                if conversations:
+                    current_state = conversations.get((update.effective_chat.id, update.effective_user.id))
+                logger.info(f"[log_add_player_name] Current conversation state: {current_state}")
+            except Exception as conv_error:
+                logger.warning(f"[log_add_player_name] Could not get conversation state: {conv_error}")
             
             # Call the actual handler
             logger.info("[log_add_player_name] Calling add_player_name...")
-            result = await add_player_name(update, context)
-            
-            # Log the result and updated state
-            logger.info(f"[log_add_player_name] add_player_name returned: {result}")
-            logger.info(f"[log_add_player_name] Updated user_data: {context.user_data}")
+            try:
+                result = await add_player_name(update, context)
+                logger.info(f"[log_add_player_name] add_player_name returned: {result}")
+                return result
+            except Exception as handler_error:
+                logger.error(f"[log_add_player_name] Error in add_player_name: {handler_error}", exc_info=True)
+                await update.message.reply_text(
+                    "Произошла ошибка при обработке имени игрока. "
+                    "Пожалуйста, попробуйте еще раз или начните заново командой /add_player."
+                )
+                return ADD_NAME  # Return to name input state
             
             # Verify the next state is valid
             if result not in [ADD_POSITION, ConversationHandler.END]:
