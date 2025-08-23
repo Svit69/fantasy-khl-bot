@@ -231,12 +231,24 @@ async def add_player_start(update, context):
     return ADD_NAME
 
 async def add_player_name(update, context):
-    logger.info(f"add_player_name called with text: {update.message.text}")
-    context.user_data['name'] = (update.message.text or '').strip()
-    logger.info(f"Set name to: {context.user_data['name']}")
-    logger.info(f"Sending position prompt, will return ADD_POSITION: {ADD_POSITION}")
-    await update.message.reply_text("Введите позицию (нападающий/защитник/вратарь):")
-    return ADD_POSITION
+    try:
+        logger.info(f"add_player_name called with text: {update.message.text}")
+        if not update.message or not update.message.text or not update.message.text.strip():
+            await update.message.reply_text("Пожалуйста, введите корректное имя игрока.")
+            return ADD_NAME
+            
+        context.user_data['name'] = update.message.text.strip()
+        logger.info(f"Set name to: {context.user_data['name']}")
+        logger.info(f"Sending position prompt, will return ADD_POSITION: {ADD_POSITION}")
+        
+        await update.message.reply_text("Введите позицию (нападающий/защитник/вратарь):")
+        return ADD_POSITION
+        
+    except Exception as e:
+        logger.error(f"Error in add_player_name: {str(e)}", exc_info=True)
+        if update and update.message:
+            await update.message.reply_text("Произошла ошибка при обработке имени игрока. Пожалуйста, попробуйте еще раз.")
+        return ADD_NAME  # Возвращаемся к вводу имени
 
 async def add_player_position(update, context):
     context.user_data['position'] = (update.message.text or '').strip()
