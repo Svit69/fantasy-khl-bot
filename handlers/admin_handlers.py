@@ -6,6 +6,9 @@ import os
 import json
 import logging
 from utils import is_admin, send_message_to_users, IMAGES_DIR, TOUR_IMAGE_PATH_FILE, CHALLENGE_IMAGE_PATH_FILE, logger
+from telegram import Update, Bot
+from telegram.ext import ContextTypes, CommandHandler, MessageHandler, filters, ConversationHandler
+import asyncio
 
 # --- Добавление игрока ---
 ADD_NAME, ADD_POSITION, ADD_CLUB, ADD_NATION, ADD_AGE, ADD_PRICE = range(6)
@@ -1161,6 +1164,83 @@ async def list_tours(update, context):
             f"Статус: {t[5]} | Победители: {winners}\n"
         )
     await update.message.reply_text(msg)
+
+# --- Push Notifications ---
+SEND_PUSH = 100
+
+async def send_push_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Начало процесса отправки push-уведомления"""
+    if not await admin_only(update, context):
+        return ConversationHandler.END
+        
+    await update.message.reply_text(
+        "✉️ Введите текст push-уведомления, которое будет отправлено всем пользователям бота:\n"
+        "(Вы можете использовать HTML-разметку: <b>жирный</b>, <i>курсив</i>, <a href=\"URL\">ссылка</a>)\n\n"
+        "Для отмены введите /cancel"
+    )
+    return SEND_PUSH
+
+async def send_push_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отправка push-уведомления всем пользователям"""
+    message_text = update.message.text
+    users = db.get_all_users()
+    
+    if not users:
+        await update.message.reply_text("❌ В базе данных нет пользователей.")
+        return ConversationHandler.END
+    
+    sent_count = 0
+    failed_count = 0
+    
+    progress_msg = await update.message.reply_text(f"🔄 Отправка уведомления {len(users)} пользователям...")
+    
+    for user in users:
+        try:
+            user_id = user[0] if isinstance(user, (tuple, list)) else user.get('telegram_id')
+            if not user_id:
+                continue
+                
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=message_text,
+                parse_mode='HTML',
+                disable_web_page_preview=True
+            )
+            sent_count += 1
+            
+            # Не спамим слишком быстро, чтобы не получить ограничение от Telegram
+            if sent_count % 20 == 0:
+                await asyncio.sleep(1)
+                await progress_msg.edit_text(f"🔄 Отправлено {sent_count} из {len(users)} уведомлений...")
+                
+        except Exception as e:
+            logger.error(f"Ошибка при отправке уведомления пользователю {user_id}: {e}")
+            failed_count += 1
+    
+    await progress_msg.edit_text(
+        f"✅ Рассылка завершена!\n"
+        f"• Отправлено: {sent_count}\n"
+        f"• Не удалось отправить: {failed_count}\n\n"
+        f"Текст уведомления:\n{message_text}"
+    )
+    return ConversationHandler.END
+
+async def send_push_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отмена отправки push-уведомления"""
+    await update.message.reply_text("❌ Отправка уведомлений отменена.")
+    return ConversationHandler.END
+
+# Регистрация обработчика для команды /push
+push_conv = ConversationHandler(
+    entry_points=[CommandHandler("push", send_push_start)],
+    states={
+        SEND_PUSH: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, send_push_process),
+            CommandHandler("cancel", send_push_cancel)
+        ]
+    },
+    fallbacks=[CommandHandler("cancel", send_push_cancel)]
+)
 
 # --- Активация тура админом ---
 async def activate_tour(update, context):
