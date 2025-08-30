@@ -4,84 +4,11 @@ from telegram.ext import ContextTypes
 from config import ADMIN_ID
 import os
 
-YOOKASSA_SHOP_ID = "1141033"
-YOOKASSA_SECRET_KEY = "test_NnIZ_gFbddTpDQQNphx0KuZFqBWHd6PVoB1KxVtWOHw"
-SUBSCRIPTION_AMOUNT = 299
-
-
-def create_yookassa_payment(user_id: int):
-    import sys
-    print("[DEBUG] Модуль configuration:", sys.modules.get('yookassa.configuration'))
-    print("[DEBUG] Модуль Payment:", sys.modules.get('yookassa.payment'))
-    print("[DEBUG] Модуль client:", sys.modules.get('yookassa.client'))
-    print("[DEBUG] Модуль yookassa:", sys.modules.get('yookassa'))
-    from yookassa import Configuration
-    print("[DEBUG] Ключи внутри функции:", Configuration.account_id, Configuration.secret_key)
-    print("[DEBUG] Импорт Payment внутри функции create_yookassa_payment")
-    from yookassa import Payment
-    print("[DEBUG] Перед Payment.create")
-    payment = Payment.create({
-        "amount": {
-            "value": f"{SUBSCRIPTION_AMOUNT}.00",
-            "currency": "RUB"
-        },
-        "confirmation": {
-            "type": "redirect",
-            "return_url": "https://t.me/khl_draft_bot"
-        },
-        "capture": True,
-        "description": f"Подписка на Fantasy KHL для user_{user_id}",
-        "metadata": {"user_id": str(user_id)}
-    })
-    from db import save_payment_id
-    save_payment_id(user_id, payment.id, status='pending')
-    return payment.confirmation.confirmation_url, payment.id
+SUBSCRIPTION_PRICE_STARS = 299
 
 import db
 import datetime
 import asyncio
-
-async def poll_yookassa_payments(bot, interval=60):
-    print("[DEBUG] poll_yookassa_payments started")
-    from yookassa import Payment
-    import db
-    while True:
-        try:
-            pending = db.get_pending_payments()
-            print("[DEBUG] pending payments:", pending)
-            for payment_id, user_id in pending:
-                payment = Payment.find_one(payment_id)
-                print(f"[DEBUG] payment_id={payment_id}, status={payment.status}")
-                if payment.status == "succeeded":
-                    # Продлить подписку: отталкиваемся от максимума между текущей датой и текущим paid_until
-                    try:
-                        current = None
-                        sub = db.get_subscription(user_id)  # (user_id, paid_until, last_payment_id)
-                        if sub and sub[1]:
-                            try:
-                                current = datetime.datetime.fromisoformat(sub[1])
-                            except Exception:
-                                current = None
-                        base = datetime.datetime.utcnow()
-                        if current and current > base:
-                            base = current
-                        new_paid_until = base + datetime.timedelta(days=31)
-                    except Exception:
-                        new_paid_until = datetime.datetime.utcnow() + datetime.timedelta(days=31)
-
-                    db.add_or_update_subscription(user_id, new_paid_until.isoformat(), payment_id)
-                    db.update_payment_status(payment_id, "succeeded")
-                    try:
-                        await bot.send_message(
-                            chat_id=user_id,
-                            text=f"✅ Оплата прошла. Подписка активна до {new_paid_until.strftime('%d.%m.%Y %H:%M')} (MSK)."
-                        )
-                    except Exception as e:
-                        print(f"Не удалось уведомить пользователя {user_id}: {e}")
-        except Exception as e:
-            print(f"Ошибка при polling ЮKassa: {e}")
-        await asyncio.sleep(interval)
-
 
 async def poll_subscription_reminders(bot, interval=3600):
     """Периодически проверяет подписки и отправляет напоминания:

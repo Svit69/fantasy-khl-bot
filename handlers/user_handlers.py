@@ -1,4 +1,4 @@
-from telegram import Update, InputFile, ReplyKeyboardMarkup, MessageEntity, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import Update, InputFile, ReplyKeyboardMarkup, MessageEntity, InlineKeyboardMarkup, InlineKeyboardButton, LabeledPrice
 from telegram.error import BadRequest
 from telegram.constants import MessageEntityType
 from telegram.ext import ContextTypes, ConversationHandler
@@ -124,12 +124,9 @@ async def referral(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    from utils import create_yookassa_payment
+    from utils import SUBSCRIPTION_PRICE_STARS
+    from config import PAYMENT_PROVIDER_TOKEN
     user = update.effective_user
-    payment_url, payment_id = create_yookassa_payment(user.id)
-    # Сохраняем payment_id в БД (можно добавить функцию)
-    # db.save_payment_id(user.id, payment_id)
-    # Проверим статус подписки и дату окончания
     end_line = ""
     try:
         from db import is_subscription_active, get_subscription
@@ -159,13 +156,57 @@ async def subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     text = (
         f"💳 <b>Подписка на Fantasy KHL</b>\n\n"
-        f"Стоимость: <b>299 руб/месяц</b>"
+        f"Стоимость: <b>{SUBSCRIPTION_PRICE_STARS} ⭐️/месяц</b>"
         f"{end_line}\n\n"
-        f"Нажмите кнопку ниже для оплаты через ЮKassa. После успешной оплаты подписка активируется автоматически."
+        "Нажмите кнопку ниже для оплаты через Telegram Stars. После успешной оплаты подписка активируется автоматически."
         f"{benefits}"
     )
-    keyboard = [[InlineKeyboardButton('Оплатить 299₽ через ЮKassa', url=payment_url)]]
-    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+    await update.message.reply_text(text, parse_mode="HTML")
+
+    prices = [LabeledPrice("Подписка на месяц", SUBSCRIPTION_PRICE_STARS * 100)]
+    await context.bot.send_invoice(
+        chat_id=user.id,
+        title="Подписка на Fantasy KHL",
+        description="Доступ на месяц",
+        payload=f"sub_{user.id}",
+        provider_token=PAYMENT_PROVIDER_TOKEN,
+        currency="XTR",
+        prices=prices,
+    )
+
+
+async def precheckout_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Подтверждение предварительного запроса на оплату."""
+    await update.pre_checkout_query.answer(ok=True)
+
+
+async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обработка успешной оплаты Telegram Stars."""
+    from db import get_subscription, add_or_update_subscription
+    import datetime
+
+    user_id = update.effective_user.id
+    payment = update.message.successful_payment
+    payment_id = payment.telegram_payment_charge_id
+
+    try:
+        current = None
+        sub = get_subscription(user_id)
+        if sub and sub[1]:
+            try:
+                current = datetime.datetime.fromisoformat(sub[1])
+            except Exception:
+                current = None
+        base = datetime.datetime.utcnow()
+        if current and current > base:
+            base = current
+        new_paid_until = base + datetime.timedelta(days=31)
+        add_or_update_subscription(user_id, new_paid_until.isoformat(), payment_id)
+        await update.message.reply_text(
+            f"✅ Оплата прошла. Подписка активна до {new_paid_until.strftime('%d.%m.%Y %H:%M')} (MSK)."
+        )
+    except Exception:
+        await update.message.reply_text("Не удалось обработать оплату. Свяжитесь с поддержкой.")
 
 
 # --- TOURS LIST (/tours) ---

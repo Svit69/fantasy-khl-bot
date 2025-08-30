@@ -1,7 +1,3 @@
-from yookassa import Configuration
-from utils import YOOKASSA_SHOP_ID, YOOKASSA_SECRET_KEY
-Configuration.configure(YOOKASSA_SHOP_ID, YOOKASSA_SECRET_KEY)
-print("[DEBUG] Ключи установлены через Configuration.configure:", Configuration.account_id, Configuration.secret_key)
 import os
 import logging
 import logging.handlers
@@ -9,7 +5,7 @@ import asyncio
 
 from telegram import Update, InputFile, BotCommand, BotCommandScopeDefault, BotCommandScopeChat
 from telegram.ext import PicklePersistence
-from telegram.ext import Application, CommandHandler, ContextTypes, ConversationHandler, MessageHandler, CallbackQueryHandler, filters
+from telegram.ext import Application, CommandHandler, ContextTypes, ConversationHandler, MessageHandler, CallbackQueryHandler, PreCheckoutQueryHandler, filters
 import httpx
 
 from config import TELEGRAM_TOKEN, ADMIN_ID
@@ -19,7 +15,7 @@ from handlers.user_handlers import start, hc, IMAGES_DIR, \
     tour_start, tour_forward_1, tour_forward_2, tour_forward_3, \
     tour_defender_1, tour_defender_2, tour_goalie, tour_captain, \
     tour_forward_callback, tour_defender_callback, tour_goalie_callback, \
-    restart_tour_callback, tour_captain_callback, rules, referral, subscribe, \
+    restart_tour_callback, tour_captain_callback, rules, referral, subscribe, precheckout_callback, successful_payment, \
     premium_add_pool_callback, premium_team_input, premium_position_selected, \
     challenge_command, challenge_level_callback, \
     challenge_open_callback, challenge_info_callback, challenge_build_callback, \
@@ -205,11 +201,9 @@ if __name__ == '__main__':
         asyncio.events._get_event_loop = asyncio.get_event_loop
 
     # Создание и настройка приложения    
-    async def post_init_poll_payments(app):
-        print("[DEBUG] post_init_poll_payments called")
-        import utils
-        import asyncio
-        asyncio.create_task(utils.poll_yookassa_payments(app.bot, 60))
+    async def post_init(app):
+        await on_startup(app)
+        import utils, asyncio
         # Запускаем напоминания о подписке (каждый час)
         asyncio.create_task(utils.poll_subscription_reminders(app.bot, 3600))
 
@@ -260,13 +254,8 @@ if __name__ == '__main__':
     app = (Application.builder()
         .token(TELEGRAM_TOKEN)
         .persistence(persistence)
-        .post_init(on_startup)
-        .post_init(post_init_poll_payments)
+        .post_init(post_init)
         .build())
-
-    # ЯВНЫЙ запуск poll_yookassa_payments для отладки
-    import asyncio
-    import utils
 
     # Wrap handlers with detailed logging
     async def log_add_player_start(update, context):
@@ -549,6 +538,8 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('referral', referral))
     app.add_handler(CommandHandler('show_users', show_users))  # Только для админа
     app.add_handler(CommandHandler('subscribe', subscribe))
+    app.add_handler(PreCheckoutQueryHandler(precheckout_callback))
+    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
     app.add_handler(CommandHandler('shop', shop))
     app.add_handler(CallbackQueryHandler(shop_item_callback, pattern=r"^shop_item_\d+$"))
     app.add_handler(CommandHandler('challenge', challenge_command))

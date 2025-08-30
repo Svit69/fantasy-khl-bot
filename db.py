@@ -3,41 +3,6 @@ from contextlib import closing
 
 DB_NAME = 'fantasy_khl.db'
 
-# --- Новая таблица для платежей ЮKassa ---
-def init_payments_table():
-    with closing(sqlite3.connect(DB_NAME)) as conn:
-        with conn:
-            conn.execute('''
-                CREATE TABLE IF NOT EXISTS yookassa_payments (
-                    payment_id TEXT PRIMARY KEY,
-                    user_id INTEGER,
-                    status TEXT,
-                    created_at TEXT
-                )
-            ''')
-
-def save_payment_id(user_id, payment_id, status='pending'):
-    import datetime
-    with closing(sqlite3.connect(DB_NAME)) as conn:
-        with conn:
-            conn.execute(
-                'INSERT OR IGNORE INTO yookassa_payments (payment_id, user_id, status, created_at) VALUES (?, ?, ?, ?)',
-                (payment_id, user_id, status, datetime.datetime.utcnow().isoformat())
-            )
-
-def update_payment_status(payment_id, status):
-    with closing(sqlite3.connect(DB_NAME)) as conn:
-        with conn:
-            conn.execute('UPDATE yookassa_payments SET status = ? WHERE payment_id = ?', (status, payment_id))
-
-def get_pending_payments():
-    with closing(sqlite3.connect(DB_NAME)) as conn:
-        with conn:
-            return conn.execute('SELECT payment_id, user_id FROM yookassa_payments WHERE status = "pending"').fetchall()
-
-
-DB_NAME = 'fantasy_khl.db'
-
 def init_db():
     with closing(sqlite3.connect(DB_NAME)) as conn:
         with conn:
