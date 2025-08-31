@@ -891,7 +891,10 @@ if __name__ == '__main__':
     app.add_handler(CallbackQueryHandler(challenge_cancel_callback, pattern=r"^challenge_cancel$"))
     app.add_handler(CallbackQueryHandler(challenge_reshuffle_callback, pattern=r"^challenge_reshuffle$"))
     # Обработчик ввода названия команды для челленджа
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, challenge_team_input))
+    # Do not block other handlers (e.g., admin conversations) when catching free-text
+    # for challenge team input. This prevents it from swallowing messages intended
+    # for ConversationHandlers like /create_tour_full state machine.
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, challenge_team_input, block=False))
 
     # ConversationHandler для установки бюджета
     set_budget_conv = ConversationHandler(
