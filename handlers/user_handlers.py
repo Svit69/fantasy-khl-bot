@@ -1488,6 +1488,16 @@ async def premium_position_selected(update: Update, context: ContextTypes.DEFAUL
         print(f"[DEBUG] premium_position_selected: team='{team_text}', found={len(filtered)} players in DB (excluding tour roster), left={left}")
         if not filtered:
             await query.message.reply_text("РџРѕ Р·Р°РґР°РЅРЅС‹Рј С„РёР»СЊС‚СЂР°Рј РёРіСЂРѕРєРѕРІ РЅРµ РЅР°Р№РґРµРЅРѕ. РР·РјРµРЅРёС‚Рµ РєРѕРјР°РЅРґСѓ РёР»Рё РїРѕР·РёС†РёСЋ.")
+            # Показать список доступных команд для подсказки
+            try:
+                clubs = sorted({str(p[3]).strip() for p in all_players if (p and len(p) > 3 and p[3])})
+                if clubs:
+                    clubs_text = "\n".join(clubs)
+                    await query.message.reply_text("Мы не нашли вашу команду по вашему запросу. Может вы имели ввиду одну из этих:\n\n" + clubs_text)
+                else:
+                    await query.message.reply_text("Мы не нашли вашу команду по вашему запросу.")
+            except Exception:
+                await query.message.reply_text("Мы не нашли вашу команду по вашему запросу.")
             return next_state
         # РџРѕСЃС‚СЂРѕРёРј РєР»Р°РІРёР°С‚СѓСЂСѓ
         from telegram import InlineKeyboardMarkup, InlineKeyboardButton
