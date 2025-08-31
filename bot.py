@@ -894,7 +894,8 @@ if __name__ == '__main__':
     # Do not block other handlers (e.g., admin conversations) when catching free-text
     # for challenge team input. This prevents it from swallowing messages intended
     # for ConversationHandlers like /create_tour_full state machine.
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, challenge_team_input, block=False))
+    # Place in a later group so conversation handlers process text first
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, challenge_team_input, block=False), group=1)
 
     # ConversationHandler для установки бюджета
     set_budget_conv = ConversationHandler(
