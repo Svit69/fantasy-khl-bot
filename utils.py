@@ -8,7 +8,7 @@ YOOKASSA_SHOP_ID = "1141033"
 YOOKASSA_SECRET_KEY = "test_NnIZ_gFbddTpDQQNphx0KuZFqBWHd6PVoB1KxVtWOHw"
 SUBSCRIPTION_AMOUNT = 299
 # Stars price (XTR). Can be overridden via env SUBSCRIPTION_STARS
-SUBSCRIPTION_STARS = int(os.getenv('SUBSCRIPTION_STARS', '299'))
+SUBSCRIPTION_STARS = int(os.getenv('SUBSCRIPTION_STARS', '199'))
 
 
 def create_yookassa_payment(user_id: int):
