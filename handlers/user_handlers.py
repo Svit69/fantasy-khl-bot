@@ -1,4 +1,4 @@
-from telegram import Update, InputFile, ReplyKeyboardMarkup, MessageEntity, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import Update, InputFile, ReplyKeyboardMarkup, MessageEntity, InlineKeyboardMarkup, InlineKeyboardButton, LabeledPrice
 from telegram.error import BadRequest
 from telegram.constants import MessageEntityType
 from telegram.ext import ContextTypes, ConversationHandler
@@ -166,6 +166,129 @@ async def subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
     keyboard = [[InlineKeyboardButton('Оплатить 299₽ через ЮKassa', url=payment_url)]]
     await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+
+# --- Telegram Stars payments ---
+
+async def subscribe_stars(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Оформление подписки через Telegram Stars (invoice)."""
+    user = update.effective_user
+    chat_id = update.effective_chat.id
+
+    # Информация о текущей подписке, если активна
+    end_line = ""
+    try:
+        from db import is_subscription_active, get_subscription
+        import datetime
+        if is_subscription_active(user.id):
+            row = get_subscription(user.id)  # (user_id, paid_until, last_payment_id)
+            pu = row[1] if row else None
+            dt = None
+            try:
+                dt = datetime.datetime.fromisoformat(pu) if pu else None
+            except Exception:
+                dt = None
+            if dt:
+                local_dt = dt.astimezone() if dt.tzinfo else dt
+                end_line = f"\n<b>Текущая подписка активна</b> до: <b>{local_dt.strftime('%d.%m.%Y %H:%M')}</b>"
+    except Exception:
+        pass
+
+    # Формируем invoice для Telegram Stars
+    from utils import SUBSCRIPTION_STARS
+    title = "Подписка Fantasy KHL — 1 месяц"
+    description = (
+        "Доступ к премиум-функциям и бонусам в боте." + end_line
+    )
+    payload = f"sub_{user.id}"
+    prices = [LabeledPrice(label="Подписка на 1 месяц", amount=int(SUBSCRIPTION_STARS))]
+
+    # Отправляем invoice: currency XTR — оплата Telegram Stars
+    await context.bot.send_invoice(
+        chat_id=chat_id,
+        title=title,
+        description=description,
+        payload=payload,
+        provider_token="XTR",
+        currency="XTR",
+        prices=prices,
+        start_parameter="subscribe"
+    )
+
+    # Поясняющее сообщение
+    try:
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=(
+                "Нажмите кнопку Оплатить в счёте выше, чтобы завершить оплату через Telegram Stars.\n"
+                "После успешной оплаты подписка активируется автоматически."
+            )
+        )
+    except Exception:
+        pass
+
+
+async def precheckout_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Подтверждаем предчек-аут для счёта (в т.ч. для Stars)."""
+    try:
+        query = update.pre_checkout_query
+    except AttributeError:
+        return
+    try:
+        await query.answer(ok=True)
+    except Exception:
+        # В случае ошибки пробуем отклонить с пояснением
+        try:
+            await query.answer(ok=False, error_message="Не удалось подтвердить оплату. Попробуйте позже.")
+        except Exception:
+            pass
+
+
+async def successful_payment_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обработка успешной оплаты: активируем/продлеваем подписку."""
+    try:
+        sp = update.message.successful_payment if getattr(update, 'message', None) else None
+        if not sp:
+            return
+        import datetime
+        user = update.effective_user
+        from db import get_subscription, add_or_update_subscription
+
+        # Продление на 31 день от текущей даты или даты окончания активной подписки
+        base = datetime.datetime.utcnow()
+        try:
+            current = None
+            sub = get_subscription(user.id)
+            if sub and sub[1]:
+                try:
+                    current = datetime.datetime.fromisoformat(sub[1])
+                except Exception:
+                    current = None
+            if current and current > base:
+                base = current
+        except Exception:
+            pass
+        new_paid_until = base + datetime.timedelta(days=31)
+
+        # Сохраняем идентификатор платежа из Telegram
+        last_payment_id = None
+        try:
+            last_payment_id = getattr(sp, 'telegram_payment_charge_id', None) or getattr(sp, 'provider_payment_charge_id', None)
+        except Exception:
+            last_payment_id = None
+        last_payment_id = f"stars:{last_payment_id or ''}"
+
+        add_or_update_subscription(user.id, new_paid_until.isoformat(), last_payment_id)
+
+        local_dt = new_paid_until.astimezone() if new_paid_until.tzinfo else new_paid_until
+        await update.message.reply_text(
+            f"Спасибо! Оплата получена. Подписка активна до {local_dt.strftime('%d.%m.%Y %H:%M')} (MSK)."
+        )
+    except Exception:
+        try:
+            await update.message.reply_text("Оплата успешно прошла, но произошла ошибка при активации. Свяжитесь с админом.")
+        except Exception:
+            pass
 
 
 # --- TOURS LIST (/tours) ---

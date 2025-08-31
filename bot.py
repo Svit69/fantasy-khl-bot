@@ -1,6 +1,8 @@
-from yookassa import Configuration
-from utils import YOOKASSA_SHOP_ID, YOOKASSA_SECRET_KEY
-Configuration.configure(YOOKASSA_SHOP_ID, YOOKASSA_SECRET_KEY)
+"""YooKassa integration removed; using Telegram Stars."""
+# Backward-compat shim to avoid NameError in legacy debug print below
+class Configuration:
+    account_id = None
+    secret_key = None
 print("[DEBUG] Ключи установлены через Configuration.configure:", Configuration.account_id, Configuration.secret_key)
 import os
 import logging
@@ -27,6 +29,7 @@ from handlers.user_handlers import start, hc, IMAGES_DIR, \
     challenge_cancel_callback, challenge_reshuffle_callback, \
     tours, tour_open_callback, tour_build_callback
 from handlers.user_handlers import shop, shop_item_callback
+from handlers.user_handlers import subscribe_stars, precheckout_callback, successful_payment_handler
 from handlers.admin_handlers import addhc, send_results, show_users
 from handlers.admin_handlers import list_challenges, delete_challenge_cmd
 from handlers.admin_handlers import challenge_rosters_cmd
@@ -192,8 +195,7 @@ async def on_startup(app):
 
 
 if __name__ == '__main__':
-    from db import init_payments_table, init_referrals_table
-    init_payments_table()
+    from db import init_referrals_table
     init_referrals_table()
     import platform
     import sys
@@ -209,7 +211,7 @@ if __name__ == '__main__':
         print("[DEBUG] post_init_poll_payments called")
         import utils
         import asyncio
-        asyncio.create_task(utils.poll_yookassa_payments(app.bot, 60))
+        # YooKassa polling removed (replaced by Telegram Stars)
         # Запускаем напоминания о подписке (каждый час)
         asyncio.create_task(utils.poll_subscription_reminders(app.bot, 3600))
 
@@ -548,7 +550,11 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('hc', hc))
     app.add_handler(CommandHandler('referral', referral))
     app.add_handler(CommandHandler('show_users', show_users))  # Только для админа
-    app.add_handler(CommandHandler('subscribe', subscribe))
+    app.add_handler(CommandHandler('subscribe', subscribe_stars))
+    # Telegram Stars payments handlers
+    from telegram.ext import PreCheckoutQueryHandler as _PreCheckoutQueryHandler  # local import to avoid top-level churn
+    app.add_handler(_PreCheckoutQueryHandler(precheckout_callback))
+    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_handler))
     app.add_handler(CommandHandler('shop', shop))
     app.add_handler(CallbackQueryHandler(shop_item_callback, pattern=r"^shop_item_\d+$"))
     app.add_handler(CommandHandler('challenge', challenge_command))
@@ -956,6 +962,3 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('rules', rules))
     app.add_handler(CommandHandler('shop', shop))
     app.run_polling()
-
-
-
