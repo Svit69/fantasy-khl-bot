@@ -147,6 +147,8 @@ async def on_startup(app):
         BotCommand("shop", "Магазин призов"),
     ]
     # Для меню админа показываем только одну команду справки
+    # Ensure referral command is present in the menu
+    user_commands.insert(3, BotCommand("referral", "получить реферальную ссылку"))
     admin_commands = user_commands + [
         BotCommand("admin_help", "Справка по админ-командам"),
     ]
@@ -949,6 +951,8 @@ if __name__ == '__main__':
         BotCommand("rules", "Правила сборки составов"),
         BotCommand("shop", "Магазин призов"),
     ]
+    # Ensure referral command is present in the menu
+    user_commands.insert(3, BotCommand("referral", "получить реферальную ссылку"))
     admin_commands = user_commands + [
         BotCommand("show_users", "Список пользователей и подписок (админ)"),
         BotCommand("send_tour_image", "Разослать изображение тура (админ)"),
