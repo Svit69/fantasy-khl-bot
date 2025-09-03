@@ -149,9 +149,12 @@ async def on_startup(app):
     # Для меню админа показываем только одну команду справки
     # Ensure referral command is present in the menu
     user_commands.insert(3, BotCommand("referral", "получить реферальную ссылку"))
+    # Temporary alias while users migrate from the misspelled command
+    user_commands.insert(4, BotCommand("refferal", "получить реферальную ссылку (алиас)"))
     admin_commands = user_commands + [
         BotCommand("admin_help", "Справка по админ-командам"),
     ]
+    admin_commands.append(BotCommand("refresh_commands", "обновить меню команд"))
     try:
         # Очистим команды на всякий случай (default и ru)
         await app.bot.delete_my_commands()
@@ -550,7 +553,9 @@ if __name__ == '__main__':
     app.add_handler(add_player_conv)
 
     app.add_handler(CommandHandler('hc', hc))
+    # Add both the correct command and a temporary alias
     app.add_handler(CommandHandler('referral', referral))
+    app.add_handler(CommandHandler('refferal', referral))
     app.add_handler(CommandHandler('show_users', show_users))  # Только для админа
     app.add_handler(CommandHandler('subscribe', subscribe_stars))
     # Telegram Stars payments handlers
@@ -598,12 +603,34 @@ if __name__ == '__main__':
             "<b>Магазин:</b>\n"
             "• /add_image_shop — задать текст и изображение магазина (диалог)\n"
         )
+        text += "\n• /refresh_commands — обновить меню команд"
         try:
             await update.message.reply_text(text, parse_mode='HTML')
         except Exception:
             await context.bot.send_message(chat_id=update.effective_chat.id, text=text, parse_mode='HTML')
 
     app.add_handler(CommandHandler('admin_help', admin_help))
+
+    async def refresh_commands(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        try:
+            uid = update.effective_user.id if update.effective_user else None
+        except Exception:
+            uid = None
+        if uid != ADMIN_ID:
+            return
+        try:
+            await on_startup(context.application)
+            try:
+                await update.message.reply_text('Команды обновлены (default, ru, private, admin).')
+            except Exception:
+                await context.bot.send_message(chat_id=update.effective_chat.id, text='Команды обновлены (default, ru, private, admin).')
+        except Exception as e:
+            try:
+                await update.message.reply_text(f'Ошибка при обновлении команд: {e}')
+            except Exception:
+                await context.bot.send_message(chat_id=update.effective_chat.id, text=f'Ошибка при обновлении команд: {e}')
+
+    app.add_handler(CommandHandler('refresh_commands', refresh_commands))
 
     # --- ConversationHandlers: удаление подписок ---
     from handlers.admin_handlers import (
