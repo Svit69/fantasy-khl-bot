@@ -9,6 +9,7 @@ from utils import is_admin, send_message_to_users, IMAGES_DIR, TOUR_IMAGE_PATH_F
 from telegram import Update, Bot
 from telegram.ext import ContextTypes, CommandHandler, MessageHandler, filters, ConversationHandler
 import asyncio
+import datetime
 
 # --- Добавление игрока ---
 ADD_NAME, ADD_POSITION, ADD_CLUB, ADD_NATION, ADD_AGE, ADD_PRICE = range(6)
@@ -1241,6 +1242,76 @@ push_conv = ConversationHandler(
     },
     fallbacks=[CommandHandler("cancel", send_push_cancel)]
 )
+
+# --- Рассылка только подписчикам ---
+BROADCAST_SUBS_WAIT_TEXT = 12001
+BROADCAST_SUBS_CONFIRM = 12002
+
+async def broadcast_subscribers_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await admin_only(update, context):
+        return ConversationHandler.END
+    await update.message.reply_text("Введите текст рассылки для подписчиков (или /cancel):")
+    return BROADCAST_SUBS_WAIT_TEXT
+
+async def broadcast_subscribers_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = (update.message.text or '').strip()
+    if not text:
+        await update.message.reply_text("Пустое сообщение. Введите текст или /cancel:")
+        return BROADCAST_SUBS_WAIT_TEXT
+    context.user_data['broadcast_text'] = text
+    # Подсчитать число активных подписчиков
+    now = datetime.datetime.utcnow()
+    subs = db.get_all_subscriptions()  # [(user_id, paid_until)]
+    targets = []
+    for user_id, paid_until in subs:
+        if not paid_until:
+            continue
+        try:
+            dt = datetime.datetime.fromisoformat(str(paid_until))
+        except Exception:
+            continue
+        if dt > now:
+            targets.append(user_id)
+    cnt = len(targets)
+    preview = (text[:120] + ('…' if len(text) > 120 else ''))
+    await update.message.reply_text(
+        f"Сообщение: \n— {preview}\n\nПодтвердите рассылку {cnt} подписчикам. Ответьте 'да' или 'нет'.")
+    return BROADCAST_SUBS_CONFIRM
+
+async def broadcast_subscribers_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    ans = (update.message.text or '').strip().lower()
+    if ans not in ("да", "д", "yes", "y", "угу", "ok", "ок"):
+        await update.message.reply_text("Рассылка отменена.")
+        return ConversationHandler.END
+    text = context.user_data.get('broadcast_text') or ''
+    if not text:
+        await update.message.reply_text("Текст рассылки не найден. Запустите заново: /broadcast_subscribers")
+        return ConversationHandler.END
+    now = datetime.datetime.utcnow()
+    subs = db.get_all_subscriptions()
+    users = []
+    for user_id, paid_until in subs:
+        if not paid_until:
+            continue
+        try:
+            dt = datetime.datetime.fromisoformat(str(paid_until))
+        except Exception:
+            continue
+        if dt > now:
+            users.append((user_id,))
+    if not users:
+        await update.message.reply_text("Нет активных подписчиков для рассылки.")
+        return ConversationHandler.END
+    try:
+        success, failed = await send_message_to_users(context.bot, users, text=text)
+        await update.message.reply_text(f"Готово. Успешно: {success}, ошибок: {failed}.")
+    except Exception as e:
+        await update.message.reply_text(f"Ошибка при рассылке: {e}")
+    return ConversationHandler.END
+
+async def broadcast_subscribers_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Рассылка отменена.")
+    return ConversationHandler.END
 
 # --- Активация тура админом ---
 async def activate_tour(update, context):

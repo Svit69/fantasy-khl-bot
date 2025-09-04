@@ -63,6 +63,12 @@ from handlers.admin_handlers import (
     purge_tours_start, purge_tours_password, purge_tours_cancel, PURGE_WAIT_PASSWORD
 )
 
+# broadcast to subscribers
+from handlers.admin_handlers import (
+    broadcast_subscribers_start, broadcast_subscribers_text, broadcast_subscribers_confirm, broadcast_subscribers_cancel,
+    BROADCAST_SUBS_WAIT_TEXT, BROADCAST_SUBS_CONFIRM,
+)
+
 from handlers.admin_handlers import (
     ADD_NAME, ADD_POSITION, ADD_CLUB, ADD_NATION, ADD_AGE, ADD_PRICE,
     EDIT_NAME, EDIT_POSITION, EDIT_CLUB, EDIT_NATION, EDIT_AGE, EDIT_PRICE
@@ -822,6 +828,18 @@ if __name__ == '__main__':
         allow_reentry=True
     )
     app.add_handler(add_image_shop_conv)
+
+    # --- ConversationHandler для /broadcast_subscribers (админ) ---
+    broadcast_subscribers_conv = ConversationHandler(
+        entry_points=[CommandHandler('broadcast_subscribers', broadcast_subscribers_start)],
+        states={
+            BROADCAST_SUBS_WAIT_TEXT: [MessageHandler(filters.TEXT & ~filters.COMMAND, broadcast_subscribers_text)],
+            BROADCAST_SUBS_CONFIRM: [MessageHandler(filters.TEXT & ~filters.COMMAND, broadcast_subscribers_confirm)],
+        },
+        fallbacks=[CommandHandler('cancel', broadcast_subscribers_cancel)],
+        name="broadcast_subscribers_conv",
+    )
+    app.add_handler(broadcast_subscribers_conv)
     # Список туров и колбэки
     app.add_handler(CommandHandler('tours', tours))
     app.add_handler(CommandHandler('tour', tours))  # для совместимости и удобства
