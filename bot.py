@@ -65,8 +65,8 @@ from handlers.admin_handlers import (
 
 # broadcast to subscribers
 from handlers.admin_handlers import (
-    broadcast_subscribers_start, broadcast_subscribers_text, broadcast_subscribers_confirm, broadcast_subscribers_cancel,
-    BROADCAST_SUBS_WAIT_TEXT, BROADCAST_SUBS_CONFIRM,
+    broadcast_subscribers_start, broadcast_subscribers_text, broadcast_subscribers_datetime, broadcast_subscribers_confirm, broadcast_subscribers_cancel,
+    BROADCAST_SUBS_WAIT_TEXT, BROADCAST_SUBS_WAIT_DATETIME, BROADCAST_SUBS_CONFIRM,
 )
 
 from handlers.admin_handlers import (
@@ -834,6 +834,7 @@ if __name__ == '__main__':
         entry_points=[CommandHandler('broadcast_subscribers', broadcast_subscribers_start)],
         states={
             BROADCAST_SUBS_WAIT_TEXT: [MessageHandler(filters.TEXT & ~filters.COMMAND, broadcast_subscribers_text)],
+            BROADCAST_SUBS_WAIT_DATETIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, broadcast_subscribers_datetime)],
             BROADCAST_SUBS_CONFIRM: [MessageHandler(filters.TEXT & ~filters.COMMAND, broadcast_subscribers_confirm)],
         },
         fallbacks=[CommandHandler('cancel', broadcast_subscribers_cancel)],

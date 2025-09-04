@@ -1245,6 +1245,7 @@ push_conv = ConversationHandler(
 
 # --- Рассылка только подписчикам ---
 BROADCAST_SUBS_WAIT_TEXT = 12001
+BROADCAST_SUBS_WAIT_DATETIME = 12003
 BROADCAST_SUBS_CONFIRM = 12002
 
 async def broadcast_subscribers_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1259,23 +1260,54 @@ async def broadcast_subscribers_text(update: Update, context: ContextTypes.DEFAU
         await update.message.reply_text("Пустое сообщение. Введите текст или /cancel:")
         return BROADCAST_SUBS_WAIT_TEXT
     context.user_data['broadcast_text'] = text
-    # Подсчитать число активных подписчиков
-    now = datetime.datetime.utcnow()
+    await update.message.reply_text(
+        "Укажите дату и время отправки в формате: дд.мм.гг чч:мм (МСК).\n"
+        "Например: 05.09.25 10:30"
+    )
+    return BROADCAST_SUBS_WAIT_DATETIME
+
+async def broadcast_subscribers_datetime(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Парсит время в МСК (UTC+3), сохраняет время в UTC и предлагает подтвердить."""
+    s = (update.message.text or '').strip()
+    dt_msk = None
+    for fmt in ("%d.%m.%y %H:%M", "%d.%m.%Y %H:%M"):
+        try:
+            dt_msk = datetime.datetime.strptime(s, fmt)
+            break
+        except Exception:
+            pass
+    if not dt_msk:
+        await update.message.reply_text(
+            "Не удалось распознать дату. Введите в формате дд.мм.гг чч:мм (МСК), например 05.09.25 10:30"
+        )
+        return BROADCAST_SUBS_WAIT_DATETIME
+    # Перевод МСК (UTC+3) в UTC
+    dt_utc = dt_msk - datetime.timedelta(hours=3)
+    now_utc = datetime.datetime.utcnow()
+    if dt_utc < now_utc:
+        await update.message.reply_text("Указанное время в прошлом. Введите будущую дату/время (МСК):")
+        return BROADCAST_SUBS_WAIT_DATETIME
+    context.user_data['broadcast_dt_utc'] = dt_utc.isoformat()
+    context.user_data['broadcast_dt_input'] = s
+
+    # Подсчитать число активных подписчиков на текущий момент (для информации)
     subs = db.get_all_subscriptions()  # [(user_id, paid_until)]
     targets = []
     for user_id, paid_until in subs:
         if not paid_until:
             continue
         try:
-            dt = datetime.datetime.fromisoformat(str(paid_until))
+            dtp = datetime.datetime.fromisoformat(str(paid_until))
         except Exception:
             continue
-        if dt > now:
+        if dtp > now_utc:
             targets.append(user_id)
     cnt = len(targets)
-    preview = (text[:120] + ('…' if len(text) > 120 else ''))
+    preview = (context.user_data.get('broadcast_text','')[:120] + ('…' if len(context.user_data.get('broadcast_text','')) > 120 else ''))
     await update.message.reply_text(
-        f"Сообщение: \n— {preview}\n\nПодтвердите рассылку {cnt} подписчикам. Ответьте 'да' или 'нет'.")
+        f"Сообщение: \n— {preview}\n\nОтправить {cnt} подписчикам в {s} (МСК)?\n"
+        "Ответьте 'да' для подтверждения или 'нет' для отмены."
+    )
     return BROADCAST_SUBS_CONFIRM
 
 async def broadcast_subscribers_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1287,6 +1319,44 @@ async def broadcast_subscribers_confirm(update: Update, context: ContextTypes.DE
     if not text:
         await update.message.reply_text("Текст рассылки не найден. Запустите заново: /broadcast_subscribers")
         return ConversationHandler.END
+    # Определяем, когда отправлять
+    dt_utc_str = context.user_data.get('broadcast_dt_utc')
+    dt_utc = None
+    if dt_utc_str:
+        try:
+            dt_utc = datetime.datetime.fromisoformat(dt_utc_str)
+        except Exception:
+            dt_utc = None
+    now = datetime.datetime.utcnow()
+    delay = 0
+    if dt_utc and dt_utc > now:
+        delay = (dt_utc - now).total_seconds()
+    # Планируем отправку через JobQueue
+    try:
+        context.application.job_queue.run_once(
+            broadcast_subscribers_job,
+            when=max(0, int(delay)),
+            data={'text': text}
+        )
+        when_desc = context.user_data.get('broadcast_dt_input') or 'сейчас'
+        await update.message.reply_text(f"Рассылка запланирована на {when_desc} (МСК).")
+    except Exception as e:
+        await update.message.reply_text(f"Не удалось запланировать рассылку: {e}")
+    return ConversationHandler.END
+
+async def broadcast_subscribers_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Рассылка отменена.")
+    return ConversationHandler.END
+
+async def broadcast_subscribers_job(context: ContextTypes.DEFAULT_TYPE):
+    """JobQueue callback: отправляет текст всем активным подписчикам."""
+    text = ''
+    try:
+        job = getattr(context, 'job', None)
+        if job and job.data:
+            text = job.data.get('text') or ''
+    except Exception:
+        text = ''
     now = datetime.datetime.utcnow()
     subs = db.get_all_subscriptions()
     users = []
@@ -1300,18 +1370,22 @@ async def broadcast_subscribers_confirm(update: Update, context: ContextTypes.DE
         if dt > now:
             users.append((user_id,))
     if not users:
-        await update.message.reply_text("Нет активных подписчиков для рассылки.")
-        return ConversationHandler.END
+        try:
+            await context.bot.send_message(chat_id=ADMIN_ID, text="Рассылка: нет активных подписчиков на момент отправки.")
+        except Exception:
+            pass
+        return
     try:
         success, failed = await send_message_to_users(context.bot, users, text=text)
-        await update.message.reply_text(f"Готово. Успешно: {success}, ошибок: {failed}.")
+        try:
+            await context.bot.send_message(chat_id=ADMIN_ID, text=f"Рассылка завершена. Успешно: {success}, ошибок: {failed}.")
+        except Exception:
+            pass
     except Exception as e:
-        await update.message.reply_text(f"Ошибка при рассылке: {e}")
-    return ConversationHandler.END
-
-async def broadcast_subscribers_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Рассылка отменена.")
-    return ConversationHandler.END
+        try:
+            await context.bot.send_message(chat_id=ADMIN_ID, text=f"Ошибка при рассылке: {e}")
+        except Exception:
+            pass
 
 # --- Активация тура админом ---
 async def activate_tour(update, context):
