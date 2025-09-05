@@ -285,6 +285,7 @@ if __name__ == '__main__':
     async def log_add_player_start(update, context):
         logger.info(f"[add_player_start] User {update.effective_user.id} started /add_player")
         logger.info(f"[DEBUG] User data before start: {context.user_data}")
+        text += "\n• /broadcast_subscribers — рассылка всем активным подписчикам к указанным дате и времени (админ)"
         try:
             result = await add_player_start(update, context)
             logger.info(f"[DEBUG] add_player_start returned: {result}")
