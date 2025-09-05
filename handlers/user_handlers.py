@@ -6,6 +6,33 @@ from config import ADMIN_ID
 import db
 import os
 from utils import is_admin, IMAGES_DIR, logger, CHALLENGE_IMAGE_PATH_FILE
+import datetime
+
+# --- Time guards: block actions after deadlines ---
+def _tour_deadline_passed(context) -> bool:
+    try:
+        import db as _db
+        tour_id = context.user_data.get('active_tour_id') or context.user_data.get('selected_tour_id')
+        if not tour_id:
+            return False
+        row = _db.get_tour_by_id(tour_id)
+        # row: (id, name, start, deadline, end, status, winners, image_filename, image_file_id)
+        dl_str = row[3]
+        dl = datetime.datetime.strptime(str(dl_str), "%d.%m.%y %H:%M")
+        return datetime.datetime.now() >= dl
+    except Exception:
+        return False
+
+def _challenge_deadline_passed(challenge_id: int) -> bool:
+    try:
+        import db as _db
+        ch = _db.get_challenge_by_id(challenge_id)
+        # ch: (id, start_date, deadline, end_date, image_filename, status, image_file_id)
+        dl = datetime.datetime.fromisoformat(str(ch[2]))
+        # deadlines stored in UTC
+        return datetime.datetime.utcnow() >= dl
+    except Exception:
+        return False
 
 def escape_md(text):
     # Все спецсимволы MarkdownV2
@@ -646,6 +673,16 @@ async def challenge_open_callback(update: Update, context: ContextTypes.DEFAULT_
         entry = None
 
     status = ch[5] if len(ch) > 5 else ''
+    # Guard by time window (UTC): start <= now < deadline
+    try:
+        start_dt = datetime.datetime.fromisoformat(str(ch[1]))
+        dl_dt = datetime.datetime.fromisoformat(str(ch[2]))
+        now = datetime.datetime.utcnow()
+        if not (start_dt <= now < dl_dt):
+            await query.edit_message_text("Челлендж недоступен: либо ещё не начался, либо дедлайн уже прошёл.")
+            return
+    except Exception:
+        pass
     if entry:
         # Если запись отменена/возвращена — считаем, что записи нет
         try:
@@ -962,6 +999,14 @@ async def challenge_level_callback(update: Update, context: ContextTypes.DEFAULT
     query = update.callback_query
     await query.answer()
     data = query.data
+    # Guard: deadline not passed for current challenge
+    try:
+        cid_guard = context.user_data.get('challenge_id')
+        if cid_guard and _challenge_deadline_passed(cid_guard):
+            await query.edit_message_text("Дедлайн челленджа прошёл. Сбор состава закрыт.")
+            return
+    except Exception:
+        pass
     level = data.replace('challenge_level_', '')
     try:
         level_int = int(level)
@@ -1012,6 +1057,14 @@ async def challenge_level_callback(update: Update, context: ContextTypes.DEFAULT
 async def challenge_pick_pos_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    # Guard: deadline not passed
+    try:
+        cid_guard = context.user_data.get('challenge_id')
+        if cid_guard and _challenge_deadline_passed(cid_guard):
+            await query.edit_message_text("Дедлайн челленджа прошёл. Выбор игроков закрыт.")
+            return
+    except Exception:
+        pass
     pos = query.data.replace('challenge_pick_pos_', '')
     remaining = context.user_data.get('challenge_remaining_positions', ['нападающий', 'защитник', 'вратарь'])
     if pos not in remaining:
@@ -1023,6 +1076,14 @@ async def challenge_pick_pos_callback(update: Update, context: ContextTypes.DEFA
 
 
 async def challenge_team_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Guard: deadline not passed
+    try:
+        cid_guard = context.user_data.get('challenge_id')
+        if cid_guard and _challenge_deadline_passed(cid_guard):
+            await update.effective_message.reply_text("Дедлайн челленджа прошёл. Выбор игроков закрыт.")
+            return
+    except Exception:
+        pass
     # Обрабатываем текст названия команды только если ожидаем
     if not context.user_data.get('challenge_expect_team'):
         return
@@ -1052,6 +1113,14 @@ async def challenge_team_input(update: Update, context: ContextTypes.DEFAULT_TYP
 async def challenge_pick_player_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    # Guard: deadline not passed
+    try:
+        cid_guard = context.user_data.get('challenge_id')
+        if cid_guard and _challenge_deadline_passed(cid_guard):
+            await query.edit_message_text("Дедлайн челленджа прошёл. Выбор игроков закрыт.")
+            return
+    except Exception:
+        pass
     try:
         pid = int(query.data.replace('challenge_pick_player_', ''))
     except Exception:
@@ -1172,6 +1241,14 @@ async def challenge_cancel_callback(update: Update, context: ContextTypes.DEFAUL
 async def challenge_reshuffle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    # Guard: deadline not passed
+    try:
+        cid_guard = context.user_data.get('challenge_id')
+        if cid_guard and _challenge_deadline_passed(cid_guard):
+            await query.edit_message_text("Дедлайн челленджа прошёл. Пересборка недоступна.")
+            return
+    except Exception:
+        pass
     cid = context.user_data.get('challenge_id')
     if not cid:
         await query.edit_message_text("Пересборка недоступна: нет активной записи.")
@@ -1233,6 +1310,14 @@ async def tour_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await message.reply_text("Нет активного тура для сбора состава. Обратитесь к администратору.")
         return ConversationHandler.END
     context.user_data['active_tour_id'] = active_tour['id']
+    # Guard: stop if deadline already passed
+    try:
+        dl = datetime.datetime.strptime(str(active_tour.get('deadline')), "%d.%m.%y %H:%M")
+        if datetime.datetime.now() >= dl:
+            await message.reply_text("Дедлайн тура уже прошёл. Сбор и изменения состава закрыты.")
+            return ConversationHandler.END
+    except Exception:
+        pass
 
     user_id = update.effective_user.id
     tour_id = active_tour['id']
@@ -1549,12 +1634,18 @@ async def send_player_choice(update, context, position, exclude_ids, next_state,
     return next_state
 
 async def tour_forward_1(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if _tour_deadline_passed(context):
+        await update.effective_message.reply_text("Дедлайн тура уже прошёл. Сбор и изменения состава закрыты.")
+        return ConversationHandler.END
     budget = context.user_data['tour_budget']
     picked = context.user_data['tour_selected']['forwards']
     return await send_player_choice(update, context, 'нападающий', picked, TOUR_FORWARD_2, budget)
 
 
 async def tour_forward_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if _tour_deadline_passed(context):
+        await update.effective_message.reply_text("Дедлайн тура уже прошёл. Состав больше менять нельзя.")
+        return ConversationHandler.END
     try:
         query = update.callback_query
         await query.answer()
@@ -1647,6 +1738,9 @@ async def tour_forward_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
 
 async def tour_forward_2(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if _tour_deadline_passed(context):
+        await update.effective_message.reply_text("Дедлайн тура уже прошёл. Сбор и изменения состава закрыты.")
+        return ConversationHandler.END
     budget = context.user_data['tour_budget']
     spent = context.user_data['tour_selected']['spent']
     left = budget - spent
@@ -1655,6 +1749,9 @@ async def tour_forward_2(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def tour_forward_3(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if _tour_deadline_passed(context):
+        await update.effective_message.reply_text("Дедлайн тура уже прошёл. Сбор и изменения состава закрыты.")
+        return ConversationHandler.END
     budget = context.user_data['tour_budget']
     spent = context.user_data['tour_selected']['spent']
     left = budget - spent
@@ -1663,6 +1760,9 @@ async def tour_forward_3(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return await send_player_choice(update, context, 'нападающий', picked, TOUR_FORWARD_3, left)
 
 async def tour_defender_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if _tour_deadline_passed(context):
+        await update.effective_message.reply_text("Дедлайн тура уже прошёл. Состав больше менять нельзя.")
+        return ConversationHandler.END
     try:
         query = update.callback_query
         await query.answer()
@@ -1744,6 +1844,9 @@ async def tour_defender_callback(update: Update, context: ContextTypes.DEFAULT_T
 
 
 async def tour_defender_1(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if _tour_deadline_passed(context):
+        await update.effective_message.reply_text("Дедлайн тура уже прошёл. Сбор и изменения состава закрыты.")
+        return ConversationHandler.END
     budget = context.user_data['tour_budget']
     spent = context.user_data['tour_selected']['spent']
     left = budget - spent
@@ -1751,6 +1854,9 @@ async def tour_defender_1(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return await send_player_choice(update, context, 'защитник', picked, TOUR_DEFENDER_2, left)
 
 async def tour_defender_2(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if _tour_deadline_passed(context):
+        await update.effective_message.reply_text("Дедлайн тура уже прошёл. Сбор и изменения состава закрыты.")
+        return ConversationHandler.END
     budget = context.user_data['tour_budget']
     spent = context.user_data['tour_selected']['spent']
     left = budget - spent
@@ -1759,6 +1865,9 @@ async def tour_defender_2(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return await send_player_choice(update, context, 'защитник', picked, TOUR_DEFENDER_2, left)
 
 async def tour_goalie_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if _tour_deadline_passed(context):
+        await update.effective_message.reply_text("Дедлайн тура уже прошёл. Состав больше менять нельзя.")
+        return ConversationHandler.END
     try:
         query = update.callback_query
         await query.answer()
@@ -1835,6 +1944,9 @@ async def tour_goalie_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 async def tour_goalie(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if _tour_deadline_passed(context):
+        await update.effective_message.reply_text("Дедлайн тура уже прошёл. Сбор и изменения состава закрыты.")
+        return ConversationHandler.END
     budget = context.user_data['tour_budget']
     spent = context.user_data['tour_selected']['spent']
     left = budget - spent
@@ -1846,6 +1958,9 @@ async def tour_goalie(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def tour_captain(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if _tour_deadline_passed(context):
+        await update.effective_message.reply_text("Дедлайн тура уже прошёл. Состав больше менять нельзя.")
+        return ConversationHandler.END
     from telegram import InlineKeyboardMarkup, InlineKeyboardButton
     # Универсально получаем message для reply_text
     message = getattr(update, "effective_message", None)
@@ -1871,6 +1986,9 @@ async def tour_captain(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- Обработчик выбора капитана ---
 async def tour_captain_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if _tour_deadline_passed(context):
+        await update.effective_message.reply_text("Дедлайн тура уже прошёл. Состав больше менять нельзя.")
+        return ConversationHandler.END
     from telegram import InlineKeyboardMarkup, InlineKeyboardButton
     query = update.callback_query
     await query.answer()
@@ -1936,6 +2054,10 @@ async def tour_captain_callback(update: Update, context: ContextTypes.DEFAULT_TY
         'forwards': selected['forwards']
     }
     from db import save_user_tour_roster
+    # Final guard before saving
+    if _tour_deadline_passed(context):
+        await update.effective_message.reply_text("Дедлайн тура уже прошёл. Состав больше менять нельзя.")
+        return ConversationHandler.END
     save_user_tour_roster(user_id, tour_id, roster_dict, captain_id, spent)
 
     text = format_final_roster_md(goalie_str, defenders_str, forwards_str, captain_str, spent, budget)
@@ -1954,6 +2076,9 @@ async def restart_tour_callback(update: Update, context: ContextTypes.DEFAULT_TY
     from db import get_active_tour, clear_user_tour_roster
     query = update.callback_query
     await query.answer()
+    if _tour_deadline_passed(context):
+        await query.edit_message_text("Дедлайн тура уже прошёл. Сбор и изменения состава закрыты.")
+        return ConversationHandler.END
     user_id = query.from_user.id
     active_tour = get_active_tour()
     if active_tour:
