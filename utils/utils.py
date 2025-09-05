@@ -1,6 +1,9 @@
 import logging
 from telegram import Update, InputFile
 from telegram.ext import ContextTypes
+import datetime
+import asyncio
+import db
 from config import ADMIN_ID
 import os
 
@@ -12,6 +15,60 @@ logger = logging.getLogger(__name__)
 def is_admin(user_id: int) -> bool:
     """Check if user is admin."""
     return user_id == ADMIN_ID
+
+async def poll_subscription_reminders(bot, interval: int = 3600):
+    """Periodically checks subscriptions and sends reminders:
+    - 7 days before expiration
+    - 3 days before expiration
+    - On expiration day
+    Uses db.subscription_notifications for deduplication.
+    """
+    logger.debug("poll_subscription_reminders started (package utils)")
+    while True:
+        try:
+            subs = db.get_all_subscriptions()  # [(user_id, paid_until)]
+            today = datetime.datetime.utcnow().date()
+            for user_id, paid_until in subs:
+                if not paid_until:
+                    continue
+                try:
+                    dt = datetime.datetime.fromisoformat(str(paid_until))
+                except Exception:
+                    continue
+                remain = (dt.date() - today).days
+                if remain in (7, 3):
+                    kind = f"{remain}d"
+                    notify_date = today.isoformat()
+                    if not db.has_subscription_notification(user_id, notify_date, kind):
+                        try:
+                            await bot.send_message(
+                                chat_id=user_id,
+                                text=(
+                                    f"⏰ Напоминание: подписка истекает через {remain} дн.\n"
+                                    f"Продлите подписку командой /subscribe."
+                                )
+                            )
+                            db.record_subscription_notification(user_id, notify_date, kind)
+                        except Exception as e:
+                            logger.warning(f"Не удалось отправить уведомление пользователю {user_id}: {e}")
+                elif remain == 0:
+                    kind = "expired"
+                    notify_date = dt.date().isoformat()
+                    if not db.has_subscription_notification(user_id, notify_date, kind):
+                        try:
+                            await bot.send_message(
+                                chat_id=user_id,
+                                text=(
+                                    "⚠️ Срок вашей подписки истёк сегодня. \n"
+                                    "Оформите продление с помощью /subscribe."
+                                )
+                            )
+                            db.record_subscription_notification(user_id, notify_date, kind)
+                        except Exception as e:
+                            logger.warning(f"Не удалось отправить уведомление об окончании подписки пользователю {user_id}: {e}")
+        except Exception as e:
+            logger.error(f"poll_subscription_reminders loop error: {e}")
+        await asyncio.sleep(interval)
 
 async def send_message_to_users(bot, users, text: str = None, photo_path: str = None, caption: str = None, parse_mode: str = None, disable_web_page_preview: bool = False):
     """Send text or photo to a list of users."""

@@ -5,6 +5,7 @@ from .utils import (
     is_admin,
     send_message_to_users,
     logger,
+    poll_subscription_reminders,
 )
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     'is_admin',
     'send_message_to_users',
     'logger',
+    'poll_subscription_reminders',
 ]
