@@ -7,7 +7,7 @@ import db
 from config import ADMIN_ID
 from utils import IMAGES_DIR
 from .user_handlers import start, tour, hc
-from .admin_handlers import send_tour_image, addhc, send_results, admin_only
+from .admin_handlers import send_tour_image, addhc2 as addhc, send_results, admin_only
 
 async def admin_only(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id if update.effective_user else None

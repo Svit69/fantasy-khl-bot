@@ -30,7 +30,7 @@ from handlers.user_handlers import start, hc, IMAGES_DIR, \
     tours, tour_open_callback, tour_build_callback
 from handlers.user_handlers import shop, shop_item_callback
 from handlers.user_handlers import subscribe_stars, precheckout_callback, successful_payment_handler
-from handlers.admin_handlers import addhc, send_results, show_users
+from handlers.admin_handlers import addhc2 as addhc, send_results, show_users
 from handlers.admin_handlers import list_challenges, delete_challenge_cmd
 from handlers.admin_handlers import challenge_rosters_cmd
 from handlers.admin_handlers import (
