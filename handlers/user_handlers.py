@@ -337,16 +337,21 @@ async def tours(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     import datetime
     try:
         from zoneinfo import ZoneInfo
-        now = datetime.datetime.now(ZoneInfo("Europe/Moscow"))
+        _tz = ZoneInfo("Europe/Moscow")
+        now = datetime.datetime.now(_tz)
     except Exception:
         # Fallback: приблизительно Мск = UTC+3
         now = datetime.datetime.utcnow() + datetime.timedelta(hours=3)
+        _tz = None
     filtered = []
     for r in rows:
         # r: (id, name, start, deadline, end, status, winners)
         try:
             start_dt = datetime.datetime.strptime(str(r[2]), "%d.%m.%y")
             deadline_dt = datetime.datetime.strptime(str(r[3]), "%d.%m.%y %H:%M")
+            if _tz is not None:
+                start_dt = start_dt.replace(tzinfo=_tz)
+                deadline_dt = deadline_dt.replace(tzinfo=_tz)
             if start_dt <= now < deadline_dt:
                 filtered.append(r)
         except Exception:
