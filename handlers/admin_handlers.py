@@ -1376,12 +1376,13 @@ async def broadcast_subscribers_job(context: ContextTypes.DEFAULT_TYPE):
             pass
         return
     try:
+        # Отправляем полный текст; включаем предпросмотр ссылок и поддерживаем эмодзи
         success, failed = await send_message_to_users(
             context.bot,
             users,
             text=text,
             parse_mode='HTML',
-            disable_web_page_preview=True,
+            disable_web_page_preview=False,
         )
         try:
             await context.bot.send_message(chat_id=ADMIN_ID, text=f"Рассылка завершена. Успешно: {success}, ошибок: {failed}.")
