@@ -16,10 +16,17 @@ def _tour_deadline_passed(context) -> bool:
         if not tour_id:
             return False
         row = _db.get_tour_by_id(tour_id)
-        # row: (id, name, start, deadline, end, status, winners, image_filename, image_file_id)
         dl_str = row[3]
+        # Parse deadline in MSK
         dl = datetime.datetime.strptime(str(dl_str), "%d.%m.%y %H:%M")
-        return datetime.datetime.now() >= dl
+        try:
+            from zoneinfo import ZoneInfo
+            dl = dl.replace(tzinfo=ZoneInfo("Europe/Moscow"))
+            now = datetime.datetime.now(ZoneInfo("Europe/Moscow"))
+        except Exception:
+            # Fallback: approximate by shifting UTC by +3
+            now = datetime.datetime.utcnow() + datetime.timedelta(hours=3)
+        return now >= dl
     except Exception:
         return False
 
@@ -328,13 +335,19 @@ async def tours(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     # Отфильтруем будущие туры (start_date > now)
     import datetime
-    now = datetime.datetime.now()
+    try:
+        from zoneinfo import ZoneInfo
+        now = datetime.datetime.now(ZoneInfo("Europe/Moscow"))
+    except Exception:
+        # Fallback: приблизительно Мск = UTC+3
+        now = datetime.datetime.utcnow() + datetime.timedelta(hours=3)
     filtered = []
     for r in rows:
         # r: (id, name, start, deadline, end, status, winners)
         try:
             start_dt = datetime.datetime.strptime(str(r[2]), "%d.%m.%y")
-            if start_dt <= now:
+            deadline_dt = datetime.datetime.strptime(str(r[3]), "%d.%m.%y %H:%M")
+            if start_dt <= now < deadline_dt:
                 filtered.append(r)
         except Exception:
             # если не удалось распарсить дату — перестрахуемся и не показываем такой тур
@@ -479,8 +492,19 @@ async def tour_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         try:
             import datetime
             from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+            try:
+                from zoneinfo import ZoneInfo
+                now = datetime.datetime.now(ZoneInfo("Europe/Moscow"))
+            except Exception:
+                now = datetime.datetime.utcnow() + datetime.timedelta(hours=3)
             deadline_dt = datetime.datetime.strptime(str(row[3]), "%d.%m.%y %H:%M")
-            now = datetime.datetime.now()
+            # Treat deadline as MSK time
+            try:
+                from zoneinfo import ZoneInfo as _ZI
+                deadline_dt = deadline_dt.replace(tzinfo=_ZI("Europe/Moscow"))
+            except Exception:
+                # Fallback: naive but aligned by shifting now above
+                pass
             if now < deadline_dt:
                 reply_markup = InlineKeyboardMarkup(
                     [[InlineKeyboardButton('Пересобрать состав', callback_data='restart_tour')]]
@@ -501,11 +525,39 @@ async def tour_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
             f"Старт: {row[2]}\nДедлайн: {row[3]}\nОкончание: {row[4]}\n\n"
             f"Нажмите кнопку ниже, чтобы начать сборку состава."
         )
-        keyboard = [[InlineKeyboardButton("Собрать состав", callback_data=f"tour_build_{row[0]}")]]
+        # Show button only if before deadline (MSK)
+        show_button = False
         try:
-            await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+            import datetime
+            try:
+                from zoneinfo import ZoneInfo
+                now = datetime.datetime.now(ZoneInfo("Europe/Moscow"))
+            except Exception:
+                now = datetime.datetime.utcnow() + datetime.timedelta(hours=3)
+            deadline_dt = datetime.datetime.strptime(str(row[3]), "%d.%m.%y %H:%M")
+            try:
+                from zoneinfo import ZoneInfo as _ZI
+                deadline_dt = deadline_dt.replace(tzinfo=_ZI("Europe/Moscow"))
+            except Exception:
+                pass
+            show_button = now < deadline_dt
         except Exception:
-            await context.bot.send_message(chat_id=update.effective_chat.id, text=text, reply_markup=InlineKeyboardMarkup(keyboard))
+            show_button = False
+        if show_button:
+            keyboard = [[InlineKeyboardButton("Собрать состав", callback_data=f"tour_build_{row[0]}")]]
+            rm = InlineKeyboardMarkup(keyboard)
+        else:
+            rm = None
+            text = (
+                f"Тур #{row[0]} — {row[1]}\n"
+                f"Статус: {row[5]}\n"
+                f"Старт: {row[2]}\nДедлайн: {row[3]}\nОкончание: {row[4]}\n\n"
+                f"Дедлайн уже прошёл. Сбор состава закрыт."
+            )
+        try:
+            await query.edit_message_text(text, reply_markup=rm)
+        except Exception:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=text, reply_markup=rm)
         # Не активируем CH напрямую — вход через кнопку 'tour_build_<id>'
         return
 
