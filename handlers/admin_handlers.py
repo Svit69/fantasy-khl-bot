@@ -492,11 +492,11 @@ async def show_users(update, context):
     import datetime
     # Получаем всех пользователей и их подписки
     with db.closing(db.sqlite3.connect(db.DB_NAME)) as conn:
-        users = conn.execute('SELECT telegram_id, username, name FROM users').fetchall()
+        users = conn.execute('SELECT telegram_id, username, name, hc_balance FROM users').fetchall()
         subs = {row[0]: row[1] for row in conn.execute('SELECT user_id, paid_until FROM subscriptions').fetchall()}
     now = datetime.datetime.utcnow()
     lines = []
-    for user_id, username, name in users:
+    for user_id, username, name, hc_balance in users:
         paid_until = subs.get(user_id)
         active = False
         if paid_until:
@@ -506,7 +506,7 @@ async def show_users(update, context):
             except Exception:
                 active = False
         status = '✅ подписка активна' if active else '❌ нет подписки'
-        lines.append(f"{user_id} | {username or '-'} | {name or '-'} | {status}")
+        lines.append(f"{user_id} | {username or '-'} | {name or '-'} | {status} | HC: {hc_balance if hc_balance is not None else 0}")
     if not lines:
         await update.message.reply_text("Нет пользователей.")
     else:
