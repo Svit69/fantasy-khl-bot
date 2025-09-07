@@ -1,4 +1,4 @@
-from telegram import Update, InputFile
+﻿from telegram import Update, InputFile
 from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, MessageHandler, filters
 from config import ADMIN_ID
 import db
@@ -11,22 +11,22 @@ from telegram.ext import ContextTypes, CommandHandler, MessageHandler, filters, 
 import asyncio
 import datetime
 
-# --- Добавление игрока ---
+# --- Р”РѕР±Р°РІР»РµРЅРёРµ РёРіСЂРѕРєР° ---
 ADD_NAME, ADD_POSITION, ADD_CLUB, ADD_NATION, ADD_AGE, ADD_PRICE = range(6)
 
-# --- Редактирование игрока ---
+# --- Р РµРґР°РєС‚РёСЂРѕРІР°РЅРёРµ РёРіСЂРѕРєР° ---
 EDIT_NAME, EDIT_POSITION, EDIT_CLUB, EDIT_NATION, EDIT_AGE, EDIT_PRICE = range(6, 12)
 
-# (зарезервировано для будущих констант состояний 12-13)
+# (Р·Р°СЂРµР·РµСЂРІРёСЂРѕРІР°РЅРѕ РґР»СЏ Р±СѓРґСѓС‰РёС… РєРѕРЅСЃС‚Р°РЅС‚ СЃРѕСЃС‚РѕСЏРЅРёР№ 12-13)
 
-# --- Магазин: состояния диалога ---
+# --- РњР°РіР°Р·РёРЅ: СЃРѕСЃС‚РѕСЏРЅРёСЏ РґРёР°Р»РѕРіР° ---
 SHOP_TEXT_WAIT = 30
 SHOP_IMAGE_WAIT = 31
 
 async def add_image_shop_start(update, context):
     if not await admin_only(update, context):
         return ConversationHandler.END
-    await update.message.reply_text("Отправьте текст описания магазина:")
+    await update.message.reply_text("РћС‚РїСЂР°РІСЊС‚Рµ С‚РµРєСЃС‚ РѕРїРёСЃР°РЅРёСЏ РјР°РіР°Р·РёРЅР°:")
     return SHOP_TEXT_WAIT
 
 async def add_image_shop_text(update, context):
@@ -35,14 +35,14 @@ async def add_image_shop_text(update, context):
         db.update_shop_text(text)
         context.user_data['shop_text'] = text
     except Exception as e:
-        await update.message.reply_text(f"Ошибка сохранения текста: {e}")
+        await update.message.reply_text(f"РћС€РёР±РєР° СЃРѕС…СЂР°РЅРµРЅРёСЏ С‚РµРєСЃС‚Р°: {e}")
         return ConversationHandler.END
-    await update.message.reply_text("Теперь отправьте одно фото магазина в следующем сообщении.")
+    await update.message.reply_text("РўРµРїРµСЂСЊ РѕС‚РїСЂР°РІСЊС‚Рµ РѕРґРЅРѕ С„РѕС‚Рѕ РјР°РіР°Р·РёРЅР° РІ СЃР»РµРґСѓСЋС‰РµРј СЃРѕРѕР±С‰РµРЅРёРё.")
     return SHOP_IMAGE_WAIT
 
 async def add_image_shop_photo(update, context):
     if not update.message or not update.message.photo:
-        await update.message.reply_text("Пожалуйста, отправьте именно фото.")
+        await update.message.reply_text("РџРѕР¶Р°Р»СѓР№СЃС‚Р°, РѕС‚РїСЂР°РІСЊС‚Рµ РёРјРµРЅРЅРѕ С„РѕС‚Рѕ.")
         return SHOP_IMAGE_WAIT
     try:
         photo = update.message.photo[-1]
@@ -51,40 +51,40 @@ async def add_image_shop_photo(update, context):
         os.makedirs(IMAGES_DIR, exist_ok=True)
         filename = 'shop.jpg'
         file_path = os.path.join(IMAGES_DIR, filename)
-        # попытка универсальной загрузки для PTB v20
+        # РїРѕРїС‹С‚РєР° СѓРЅРёРІРµСЂСЃР°Р»СЊРЅРѕР№ Р·Р°РіСЂСѓР·РєРё РґР»СЏ PTB v20
         try:
             await tg_file.download_to_drive(file_path)
         except Exception:
             await tg_file.download(custom_path=file_path)
         db.update_shop_image(filename, file_id)
-        await update.message.reply_text("Готово. Магазин обновлён.")
+        await update.message.reply_text("Р“РѕС‚РѕРІРѕ. РњР°РіР°Р·РёРЅ РѕР±РЅРѕРІР»С‘РЅ.")
     except Exception as e:
-        await update.message.reply_text(f"Ошибка сохранения фото: {e}")
+        await update.message.reply_text(f"РћС€РёР±РєР° СЃРѕС…СЂР°РЅРµРЅРёСЏ С„РѕС‚Рѕ: {e}")
     return ConversationHandler.END
 
 async def add_image_shop_cancel(update, context):
-    await update.message.reply_text("Обновление магазина отменено.")
+    await update.message.reply_text("РћР±РЅРѕРІР»РµРЅРёРµ РјР°РіР°Р·РёРЅР° РѕС‚РјРµРЅРµРЅРѕ.")
     return ConversationHandler.END
 
-# --- Удаление подписок (запароленные команды) ---
+# --- РЈРґР°Р»РµРЅРёРµ РїРѕРґРїРёСЃРѕРє (Р·Р°РїР°СЂРѕР»РµРЅРЅС‹Рµ РєРѕРјР°РЅРґС‹) ---
 DEL_SUB_WAIT_PASSWORD = 10010
 DEL_SUB_WAIT_USERNAME = 10011
 
 async def delete_sub_by_username_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     if not is_admin(user.id):
-        await update.message.reply_text("Команда доступна только администратору.")
+        await update.message.reply_text("РљРѕРјР°РЅРґР° РґРѕСЃС‚СѓРїРЅР° С‚РѕР»СЊРєРѕ Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂСѓ.")
         return ConversationHandler.END
-    await update.message.reply_text("Введите пароль для удаления подписки пользователя:")
+    await update.message.reply_text("Р’РІРµРґРёС‚Рµ РїР°СЂРѕР»СЊ РґР»СЏ СѓРґР°Р»РµРЅРёСЏ РїРѕРґРїРёСЃРєРё РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ:")
     return DEL_SUB_WAIT_PASSWORD
 
 async def delete_sub_by_username_password(update: Update, context: ContextTypes.DEFAULT_TYPE):
     pw = (update.message.text or '').strip()
     checker = _get_purge_password_checker()
     if not checker(pw):
-        await update.message.reply_text("Неверный пароль. Отмена.")
+        await update.message.reply_text("РќРµРІРµСЂРЅС‹Р№ РїР°СЂРѕР»СЊ. РћС‚РјРµРЅР°.")
         return ConversationHandler.END
-    await update.message.reply_text("Введите @username пользователя (без пробелов):")
+    await update.message.reply_text("Р’РІРµРґРёС‚Рµ @username РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ (Р±РµР· РїСЂРѕР±РµР»РѕРІ):")
     return DEL_SUB_WAIT_USERNAME
 
 async def delete_sub_by_username_username(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -94,17 +94,17 @@ async def delete_sub_by_username_username(update: Update, context: ContextTypes.
     try:
         row = db.get_user_by_username(username)
         if not row:
-            await update.message.reply_text("Пользователь не найден.")
+            await update.message.reply_text("РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ.")
             return ConversationHandler.END
         user_id = row[0] if isinstance(row, tuple) else row['telegram_id'] if isinstance(row, dict) else row[0]
         deleted = db.delete_subscription_by_user_id(user_id)
-        await update.message.reply_text(f"Удалено подписок: {deleted} у пользователя @{username}.")
+        await update.message.reply_text(f"РЈРґР°Р»РµРЅРѕ РїРѕРґРїРёСЃРѕРє: {deleted} Сѓ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ @{username}.")
     except Exception as e:
-        await update.message.reply_text(f"Ошибка: {e}")
+        await update.message.reply_text(f"РћС€РёР±РєР°: {e}")
     return ConversationHandler.END
 
 async def delete_sub_by_username_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Отменено.")
+    await update.message.reply_text("РћС‚РјРµРЅРµРЅРѕ.")
     return ConversationHandler.END
 
 PURGE_SUBS_WAIT_PASSWORD = 10020
@@ -112,71 +112,71 @@ PURGE_SUBS_WAIT_PASSWORD = 10020
 async def purge_subscriptions_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     if not is_admin(user.id):
-        await update.message.reply_text("Команда доступна только администратору.")
+        await update.message.reply_text("РљРѕРјР°РЅРґР° РґРѕСЃС‚СѓРїРЅР° С‚РѕР»СЊРєРѕ Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂСѓ.")
         return ConversationHandler.END
-    await update.message.reply_text("Введите пароль для подтверждения удаления ВСЕХ подписок:")
+    await update.message.reply_text("Р’РІРµРґРёС‚Рµ РїР°СЂРѕР»СЊ РґР»СЏ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ СѓРґР°Р»РµРЅРёСЏ Р’РЎР•РҐ РїРѕРґРїРёСЃРѕРє:")
     return PURGE_SUBS_WAIT_PASSWORD
 
 async def purge_subscriptions_password(update: Update, context: ContextTypes.DEFAULT_TYPE):
     pw = (update.message.text or '').strip()
     checker = _get_purge_password_checker()
     if not checker(pw):
-        await update.message.reply_text("Неверный пароль. Отмена.")
+        await update.message.reply_text("РќРµРІРµСЂРЅС‹Р№ РїР°СЂРѕР»СЊ. РћС‚РјРµРЅР°.")
         return ConversationHandler.END
     try:
         deleted = db.purge_all_subscriptions()
-        await update.message.reply_text(f"Удалено подписок: {deleted}.")
+        await update.message.reply_text(f"РЈРґР°Р»РµРЅРѕ РїРѕРґРїРёСЃРѕРє: {deleted}.")
     except Exception as e:
-        await update.message.reply_text(f"Ошибка удаления: {e}")
+        await update.message.reply_text(f"РћС€РёР±РєР° СѓРґР°Р»РµРЅРёСЏ: {e}")
     return ConversationHandler.END
 
-# --- Удаление ОДНОГО тура по id (запароленная команда) ---
+# --- РЈРґР°Р»РµРЅРёРµ РћР”РќРћР“Рћ С‚СѓСЂР° РїРѕ id (Р·Р°РїР°СЂРѕР»РµРЅРЅР°СЏ РєРѕРјР°РЅРґР°) ---
 DEL_TOUR_WAIT_PASSWORD = 10030
 DEL_TOUR_WAIT_ID = 10031
 
 async def delete_tour_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     if not is_admin(user.id):
-        await update.message.reply_text("Команда доступна только администратору.")
+        await update.message.reply_text("РљРѕРјР°РЅРґР° РґРѕСЃС‚СѓРїРЅР° С‚РѕР»СЊРєРѕ Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂСѓ.")
         return ConversationHandler.END
-    await update.message.reply_text("Введите пароль для удаления ТУРА по id:")
+    await update.message.reply_text("Р’РІРµРґРёС‚Рµ РїР°СЂРѕР»СЊ РґР»СЏ СѓРґР°Р»РµРЅРёСЏ РўРЈР Рђ РїРѕ id:")
     return DEL_TOUR_WAIT_PASSWORD
 
 async def delete_tour_password(update: Update, context: ContextTypes.DEFAULT_TYPE):
     pw = (update.message.text or '').strip()
     checker = _get_purge_password_checker()
     if not checker(pw):
-        await update.message.reply_text("Неверный пароль. Отмена.")
+        await update.message.reply_text("РќРµРІРµСЂРЅС‹Р№ РїР°СЂРѕР»СЊ. РћС‚РјРµРЅР°.")
         return ConversationHandler.END
-    await update.message.reply_text("Введите id тура (целое число):")
+    await update.message.reply_text("Р’РІРµРґРёС‚Рµ id С‚СѓСЂР° (С†РµР»РѕРµ С‡РёСЃР»Рѕ):")
     return DEL_TOUR_WAIT_ID
 
 async def delete_tour_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     txt = (update.message.text or '').strip()
     if not txt.isdigit():
-        await update.message.reply_text("Нужно число. Отменено.")
+        await update.message.reply_text("РќСѓР¶РЅРѕ С‡РёСЃР»Рѕ. РћС‚РјРµРЅРµРЅРѕ.")
         return ConversationHandler.END
     tour_id = int(txt)
     try:
         deleted = db.delete_tour_by_id(tour_id)
         if deleted:
-            await update.message.reply_text(f"Тур #{tour_id} удалён. Связанные данные очищены.")
+            await update.message.reply_text(f"РўСѓСЂ #{tour_id} СѓРґР°Р»С‘РЅ. РЎРІСЏР·Р°РЅРЅС‹Рµ РґР°РЅРЅС‹Рµ РѕС‡РёС‰РµРЅС‹.")
         else:
-            await update.message.reply_text(f"Тур #{tour_id} не найден.")
+            await update.message.reply_text(f"РўСѓСЂ #{tour_id} РЅРµ РЅР°Р№РґРµРЅ.")
     except Exception as e:
-        await update.message.reply_text(f"Ошибка удаления: {e}")
+        await update.message.reply_text(f"РћС€РёР±РєР° СѓРґР°Р»РµРЅРёСЏ: {e}")
     return ConversationHandler.END
 
 async def delete_tour_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Отменено.")
+    await update.message.reply_text("РћС‚РјРµРЅРµРЅРѕ.")
     return ConversationHandler.END
-# --- PURGE TOURS (запароленная команда) ---
+# --- PURGE TOURS (Р·Р°РїР°СЂРѕР»РµРЅРЅР°СЏ РєРѕРјР°РЅРґР°) ---
 PURGE_WAIT_PASSWORD = 9991
 
 def _get_purge_password_checker():
-    """Возвращает функцию checker(pw:str)->bool, не раскрывая пароль в коде.
-    Проверяется сначала переменная окружения PURGE_TOURS_PASSWORD_HASH (sha256),
-    иначе PURGE_TOURS_PASSWORD (plain)."""
+    """Р’РѕР·РІСЂР°С‰Р°РµС‚ С„СѓРЅРєС†РёСЋ checker(pw:str)->bool, РЅРµ СЂР°СЃРєСЂС‹РІР°СЏ РїР°СЂРѕР»СЊ РІ РєРѕРґРµ.
+    РџСЂРѕРІРµСЂСЏРµС‚СЃСЏ СЃРЅР°С‡Р°Р»Р° РїРµСЂРµРјРµРЅРЅР°СЏ РѕРєСЂСѓР¶РµРЅРёСЏ PURGE_TOURS_PASSWORD_HASH (sha256),
+    РёРЅР°С‡Рµ PURGE_TOURS_PASSWORD (plain)."""
     import hashlib
     env_hash = os.getenv('PURGE_TOURS_PASSWORD_HASH', '').strip()
     env_plain = os.getenv('PURGE_TOURS_PASSWORD', '').strip()
@@ -197,40 +197,40 @@ async def purge_tours_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     from utils import is_admin
     user = update.effective_user
     if not is_admin(user.id):
-        await update.message.reply_text("Команда доступна только администратору.")
+        await update.message.reply_text("РљРѕРјР°РЅРґР° РґРѕСЃС‚СѓРїРЅР° С‚РѕР»СЊРєРѕ Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂСѓ.")
         return ConversationHandler.END
-    await update.message.reply_text("Введите пароль для подтверждения удаления ВСЕХ туров:")
+    await update.message.reply_text("Р’РІРµРґРёС‚Рµ РїР°СЂРѕР»СЊ РґР»СЏ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ СѓРґР°Р»РµРЅРёСЏ Р’РЎР•РҐ С‚СѓСЂРѕРІ:")
     return PURGE_WAIT_PASSWORD
 
 async def purge_tours_password(update: Update, context: ContextTypes.DEFAULT_TYPE):
     pw = (update.message.text or '').strip()
     checker = _get_purge_password_checker()
     if not checker(pw):
-        await update.message.reply_text("Неверный пароль. Отмена.")
+        await update.message.reply_text("РќРµРІРµСЂРЅС‹Р№ РїР°СЂРѕР»СЊ. РћС‚РјРµРЅР°.")
         return ConversationHandler.END
     try:
         deleted = db.purge_all_tours()
-        await update.message.reply_text(f"Удалено туров: {deleted}. Составы и связанные данные также очищены.")
+        await update.message.reply_text(f"РЈРґР°Р»РµРЅРѕ С‚СѓСЂРѕРІ: {deleted}. РЎРѕСЃС‚Р°РІС‹ Рё СЃРІСЏР·Р°РЅРЅС‹Рµ РґР°РЅРЅС‹Рµ С‚Р°РєР¶Рµ РѕС‡РёС‰РµРЅС‹.")
     except Exception as e:
-        await update.message.reply_text(f"Ошибка удаления: {e}")
+        await update.message.reply_text(f"РћС€РёР±РєР° СѓРґР°Р»РµРЅРёСЏ: {e}")
     return ConversationHandler.END
 
 async def purge_tours_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Отменено.")
+    await update.message.reply_text("РћС‚РјРµРЅРµРЅРѕ.")
     return ConversationHandler.END
 
 async def add_image_shop_cancel(update, context):
-    await update.message.reply_text("Обновление магазина отменено.")
+    await update.message.reply_text("РћР±РЅРѕРІР»РµРЅРёРµ РјР°РіР°Р·РёРЅР° РѕС‚РјРµРЅРµРЅРѕ.")
     return ConversationHandler.END
 
-# --- Добавление игрока ---
+# --- Р”РѕР±Р°РІР»РµРЅРёРµ РёРіСЂРѕРєР° ---
 async def add_player_start(update, context):
     logger.info("add_player_start called")
     if not await admin_only(update, context):
         logger.warning("Admin check failed in add_player_start")
         return ConversationHandler.END
     logger.info("Sending name prompt")
-    await update.message.reply_text("Введите имя и фамилию игрока:")
+    await update.message.reply_text("Р’РІРµРґРёС‚Рµ РёРјСЏ Рё С„Р°РјРёР»РёСЋ РёРіСЂРѕРєР°:")
     logger.info(f"Returning ADD_NAME state: {ADD_NAME}")
     return ADD_NAME
 
@@ -238,40 +238,40 @@ async def add_player_name(update, context):
     try:
         logger.info(f"add_player_name called with text: {update.message.text}")
         if not update.message or not update.message.text or not update.message.text.strip():
-            await update.message.reply_text("Пожалуйста, введите корректное имя игрока.")
+            await update.message.reply_text("РџРѕР¶Р°Р»СѓР№СЃС‚Р°, РІРІРµРґРёС‚Рµ РєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ РёРіСЂРѕРєР°.")
             return ADD_NAME
             
         context.user_data['name'] = update.message.text.strip()
         logger.info(f"Set name to: {context.user_data['name']}")
         logger.info(f"Sending position prompt, will return ADD_POSITION: {ADD_POSITION}")
         
-        await update.message.reply_text("Введите позицию (нападающий/защитник/вратарь):")
+        await update.message.reply_text("Р’РІРµРґРёС‚Рµ РїРѕР·РёС†РёСЋ (РЅР°РїР°РґР°СЋС‰РёР№/Р·Р°С‰РёС‚РЅРёРє/РІСЂР°С‚Р°СЂСЊ):")
         return ADD_POSITION
         
     except Exception as e:
         logger.error(f"Error in add_player_name: {str(e)}", exc_info=True)
         if update and update.message:
-            await update.message.reply_text("Произошла ошибка при обработке имени игрока. Пожалуйста, попробуйте еще раз.")
-        return ADD_NAME  # Возвращаемся к вводу имени
+            await update.message.reply_text("РџСЂРѕРёР·РѕС€Р»Р° РѕС€РёР±РєР° РїСЂРё РѕР±СЂР°Р±РѕС‚РєРµ РёРјРµРЅРё РёРіСЂРѕРєР°. РџРѕР¶Р°Р»СѓР№СЃС‚Р°, РїРѕРїСЂРѕР±СѓР№С‚Рµ РµС‰Рµ СЂР°Р·.")
+        return ADD_NAME  # Р’РѕР·РІСЂР°С‰Р°РµРјСЃСЏ Рє РІРІРѕРґСѓ РёРјРµРЅРё
 
 async def add_player_position(update, context):
     context.user_data['position'] = (update.message.text or '').strip()
-    await update.message.reply_text("Введите клуб:")
+    await update.message.reply_text("Р’РІРµРґРёС‚Рµ РєР»СѓР±:")
     return ADD_CLUB
 
 async def add_player_club(update, context):
     context.user_data['club'] = (update.message.text or '').strip()
-    await update.message.reply_text("Введите нацию:")
+    await update.message.reply_text("Р’РІРµРґРёС‚Рµ РЅР°С†РёСЋ:")
     return ADD_NATION
 
 async def add_player_nation(update, context):
     context.user_data['nation'] = (update.message.text or '').strip()
-    await update.message.reply_text("Введите возраст (число):")
+    await update.message.reply_text("Р’РІРµРґРёС‚Рµ РІРѕР·СЂР°СЃС‚ (С‡РёСЃР»Рѕ):")
     return ADD_AGE
 
 async def add_player_age(update, context):
     context.user_data['age'] = (update.message.text or '').strip()
-    await update.message.reply_text("Введите стоимость (HC, число):")
+    await update.message.reply_text("Р’РІРµРґРёС‚Рµ СЃС‚РѕРёРјРѕСЃС‚СЊ (HC, С‡РёСЃР»Рѕ):")
     return ADD_PRICE
 
 async def add_player_price(update, context):
@@ -283,29 +283,29 @@ async def add_player_price(update, context):
         age = int(context.user_data.get('age', '0'))
         price = int((update.message.text or '0').strip())
         db.add_player(name, position, club, nation, age, price)
-        await update.message.reply_text("Игрок добавлен!")
+        await update.message.reply_text("РРіСЂРѕРє РґРѕР±Р°РІР»РµРЅ!")
     except Exception as e:
-        await update.message.reply_text(f"Ошибка при добавлении: {e}")
+        await update.message.reply_text(f"РћС€РёР±РєР° РїСЂРё РґРѕР±Р°РІР»РµРЅРёРё: {e}")
     return ConversationHandler.END
 
 async def add_player_cancel(update, context):
-    await update.message.reply_text("Добавление отменено.")
+    await update.message.reply_text("Р”РѕР±Р°РІР»РµРЅРёРµ РѕС‚РјРµРЅРµРЅРѕ.")
     return ConversationHandler.END
 
-# --- Список / поиск / удаление игроков ---
+# --- РЎРїРёСЃРѕРє / РїРѕРёСЃРє / СѓРґР°Р»РµРЅРёРµ РёРіСЂРѕРєРѕРІ ---
 async def list_players(update, context):
     if not await admin_only(update, context):
         return
     try:
         players = db.get_all_players()
     except Exception as e:
-        await update.message.reply_text(f"Ошибка получения списка игроков: {e}")
+        await update.message.reply_text(f"РћС€РёР±РєР° РїРѕР»СѓС‡РµРЅРёСЏ СЃРїРёСЃРєР° РёРіСЂРѕРєРѕРІ: {e}")
         return
     if not players:
-        await update.message.reply_text("Список игроков пуст.")
+        await update.message.reply_text("РЎРїРёСЃРѕРє РёРіСЂРѕРєРѕРІ РїСѓСЃС‚.")
         return
     msg = "\n".join([
-        f"{p[0]}. {p[1]} | {p[2]} | {p[3]} | {p[4]} | {p[5]} лет | {p[6]} HC" for p in players
+        f"{p[0]}. {p[1]} | {p[2]} | {p[3]} | {p[4]} | {p[5]} Р»РµС‚ | {p[6]} HC" for p in players
     ])
     for i in range(0, len(msg), 3500):
         await update.message.reply_text(msg[i:i+3500])
@@ -314,74 +314,74 @@ async def find_player(update, context):
     if not await admin_only(update, context):
         return
     if not context.args or not str(context.args[0]).isdigit():
-        await update.message.reply_text("Использование: /find_player <id>")
+        await update.message.reply_text("РСЃРїРѕР»СЊР·РѕРІР°РЅРёРµ: /find_player <id>")
         return
     player_id = int(context.args[0])
     player = db.get_player_by_id(player_id)
     if not player:
-        await update.message.reply_text("Игрок не найден.")
+        await update.message.reply_text("РРіСЂРѕРє РЅРµ РЅР°Р№РґРµРЅ.")
         return
-    msg = f"{player[0]}. {player[1]} | {player[2]} | {player[3]} | {player[4]} | {player[5]} лет | {player[6]} HC"
+    msg = f"{player[0]}. {player[1]} | {player[2]} | {player[3]} | {player[4]} | {player[5]} Р»РµС‚ | {player[6]} HC"
     await update.message.reply_text(msg)
 
 async def remove_player(update, context):
     if not await admin_only(update, context):
         return
     if not context.args or not str(context.args[0]).isdigit():
-        await update.message.reply_text("Использование: /remove_player <id>")
+        await update.message.reply_text("РСЃРїРѕР»СЊР·РѕРІР°РЅРёРµ: /remove_player <id>")
         return
     player_id = int(context.args[0])
     player = db.get_player_by_id(player_id)
     if not player:
-        await update.message.reply_text("Игрок не найден.")
+        await update.message.reply_text("РРіСЂРѕРє РЅРµ РЅР°Р№РґРµРЅ.")
         return
     try:
         if db.remove_player(player_id):
-            await update.message.reply_text(f"Игрок {player[1]} (ID: {player_id}) удален.")
+            await update.message.reply_text(f"РРіСЂРѕРє {player[1]} (ID: {player_id}) СѓРґР°Р»РµРЅ.")
         else:
-            await update.message.reply_text("Ошибка при удалении игрока.")
+            await update.message.reply_text("РћС€РёР±РєР° РїСЂРё СѓРґР°Р»РµРЅРёРё РёРіСЂРѕРєР°.")
     except Exception as e:
-        await update.message.reply_text(f"Ошибка при удалении игрока: {e}")
+        await update.message.reply_text(f"РћС€РёР±РєР° РїСЂРё СѓРґР°Р»РµРЅРёРё РёРіСЂРѕРєР°: {e}")
 
-# --- Редактирование игрока ---
+# --- Р РµРґР°РєС‚РёСЂРѕРІР°РЅРёРµ РёРіСЂРѕРєР° ---
 async def edit_player_start(update, context):
     if not await admin_only(update, context):
         return ConversationHandler.END
     if not context.args or not str(context.args[0]).isdigit():
-        await update.message.reply_text("Использование: /edit_player <id>")
+        await update.message.reply_text("РСЃРїРѕР»СЊР·РѕРІР°РЅРёРµ: /edit_player <id>")
         return ConversationHandler.END
     player_id = int(context.args[0])
     player = db.get_player_by_id(player_id)
     if not player:
-        await update.message.reply_text("Игрок не найден.")
+        await update.message.reply_text("РРіСЂРѕРє РЅРµ РЅР°Р№РґРµРЅ.")
         return ConversationHandler.END
     context.user_data['edit_player_id'] = player_id
-    await update.message.reply_text("Введите новое имя и фамилию игрока:")
+    await update.message.reply_text("Р’РІРµРґРёС‚Рµ РЅРѕРІРѕРµ РёРјСЏ Рё С„Р°РјРёР»РёСЋ РёРіСЂРѕРєР°:")
     return EDIT_NAME
 
 async def edit_player_name(update, context):
     context.user_data['edit_name'] = (update.message.text or '').strip()
-    await update.message.reply_text("Введите новую позицию (нападающий/защитник/вратарь):")
+    await update.message.reply_text("Р’РІРµРґРёС‚Рµ РЅРѕРІСѓСЋ РїРѕР·РёС†РёСЋ (РЅР°РїР°РґР°СЋС‰РёР№/Р·Р°С‰РёС‚РЅРёРє/РІСЂР°С‚Р°СЂСЊ):")
     return EDIT_POSITION
 
 async def edit_player_position(update, context):
     context.user_data['edit_position'] = (update.message.text or '').strip()
-    await update.message.reply_text("Введите новый клуб:")
+    await update.message.reply_text("Р’РІРµРґРёС‚Рµ РЅРѕРІС‹Р№ РєР»СѓР±:")
     return EDIT_CLUB
 
 async def edit_player_club(update, context):
     context.user_data['edit_club'] = (update.message.text or '').strip()
-    await update.message.reply_text("Введите новую нацию:")
+    await update.message.reply_text("Р’РІРµРґРёС‚Рµ РЅРѕРІСѓСЋ РЅР°С†РёСЋ:")
     return EDIT_NATION
 
 async def edit_player_nation(update, context):
     context.user_data['edit_nation'] = (update.message.text or '').strip()
-    await update.message.reply_text("Введите новый возраст (число):")
+    await update.message.reply_text("Р’РІРµРґРёС‚Рµ РЅРѕРІС‹Р№ РІРѕР·СЂР°СЃС‚ (С‡РёСЃР»Рѕ):")
     return EDIT_AGE
 
 async def edit_player_age(update, context):
     context.user_data['edit_age'] = (update.message.text or '').strip()
-    await update.message.reply_text("Введите новую стоимость (HC, число):")
+    await update.message.reply_text("Р’РІРµРґРёС‚Рµ РЅРѕРІСѓСЋ СЃС‚РѕРёРјРѕСЃС‚СЊ (HC, С‡РёСЃР»Рѕ):")
     return EDIT_PRICE
 
 async def edit_player_price(update, context):
@@ -395,21 +395,21 @@ async def edit_player_price(update, context):
         price = int((update.message.text or '0').strip())
         ok = db.update_player(player_id, name, position, club, nation, age, price)
         if ok:
-            await update.message.reply_text("Игрок успешно обновлён!")
+            await update.message.reply_text("РРіСЂРѕРє СѓСЃРїРµС€РЅРѕ РѕР±РЅРѕРІР»С‘РЅ!")
         else:
-            await update.message.reply_text("Не удалось обновить игрока.")
+            await update.message.reply_text("РќРµ СѓРґР°Р»РѕСЃСЊ РѕР±РЅРѕРІРёС‚СЊ РёРіСЂРѕРєР°.")
     except Exception as e:
-        await update.message.reply_text(f"Ошибка при обновлении: {e}")
+        await update.message.reply_text(f"РћС€РёР±РєР° РїСЂРё РѕР±РЅРѕРІР»РµРЅРёРё: {e}")
     finally:
         for k in ('edit_player_id','edit_name','edit_position','edit_club','edit_nation','edit_age'):
             context.user_data.pop(k, None)
     return ConversationHandler.END
 
 async def edit_player_cancel(update, context):
-    await update.message.reply_text("Редактирование отменено.")
+    await update.message.reply_text("Р РµРґР°РєС‚РёСЂРѕРІР°РЅРёРµ РѕС‚РјРµРЅРµРЅРѕ.")
     return ConversationHandler.END
 
-# --- Тур: добавить и вывести состав ---
+# --- РўСѓСЂ: РґРѕР±Р°РІРёС‚СЊ Рё РІС‹РІРµСЃС‚Рё СЃРѕСЃС‚Р°РІ ---
 SET_BUDGET_WAIT = 21
 
 async def set_budget_start(update, context):
@@ -437,7 +437,7 @@ async def set_tour_roster_start(update, context):
     if not await admin_only(update, context):
         return ConversationHandler.END
     await update.message.reply_text(
-        "Пожалуйста, отправьте список игроков на тур в формате:\n50: 28, 1, ...\n40: ... и т.д. (ровно 20 игроков)"
+        "РџРѕР¶Р°Р»СѓР№СЃС‚Р°, РѕС‚РїСЂР°РІСЊС‚Рµ СЃРїРёСЃРѕРє РёРіСЂРѕРєРѕРІ РЅР° С‚СѓСЂ РІ С„РѕСЂРјР°С‚Рµ:\n50: 28, 1, ...\n40: ... Рё С‚.Рґ. (СЂРѕРІРЅРѕ 20 РёРіСЂРѕРєРѕРІ)"
     )
     return SET_TOUR_ROSTER_WAIT
 
@@ -448,7 +448,7 @@ async def set_tour_roster_process(update, context):
     try:
         for line in lines:
             if ':' not in line:
-                await update.message.reply_text(f"Неверный формат строки: {line}")
+                await update.message.reply_text(f"РќРµРІРµСЂРЅС‹Р№ С„РѕСЂРјР°С‚ СЃС‚СЂРѕРєРё: {line}")
                 return ConversationHandler.END
             cost_str, ids_str = line.split(':', 1)
             cost = int(cost_str.strip())
@@ -456,21 +456,21 @@ async def set_tour_roster_process(update, context):
             for player_id in id_list:
                 ids.append((cost, player_id))
     except Exception as e:
-        await update.message.reply_text(f"Ошибка разбора: {e}")
+        await update.message.reply_text(f"РћС€РёР±РєР° СЂР°Р·Р±РѕСЂР°: {e}")
         return ConversationHandler.END
     if len(ids) != 20:
-        await update.message.reply_text(f"Ошибка: должно быть ровно 20 игроков, а не {len(ids)}")
+        await update.message.reply_text(f"РћС€РёР±РєР°: РґРѕР»Р¶РЅРѕ Р±С‹С‚СЊ СЂРѕРІРЅРѕ 20 РёРіСЂРѕРєРѕРІ, Р° РЅРµ {len(ids)}")
         return ConversationHandler.END
-    # Проверка, что все игроки существуют
+    # РџСЂРѕРІРµСЂРєР°, С‡С‚Рѕ РІСЃРµ РёРіСЂРѕРєРё СЃСѓС‰РµСЃС‚РІСѓСЋС‚
     for cost, player_id in ids:
         player = db.get_player_by_id(player_id)
         if not player:
-            await update.message.reply_text(f"Игрок с id {player_id} не найден!")
+            await update.message.reply_text(f"РРіСЂРѕРє СЃ id {player_id} РЅРµ РЅР°Р№РґРµРЅ!")
             return ConversationHandler.END
     db.clear_tour_roster()
     for cost, player_id in ids:
         db.add_tour_roster_entry(player_id, cost)
-    await update.message.reply_text("Состав на тур успешно сохранён!")
+    await update.message.reply_text("РЎРѕСЃС‚Р°РІ РЅР° С‚СѓСЂ СѓСЃРїРµС€РЅРѕ СЃРѕС…СЂР°РЅС‘РЅ!")
     return ConversationHandler.END
 
 async def get_tour_roster(update, context):
@@ -478,19 +478,19 @@ async def get_tour_roster(update, context):
         return
     roster = db.get_tour_roster_with_player_info()
     if not roster:
-        await update.message.reply_text("Состав на тур не задан.")
+        await update.message.reply_text("РЎРѕСЃС‚Р°РІ РЅР° С‚СѓСЂ РЅРµ Р·Р°РґР°РЅ.")
         return
-    msg = "Состав на тур:\n"
+    msg = "РЎРѕСЃС‚Р°РІ РЅР° С‚СѓСЂ:\n"
     for cost, pid, name, pos, club, nation, age, price in roster:
-        msg += f"{cost}: {pid}. {name} | {pos} | {club} | {nation} | {age} лет | {price} HC\n"
+        msg += f"{cost}: {pid}. {name} | {pos} | {club} | {nation} | {age} Р»РµС‚ | {price} HC\n"
     await update.message.reply_text(msg)
 
-# --- Список пользователей и подписок ---
+# --- РЎРїРёСЃРѕРє РїРѕР»СЊР·РѕРІР°С‚РµР»РµР№ Рё РїРѕРґРїРёСЃРѕРє ---
 async def show_users(update, context):
     if not await admin_only(update, context):
         return
     import datetime
-    # Получаем всех пользователей и их подписки
+    # РџРѕР»СѓС‡Р°РµРј РІСЃРµС… РїРѕР»СЊР·РѕРІР°С‚РµР»РµР№ Рё РёС… РїРѕРґРїРёСЃРєРё
     with db.closing(db.sqlite3.connect(db.DB_NAME)) as conn:
         users = conn.execute('SELECT telegram_id, username, name, hc_balance FROM users').fetchall()
         subs = {row[0]: row[1] for row in conn.execute('SELECT user_id, paid_until FROM subscriptions').fetchall()}
@@ -505,23 +505,23 @@ async def show_users(update, context):
                 active = dt > now
             except Exception:
                 active = False
-        status = '✅ подписка активна' if active else '❌ нет подписки'
+        status = 'вњ… РїРѕРґРїРёСЃРєР° Р°РєС‚РёРІРЅР°' if active else 'вќЊ РЅРµС‚ РїРѕРґРїРёСЃРєРё'
         lines.append(f"{user_id} | {username or '-'} | {name or '-'} | {status} | HC: {hc_balance if hc_balance is not None else 0}")
     if not lines:
-        await update.message.reply_text("Нет пользователей.")
+        await update.message.reply_text("РќРµС‚ РїРѕР»СЊР·РѕРІР°С‚РµР»РµР№.")
     else:
-        msg = 'Пользователи и подписки:\n\n' + '\n'.join(lines)
+        msg = 'РџРѕР»СЊР·РѕРІР°С‚РµР»Рё Рё РїРѕРґРїРёСЃРєРё:\n\n' + '\n'.join(lines)
         for i in range(0, len(msg), 4000):
             await update.message.reply_text(msg[i:i+4000])
 
-# --- Челлендж: вывод составов по id ---
+# --- Р§РµР»Р»РµРЅРґР¶: РІС‹РІРѕРґ СЃРѕСЃС‚Р°РІРѕРІ РїРѕ id ---
 async def challenge_rosters_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Админ-команда: /challenge_rosters <challenge_id>
-    Показывает список пользователей, их статус заявки, ставку и выбранных игроков (нападающий/защитник/вратарь).
+    """РђРґРјРёРЅ-РєРѕРјР°РЅРґР°: /challenge_rosters <challenge_id>
+    РџРѕРєР°Р·С‹РІР°РµС‚ СЃРїРёСЃРѕРє РїРѕР»СЊР·РѕРІР°С‚РµР»РµР№, РёС… СЃС‚Р°С‚СѓСЃ Р·Р°СЏРІРєРё, СЃС‚Р°РІРєСѓ Рё РІС‹Р±СЂР°РЅРЅС‹С… РёРіСЂРѕРєРѕРІ (РЅР°РїР°РґР°СЋС‰РёР№/Р·Р°С‰РёС‚РЅРёРє/РІСЂР°С‚Р°СЂСЊ).
     """
     if not await admin_only(update, context):
         return
-    # Разбор аргумента
+    # Р Р°Р·Р±РѕСЂ Р°СЂРіСѓРјРµРЅС‚Р°
     challenge_id = None
     try:
         if context.args and len(context.args) >= 1:
@@ -529,10 +529,10 @@ async def challenge_rosters_cmd(update: Update, context: ContextTypes.DEFAULT_TY
     except Exception:
         challenge_id = None
     if not challenge_id:
-        await update.message.reply_text("Использование: /challenge_rosters <challenge_id>")
+        await update.message.reply_text("РСЃРїРѕР»СЊР·РѕРІР°РЅРёРµ: /challenge_rosters <challenge_id>")
         return
 
-    # Получаем записи заявок с юзерами
+    # РџРѕР»СѓС‡Р°РµРј Р·Р°РїРёСЃРё Р·Р°СЏРІРѕРє СЃ СЋР·РµСЂР°РјРё
     try:
         with db.closing(db.sqlite3.connect(db.DB_NAME)) as conn:
             conn.row_factory = db.sqlite3.Row
@@ -554,16 +554,16 @@ async def challenge_rosters_cmd(update: Update, context: ContextTypes.DEFAULT_TY
                 ''', (challenge_id,)
             ).fetchall()
     except Exception as e:
-        await update.message.reply_text(f"Ошибка БД: {e}")
+        await update.message.reply_text(f"РћС€РёР±РєР° Р‘Р”: {e}")
         return
 
     if not rows:
-        await update.message.reply_text(f"Для челленджа #{challenge_id} заявки не найдены.")
+        await update.message.reply_text(f"Р”Р»СЏ С‡РµР»Р»РµРЅРґР¶Р° #{challenge_id} Р·Р°СЏРІРєРё РЅРµ РЅР°Р№РґРµРЅС‹.")
         return
 
     def name_club(pid):
         if not pid:
-            return "—"
+            return "вЂ”"
         try:
             p = db.get_player_by_id(int(pid))
             if p:
@@ -572,34 +572,34 @@ async def challenge_rosters_cmd(update: Update, context: ContextTypes.DEFAULT_TY
             pass
         return str(pid)
 
-    # Формируем сообщение с разбиением на части
+    # Р¤РѕСЂРјРёСЂСѓРµРј СЃРѕРѕР±С‰РµРЅРёРµ СЃ СЂР°Р·Р±РёРµРЅРёРµРј РЅР° С‡Р°СЃС‚Рё
     parts = []
-    cur_lines = [f"Составы участников челленджа #{challenge_id}:", ""]
+    cur_lines = [f"РЎРѕСЃС‚Р°РІС‹ СѓС‡Р°СЃС‚РЅРёРєРѕРІ С‡РµР»Р»РµРЅРґР¶Р° #{challenge_id}:", ""]
     for r in rows:
-        uname = ("@" + (r["username"] or "").strip()) if r["username"] else "—"
-        name = r["name"] or "—"
+        uname = ("@" + (r["username"] or "").strip()) if r["username"] else "вЂ”"
+        name = r["name"] or "вЂ”"
         status = (r["status"] or "").lower()
         stake = r["stake"] or 0
-        fwd = name_club(r["forward_id"]) if r["forward_id"] else "—"
-        dfd = name_club(r["defender_id"]) if r["defender_id"] else "—"
-        gk = name_club(r["goalie_id"]) if r["goalie_id"] else "—"
+        fwd = name_club(r["forward_id"]) if r["forward_id"] else "вЂ”"
+        dfd = name_club(r["defender_id"]) if r["defender_id"] else "вЂ”"
+        gk = name_club(r["goalie_id"]) if r["goalie_id"] else "вЂ”"
 
-        # Статус значком
+        # РЎС‚Р°С‚СѓСЃ Р·РЅР°С‡РєРѕРј
         status_icon = {
-            'in_progress': '🟡 in_progress',
-            'completed': '🟢 completed',
-            'canceled': '⚪ canceled',
-            'refunded': '⚪ refunded',
-        }.get(status, status or '—')
+            'in_progress': 'рџџЎ in_progress',
+            'completed': 'рџџў completed',
+            'canceled': 'вљЄ canceled',
+            'refunded': 'вљЄ refunded',
+        }.get(status, status or 'вЂ”')
 
-        cur_lines.append(f"• {uname} | {name} | {status_icon} | Ставка: {stake} HC")
-        cur_lines.append(f"Нападающий: {fwd}")
-        cur_lines.append(f"Защитник: {dfd}")
-        cur_lines.append(f"Вратарь: {gk}")
+        cur_lines.append(f"вЂў {uname} | {name} | {status_icon} | РЎС‚Р°РІРєР°: {stake} HC")
+        cur_lines.append(f"РќР°РїР°РґР°СЋС‰РёР№: {fwd}")
+        cur_lines.append(f"Р—Р°С‰РёС‚РЅРёРє: {dfd}")
+        cur_lines.append(f"Р’СЂР°С‚Р°СЂСЊ: {gk}")
         cur_lines.append("")
 
         joined = "\n".join(cur_lines)
-        if len(joined) > 3500:  # запас до лимита Telegram в 4096
+        if len(joined) > 3500:  # Р·Р°РїР°СЃ РґРѕ Р»РёРјРёС‚Р° Telegram РІ 4096
             parts.append(joined)
             cur_lines = []
     if cur_lines:
@@ -614,37 +614,37 @@ async def challenge_rosters_cmd(update: Update, context: ContextTypes.DEFAULT_TY
 async def admin_only(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     user_id = update.effective_user.id if update.effective_user else None
     if not is_admin(user_id):
-        await update.message.reply_text('Нет доступа')
+        await update.message.reply_text('РќРµС‚ РґРѕСЃС‚СѓРїР°')
         return False
     return True
 
 async def send_tour_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Сценарий:
-    1. Админ отправляет /send_tour_image — бот просит прикрепить картинку.
-    2. Админ отправляет фото — бот сохраняет, сообщает об успехе.
+    РЎС†РµРЅР°СЂРёР№:
+    1. РђРґРјРёРЅ РѕС‚РїСЂР°РІР»СЏРµС‚ /send_tour_image вЂ” Р±РѕС‚ РїСЂРѕСЃРёС‚ РїСЂРёРєСЂРµРїРёС‚СЊ РєР°СЂС‚РёРЅРєСѓ.
+    2. РђРґРјРёРЅ РѕС‚РїСЂР°РІР»СЏРµС‚ С„РѕС‚Рѕ вЂ” Р±РѕС‚ СЃРѕС…СЂР°РЅСЏРµС‚, СЃРѕРѕР±С‰Р°РµС‚ РѕР± СѓСЃРїРµС…Рµ.
     """
     if not await admin_only(update, context):
-        logger.info(f"Пользователь {update.effective_user.id} не админ, доступ запрещён.")
+        logger.info(f"РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ {update.effective_user.id} РЅРµ Р°РґРјРёРЅ, РґРѕСЃС‚СѓРї Р·Р°РїСЂРµС‰С‘РЅ.")
         return
 
-    # Если команда вызвана без фото, запрашиваем фото
+    # Р•СЃР»Рё РєРѕРјР°РЅРґР° РІС‹Р·РІР°РЅР° Р±РµР· С„РѕС‚Рѕ, Р·Р°РїСЂР°С€РёРІР°РµРј С„РѕС‚Рѕ
 
 
     if not update.message.photo:
         context.user_data['awaiting_tour_image'] = True
         chat_id = update.effective_chat.id
         debug_info = f"[DEBUG] /send_tour_image chat_id: {chat_id}, user_data: {context.user_data}"
-        await update.message.reply_text('Пожалуйста, прикрепите картинку следующим сообщением.')
+        await update.message.reply_text('РџРѕР¶Р°Р»СѓР№СЃС‚Р°, РїСЂРёРєСЂРµРїРёС‚Рµ РєР°СЂС‚РёРЅРєСѓ СЃР»РµРґСѓСЋС‰РёРј СЃРѕРѕР±С‰РµРЅРёРµРј.')
         await update.message.reply_text(debug_info)
-        logger.info(f"[DEBUG] Ожидание картинки от админа {update.effective_user.id}, user_data: {context.user_data}")
+        logger.info(f"[DEBUG] РћР¶РёРґР°РЅРёРµ РєР°СЂС‚РёРЅРєРё РѕС‚ Р°РґРјРёРЅР° {update.effective_user.id}, user_data: {context.user_data}")
         return
 
-    # Если фото пришло после запроса
+    # Р•СЃР»Рё С„РѕС‚Рѕ РїСЂРёС€Р»Рѕ РїРѕСЃР»Рµ Р·Р°РїСЂРѕСЃР°
 
 
     if context.user_data.get('awaiting_tour_image'):
-        logger.info(f"[DEBUG] Получено фото, user_data: {context.user_data}")
+        logger.info(f"[DEBUG] РџРѕР»СѓС‡РµРЅРѕ С„РѕС‚Рѕ, user_data: {context.user_data}")
         try:
             photo = update.message.photo[-1]
             file = await photo.get_file()
@@ -654,17 +654,17 @@ async def send_tour_image(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             with open(TOUR_IMAGE_PATH_FILE, 'w') as f:
                 f.write(filename)
             context.user_data['awaiting_tour_image'] = False
-            await update.message.reply_text(f'✅ Картинка принята и сохранена как `{filename}`. Она будет разослана пользователям при команде /tour.')
-            await context.bot.send_message(chat_id=update.effective_chat.id, text=f'[DEBUG] Фото обработано, сохранено как {filename}')
-            logger.info(f"Картинка тура сохранена: {path} (от {update.effective_user.id})")
+            await update.message.reply_text(f'вњ… РљР°СЂС‚РёРЅРєР° РїСЂРёРЅСЏС‚Р° Рё СЃРѕС…СЂР°РЅРµРЅР° РєР°Рє `{filename}`. РћРЅР° Р±СѓРґРµС‚ СЂР°Р·РѕСЃР»Р°РЅР° РїРѕР»СЊР·РѕРІР°С‚РµР»СЏРј РїСЂРё РєРѕРјР°РЅРґРµ /tour.')
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=f'[DEBUG] Р¤РѕС‚Рѕ РѕР±СЂР°Р±РѕС‚Р°РЅРѕ, СЃРѕС…СЂР°РЅРµРЅРѕ РєР°Рє {filename}')
+            logger.info(f"РљР°СЂС‚РёРЅРєР° С‚СѓСЂР° СЃРѕС…СЂР°РЅРµРЅР°: {path} (РѕС‚ {update.effective_user.id})")
         except Exception as e:
-            logger.error(f'Ошибка при сохранении картинки тура: {e}')
-            await update.message.reply_text(f'Ошибка при сохранении картинки: {e}')
+            logger.error(f'РћС€РёР±РєР° РїСЂРё СЃРѕС…СЂР°РЅРµРЅРёРё РєР°СЂС‚РёРЅРєРё С‚СѓСЂР°: {e}')
+            await update.message.reply_text(f'РћС€РёР±РєР° РїСЂРё СЃРѕС…СЂР°РЅРµРЅРёРё РєР°СЂС‚РёРЅРєРё: {e}')
         return
 
-    # Если фото пришло без запроса
-    await update.message.reply_text('Сначала отправьте команду /send_tour_image, затем фото.')
-    logger.info(f"Фото получено без запроса от {update.effective_user.id}")
+    # Р•СЃР»Рё С„РѕС‚Рѕ РїСЂРёС€Р»Рѕ Р±РµР· Р·Р°РїСЂРѕСЃР°
+    await update.message.reply_text('РЎРЅР°С‡Р°Р»Р° РѕС‚РїСЂР°РІСЊС‚Рµ РєРѕРјР°РЅРґСѓ /send_tour_image, Р·Р°С‚РµРј С„РѕС‚Рѕ.')
+    logger.info(f"Р¤РѕС‚Рѕ РїРѕР»СѓС‡РµРЅРѕ Р±РµР· Р·Р°РїСЂРѕСЃР° РѕС‚ {update.effective_user.id}")
 
 async def process_tour_image_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
@@ -675,30 +675,30 @@ async def process_tour_image_photo(update: Update, context: ContextTypes.DEFAULT
         await file.download_to_drive(path)
         with open(TOUR_IMAGE_PATH_FILE, 'w') as f:
             f.write(filename)
-        await update.message.reply_text(f'✅ Картинка принята и сохранена как `{filename}`. Она будет разослана пользователям при команде /tour.')
-        logger.info(f"Картинка тура сохранена: {path} (от {update.effective_user.id})")
+        await update.message.reply_text(f'вњ… РљР°СЂС‚РёРЅРєР° РїСЂРёРЅСЏС‚Р° Рё СЃРѕС…СЂР°РЅРµРЅР° РєР°Рє `{filename}`. РћРЅР° Р±СѓРґРµС‚ СЂР°Р·РѕСЃР»Р°РЅР° РїРѕР»СЊР·РѕРІР°С‚РµР»СЏРј РїСЂРё РєРѕРјР°РЅРґРµ /tour.')
+        logger.info(f"РљР°СЂС‚РёРЅРєР° С‚СѓСЂР° СЃРѕС…СЂР°РЅРµРЅР°: {path} (РѕС‚ {update.effective_user.id})")
     except Exception as e:
-        logger.error(f'Ошибка при сохранении картинки тура: {e}')
-        await update.message.reply_text(f'Ошибка при сохранении картинки: {e}')
+        logger.error(f'РћС€РёР±РєР° РїСЂРё СЃРѕС…СЂР°РЅРµРЅРёРё РєР°СЂС‚РёРЅРєРё С‚СѓСЂР°: {e}')
+        await update.message.reply_text(f'РћС€РёР±РєР° РїСЂРё СЃРѕС…СЂР°РЅРµРЅРёРё РєР°СЂС‚РёРЅРєРё: {e}')
 
 async def addhc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await admin_only(update, context):
         return
     if len(context.args) != 2 or not context.args[1].isdigit():
-        await update.message.reply_text('Использование: /addhc @username 100')
+        await update.message.reply_text('РСЃРїРѕР»СЊР·РѕРІР°РЅРёРµ: /addhc @username 100')
         return
     username = context.args[0].lstrip('@')
     amount = int(context.args[1])
     user = db.get_user_by_username(username)
     if not user:
-        await update.message.reply_text('Пользователь не найден.')
+        await update.message.reply_text('РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ.')
         return
     db.update_hc_balance(user[0], amount)
     new_balance = db.get_user_by_id(user[0])[3]
-    await context.bot.send_message(chat_id=user[0], text=f'🎉 Тебе начислено {amount} HC!\n💰 Новый баланс: {new_balance} HC')
-    await update.message.reply_text(f'Пользователю @{username} начислено {amount} HC.')
+    await context.bot.send_message(chat_id=user[0], text=f'рџЋ‰ РўРµР±Рµ РЅР°С‡РёСЃР»РµРЅРѕ {amount} HC!\nрџ’° РќРѕРІС‹Р№ Р±Р°Р»Р°РЅСЃ: {new_balance} HC')
+    await update.message.reply_text(f'РџРѕР»СЊР·РѕРІР°С‚РµР»СЋ @{username} РЅР°С‡РёСЃР»РµРЅРѕ {amount} HC.')
 
-# --- Регистрация челленджа (+ загрузка картинки) ---
+# --- Р РµРіРёСЃС‚СЂР°С†РёСЏ С‡РµР»Р»РµРЅРґР¶Р° (+ Р·Р°РіСЂСѓР·РєР° РєР°СЂС‚РёРЅРєРё) ---
 CHALLENGE_START = 31
 CHALLENGE_DEADLINE = 32
 CHALLENGE_END = 33
@@ -718,7 +718,7 @@ async def send_challenge_image_start(update: Update, context: ContextTypes.DEFAU
     context.user_data.pop('challenge_deadline', None)
     context.user_data.pop('challenge_end', None)
     await update.message.reply_text(
-        'Создание челленджа. Введите дату СТАРТА в формате ISO, например: 2025-08-08T12:00:00'
+        'РЎРѕР·РґР°РЅРёРµ С‡РµР»Р»РµРЅРґР¶Р°. Р’РІРµРґРёС‚Рµ РґР°С‚Сѓ РЎРўРђР РўРђ РІ С„РѕСЂРјР°С‚Рµ ISO, РЅР°РїСЂРёРјРµСЂ: 2025-08-08T12:00:00'
     )
     return CHALLENGE_START
 
@@ -726,45 +726,45 @@ async def challenge_input_start_date(update: Update, context: ContextTypes.DEFAU
     text = (update.message.text or '').strip()
     dt = _parse_iso(text)
     if not dt:
-        await update.message.reply_text('Некорректная дата. Повторите в формате ISO: 2025-08-08T12:00:00')
+        await update.message.reply_text('РќРµРєРѕСЂСЂРµРєС‚РЅР°СЏ РґР°С‚Р°. РџРѕРІС‚РѕСЂРёС‚Рµ РІ С„РѕСЂРјР°С‚Рµ ISO: 2025-08-08T12:00:00')
         return CHALLENGE_START
     context.user_data['challenge_start'] = text
-    await update.message.reply_text('Введите ДЕДЛАЙН (крайний срок выбора состава) в формате ISO: 2025-08-09T18:00:00')
+    await update.message.reply_text('Р’РІРµРґРёС‚Рµ Р”Р•Р”Р›РђР™Рќ (РєСЂР°Р№РЅРёР№ СЃСЂРѕРє РІС‹Р±РѕСЂР° СЃРѕСЃС‚Р°РІР°) РІ С„РѕСЂРјР°С‚Рµ ISO: 2025-08-09T18:00:00')
     return CHALLENGE_DEADLINE
 
 async def challenge_input_deadline(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or '').strip()
     dt = _parse_iso(text)
     if not dt:
-        await update.message.reply_text('Некорректная дата. Повторите дедлайн в формате ISO.')
+        await update.message.reply_text('РќРµРєРѕСЂСЂРµРєС‚РЅР°СЏ РґР°С‚Р°. РџРѕРІС‚РѕСЂРёС‚Рµ РґРµРґР»Р°Р№РЅ РІ С„РѕСЂРјР°С‚Рµ ISO.')
         return CHALLENGE_DEADLINE
-    # Проверим порядок
+    # РџСЂРѕРІРµСЂРёРј РїРѕСЂСЏРґРѕРє
     sd = _parse_iso(context.user_data.get('challenge_start', ''))
     if not sd or not (sd < dt):
-        await update.message.reply_text('Дедлайн должен быть ПОСЛЕ даты старта. Повторите ввод дедлайна.')
+        await update.message.reply_text('Р”РµРґР»Р°Р№РЅ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РџРћРЎР›Р• РґР°С‚С‹ СЃС‚Р°СЂС‚Р°. РџРѕРІС‚РѕСЂРёС‚Рµ РІРІРѕРґ РґРµРґР»Р°Р№РЅР°.')
         return CHALLENGE_DEADLINE
     context.user_data['challenge_deadline'] = text
-    await update.message.reply_text('Введите ДАТУ ОКОНЧАНИЯ игры в формате ISO: 2025-08-12T23:59:59')
+    await update.message.reply_text('Р’РІРµРґРёС‚Рµ Р”РђРўРЈ РћРљРћРќР§РђРќРРЇ РёРіСЂС‹ РІ С„РѕСЂРјР°С‚Рµ ISO: 2025-08-12T23:59:59')
     return CHALLENGE_END
 
 async def challenge_input_end_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or '').strip()
     dt = _parse_iso(text)
     if not dt:
-        await update.message.reply_text('Некорректная дата. Повторите дату окончания в формате ISO.')
+        await update.message.reply_text('РќРµРєРѕСЂСЂРµРєС‚РЅР°СЏ РґР°С‚Р°. РџРѕРІС‚РѕСЂРёС‚Рµ РґР°С‚Сѓ РѕРєРѕРЅС‡Р°РЅРёСЏ РІ С„РѕСЂРјР°С‚Рµ ISO.')
         return CHALLENGE_END
     sd = _parse_iso(context.user_data.get('challenge_start', ''))
     dl = _parse_iso(context.user_data.get('challenge_deadline', ''))
     if not sd or not dl or not (dl < dt):
-        await update.message.reply_text('Дата окончания должна быть ПОСЛЕ дедлайна. Повторите дату окончания.')
+        await update.message.reply_text('Р”Р°С‚Р° РѕРєРѕРЅС‡Р°РЅРёСЏ РґРѕР»Р¶РЅР° Р±С‹С‚СЊ РџРћРЎР›Р• РґРµРґР»Р°Р№РЅР°. РџРѕРІС‚РѕСЂРёС‚Рµ РґР°С‚Сѓ РѕРєРѕРЅС‡Р°РЅРёСЏ.')
         return CHALLENGE_END
     context.user_data['challenge_end'] = text
-    await update.message.reply_text('Теперь пришлите КАРТИНКУ челленджа сообщением в чат.')
+    await update.message.reply_text('РўРµРїРµСЂСЊ РїСЂРёС€Р»РёС‚Рµ РљРђР РўРРќРљРЈ С‡РµР»Р»РµРЅРґР¶Р° СЃРѕРѕР±С‰РµРЅРёРµРј РІ С‡Р°С‚.')
     return CHALLENGE_WAIT_IMAGE
 
 async def send_challenge_image_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        # Сохраняем фото
+        # РЎРѕС…СЂР°РЅСЏРµРј С„РѕС‚Рѕ
         photo = update.message.photo[-1]
         file = await photo.get_file()
         filename = f"challenge_{photo.file_unique_id}.jpg"
@@ -773,7 +773,7 @@ async def send_challenge_image_photo(update: Update, context: ContextTypes.DEFAU
         with open(CHALLENGE_IMAGE_PATH_FILE, 'w') as f:
             f.write(filename)
 
-        # Регистрируем челлендж в БД
+        # Р РµРіРёСЃС‚СЂРёСЂСѓРµРј С‡РµР»Р»РµРЅРґР¶ РІ Р‘Р”
         start_date = context.user_data.get('challenge_start')
         deadline = context.user_data.get('challenge_deadline')
         end_date = context.user_data.get('challenge_end')
@@ -781,19 +781,19 @@ async def send_challenge_image_photo(update: Update, context: ContextTypes.DEFAU
         ch_id = db.create_challenge(start_date, deadline, end_date, filename, image_file_id)
 
         await update.message.reply_text(
-            f'✅ Челлендж зарегистрирован (id={ch_id}). Картинка сохранена как `{filename}`.'
+            f'вњ… Р§РµР»Р»РµРЅРґР¶ Р·Р°СЂРµРіРёСЃС‚СЂРёСЂРѕРІР°РЅ (id={ch_id}). РљР°СЂС‚РёРЅРєР° СЃРѕС…СЂР°РЅРµРЅР° РєР°Рє `{filename}`.'
         )
-        logger.info(f"Челлендж {ch_id} создан: {start_date} / {deadline} / {end_date}, image={path}")
+        logger.info(f"Р§РµР»Р»РµРЅРґР¶ {ch_id} СЃРѕР·РґР°РЅ: {start_date} / {deadline} / {end_date}, image={path}")
     except Exception as e:
-        logger.error(f'Ошибка при регистрации челленджа: {e}')
-        await update.message.reply_text(f'Ошибка при регистрации челленджа: {e}')
+        logger.error(f'РћС€РёР±РєР° РїСЂРё СЂРµРіРёСЃС‚СЂР°С†РёРё С‡РµР»Р»РµРЅРґР¶Р°: {e}')
+        await update.message.reply_text(f'РћС€РёР±РєР° РїСЂРё СЂРµРіРёСЃС‚СЂР°С†РёРё С‡РµР»Р»РµРЅРґР¶Р°: {e}')
     finally:
-        # Очистим временные данные
+        # РћС‡РёСЃС‚РёРј РІСЂРµРјРµРЅРЅС‹Рµ РґР°РЅРЅС‹Рµ
         for k in ('challenge_start','challenge_deadline','challenge_end'):
             context.user_data.pop(k, None)
     return ConversationHandler.END
 
-# --- Магазин: описание + картинка ---
+# --- РњР°РіР°Р·РёРЅ: РѕРїРёСЃР°РЅРёРµ + РєР°СЂС‚РёРЅРєР° ---
 SHOP_TEXT_WAIT = 41
 SHOP_IMAGE_WAIT = 42
 
@@ -801,7 +801,7 @@ async def add_image_shop_start(update, context):
     if not await admin_only(update, context):
         return ConversationHandler.END
     await update.message.reply_text(
-        "Напишите текст описания магазина. Можете оформить аккуратно (обычный текст)."
+        "РќР°РїРёС€РёС‚Рµ С‚РµРєСЃС‚ РѕРїРёСЃР°РЅРёСЏ РјР°РіР°Р·РёРЅР°. РњРѕР¶РµС‚Рµ РѕС„РѕСЂРјРёС‚СЊ Р°РєРєСѓСЂР°С‚РЅРѕ (РѕР±С‹С‡РЅС‹Р№ С‚РµРєСЃС‚)."
     )
     return SHOP_TEXT_WAIT
 
@@ -811,12 +811,12 @@ async def add_image_shop_text(update, context):
         db.update_shop_text(text)
     except Exception:
         pass
-    await update.message.reply_text("Теперь отправьте картинку магазина одним фото сообщением.")
+    await update.message.reply_text("РўРµРїРµСЂСЊ РѕС‚РїСЂР°РІСЊС‚Рµ РєР°СЂС‚РёРЅРєСѓ РјР°РіР°Р·РёРЅР° РѕРґРЅРёРј С„РѕС‚Рѕ СЃРѕРѕР±С‰РµРЅРёРµРј.")
     return SHOP_IMAGE_WAIT
 
 async def add_image_shop_photo(update, context):
     if not update.message.photo:
-        await update.message.reply_text("Пожалуйста, отправьте одно фото.")
+        await update.message.reply_text("РџРѕР¶Р°Р»СѓР№СЃС‚Р°, РѕС‚РїСЂР°РІСЊС‚Рµ РѕРґРЅРѕ С„РѕС‚Рѕ.")
         return SHOP_IMAGE_WAIT
     try:
         photo = update.message.photo[-1]
@@ -824,18 +824,18 @@ async def add_image_shop_photo(update, context):
         filename = f"shop_{photo.file_unique_id}.jpg"
         path = os.path.join(IMAGES_DIR, filename)
         await file.download_to_drive(path)
-        # Сохраним file_id для быстрого повторного отправления
+        # РЎРѕС…СЂР°РЅРёРј file_id РґР»СЏ Р±С‹СЃС‚СЂРѕРіРѕ РїРѕРІС‚РѕСЂРЅРѕРіРѕ РѕС‚РїСЂР°РІР»РµРЅРёСЏ
         db.update_shop_image(filename, photo.file_id)
-        await update.message.reply_text("Готово. Магазин обновлён.")
-        logger.info(f"Магазин обновлён: text set, image {filename}")
+        await update.message.reply_text("Р“РѕС‚РѕРІРѕ. РњР°РіР°Р·РёРЅ РѕР±РЅРѕРІР»С‘РЅ.")
+        logger.info(f"РњР°РіР°Р·РёРЅ РѕР±РЅРѕРІР»С‘РЅ: text set, image {filename}")
     except Exception as e:
-        logger.error(f"Ошибка при сохранении картинки магазина: {e}")
-        await update.message.reply_text(f"Ошибка при сохранении картинки: {e}")
+        logger.error(f"РћС€РёР±РєР° РїСЂРё СЃРѕС…СЂР°РЅРµРЅРёРё РєР°СЂС‚РёРЅРєРё РјР°РіР°Р·РёРЅР°: {e}")
+        await update.message.reply_text(f"РћС€РёР±РєР° РїСЂРё СЃРѕС…СЂР°РЅРµРЅРёРё РєР°СЂС‚РёРЅРєРё: {e}")
     return ConversationHandler.END
 
 async def send_challenge_image_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        await update.message.reply_text('Отменено.')
+        await update.message.reply_text('РћС‚РјРµРЅРµРЅРѕ.')
     except Exception:
         pass
     for k in ('challenge_start','challenge_deadline','challenge_end'):
@@ -852,27 +852,27 @@ async def send_results(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         filename = f"results_{photo.file_unique_id}.jpg"
         path = os.path.join(IMAGES_DIR, filename)
         await file.download_to_drive(path)
-        success, failed = await send_message_to_users(context.bot, users, photo_path=path, caption='📊 Результаты тура:')
-        await update.message.reply_text(f'Результаты (фото) разосланы. Успешно: {success}, ошибки: {failed}')
+        success, failed = await send_message_to_users(context.bot, users, photo_path=path, caption='рџ“Љ Р РµР·СѓР»СЊС‚Р°С‚С‹ С‚СѓСЂР°:')
+        await update.message.reply_text(f'Р РµР·СѓР»СЊС‚Р°С‚С‹ (С„РѕС‚Рѕ) СЂР°Р·РѕСЃР»Р°РЅС‹. РЈСЃРїРµС€РЅРѕ: {success}, РѕС€РёР±РєРё: {failed}')
     elif context.args:
         text = ' '.join(context.args)
-        success, failed = await send_message_to_users(context.bot, users, text=f'📊 Результаты тура:\n{text}')
-        await update.message.reply_text(f'Результаты (текст) разосланы. Успешно: {success}, ошибки: {failed}')
+        success, failed = await send_message_to_users(context.bot, users, text=f'рџ“Љ Р РµР·СѓР»СЊС‚Р°С‚С‹ С‚СѓСЂР°:\n{text}')
+        await update.message.reply_text(f'Р РµР·СѓР»СЊС‚Р°С‚С‹ (С‚РµРєСЃС‚) СЂР°Р·РѕСЃР»Р°РЅС‹. РЈСЃРїРµС€РЅРѕ: {success}, РѕС€РёР±РєРё: {failed}')
     else:
-        await update.message.reply_text('Пришлите изображение или текст после команды.')
+        await update.message.reply_text('РџСЂРёС€Р»РёС‚Рµ РёР·РѕР±СЂР°Р¶РµРЅРёРµ РёР»Рё С‚РµРєСЃС‚ РїРѕСЃР»Рµ РєРѕРјР°РЅРґС‹.')
 
-# --- Управление челленджами (список/удаление) ---
+# --- РЈРїСЂР°РІР»РµРЅРёРµ С‡РµР»Р»РµРЅРґР¶Р°РјРё (СЃРїРёСЃРѕРє/СѓРґР°Р»РµРЅРёРµ) ---
 async def list_challenges(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await admin_only(update, context):
         return
     try:
         rows = db.get_all_challenges()
         if not rows:
-            await update.message.reply_text('В базе нет челленджей.')
+            await update.message.reply_text('Р’ Р±Р°Р·Рµ РЅРµС‚ С‡РµР»Р»РµРЅРґР¶РµР№.')
             return
         lines = []
         for r in rows:
-            # ожидаемые поля: id, start_date, deadline, end_date, image_filename, status[, image_file_id]
+            # РѕР¶РёРґР°РµРјС‹Рµ РїРѕР»СЏ: id, start_date, deadline, end_date, image_filename, status[, image_file_id]
             ch_id = r[0]
             start_date = r[1]
             deadline = r[2]
@@ -880,69 +880,69 @@ async def list_challenges(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             image_filename = r[4] if len(r) > 4 else ''
             status = r[5] if len(r) > 5 else ''
             lines.append(
-                f"id={ch_id} | {status}\nstart: {start_date}\ndeadline: {deadline}\nend: {end_date}\nimage: {image_filename}\n—"
+                f"id={ch_id} | {status}\nstart: {start_date}\ndeadline: {deadline}\nend: {end_date}\nimage: {image_filename}\nвЂ”"
             )
         msg = "\n".join(lines)
-        # Telegram ограничение на длину сообщения ~4096
+        # Telegram РѕРіСЂР°РЅРёС‡РµРЅРёРµ РЅР° РґР»РёРЅСѓ СЃРѕРѕР±С‰РµРЅРёСЏ ~4096
         for i in range(0, len(msg), 3500):
             await update.message.reply_text(msg[i:i+3500])
     except Exception as e:
-        await update.message.reply_text(f"Ошибка получения списка челленджей: {e}")
+        await update.message.reply_text(f"РћС€РёР±РєР° РїРѕР»СѓС‡РµРЅРёСЏ СЃРїРёСЃРєР° С‡РµР»Р»РµРЅРґР¶РµР№: {e}")
 
 async def delete_challenge_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await admin_only(update, context):
         return
     args = getattr(context, 'args', []) or []
     if not args or not args[0].isdigit():
-        await update.message.reply_text('Использование: /delete_challenge <id>')
+        await update.message.reply_text('РСЃРїРѕР»СЊР·РѕРІР°РЅРёРµ: /delete_challenge <id>')
         return
     ch_id = int(args[0])
     try:
         deleted = db.delete_challenge(ch_id)
         if deleted:
-            await update.message.reply_text(f'Челлендж id={ch_id} удалён.')
+            await update.message.reply_text(f'Р§РµР»Р»РµРЅРґР¶ id={ch_id} СѓРґР°Р»С‘РЅ.')
         else:
-            await update.message.reply_text(f'Челлендж id={ch_id} не найден.')
+            await update.message.reply_text(f'Р§РµР»Р»РµРЅРґР¶ id={ch_id} РЅРµ РЅР°Р№РґРµРЅ.')
     except Exception as e:
-        await update.message.reply_text(f'Ошибка удаления челленджа: {e}')
+        await update.message.reply_text(f'РћС€РёР±РєР° СѓРґР°Р»РµРЅРёСЏ С‡РµР»Р»РµРЅРґР¶Р°: {e}')
 
-# --- Управление турами (admin) ---
+# --- РЈРїСЂР°РІР»РµРЅРёРµ С‚СѓСЂР°РјРё (admin) ---
 from telegram.ext import CommandHandler, MessageHandler, filters, ConversationHandler
 import json
 
 TOUR_NAME, TOUR_START, TOUR_DEADLINE, TOUR_END, TOUR_CONFIRM = range(100, 105)
 
-# --- ЕДИНЫЙ ПАКЕТНЫЙ ДИАЛОГ СОЗДАНИЯ ТУРА ---
-# Этапы: имя -> дата старта -> дедлайн -> окончание -> фото -> ростер -> финал
+# --- Р•Р”РРќР«Р™ РџРђРљР•РўРќР«Р™ Р”РРђР›РћР“ РЎРћР—Р”РђРќРРЇ РўРЈР Рђ ---
+# Р­С‚Р°РїС‹: РёРјСЏ -> РґР°С‚Р° СЃС‚Р°СЂС‚Р° -> РґРµРґР»Р°Р№РЅ -> РѕРєРѕРЅС‡Р°РЅРёРµ -> С„РѕС‚Рѕ -> СЂРѕСЃС‚РµСЂ -> С„РёРЅР°Р»
 CT_NAME, CT_START, CT_DEADLINE, CT_END, CT_IMAGE, CT_ROSTER = range(200, 206)
 
 async def create_tour_full_start(update, context):
     if not await admin_only(update, context):
         return ConversationHandler.END
-    # Очистим временные данные диалога
+    # РћС‡РёСЃС‚РёРј РІСЂРµРјРµРЅРЅС‹Рµ РґР°РЅРЅС‹Рµ РґРёР°Р»РѕРіР°
     for k in ['ct_name', 'ct_start', 'ct_deadline', 'ct_end', 'ct_image_filename', 'ct_tour_id']:
         context.user_data.pop(k, None)
-    await update.message.reply_text("Введите название тура:")
+    await update.message.reply_text("Р’РІРµРґРёС‚Рµ РЅР°Р·РІР°РЅРёРµ С‚СѓСЂР°:")
     return CT_NAME
 
 async def create_tour_full_name(update, context):
     context.user_data['ct_name'] = (update.message.text or '').strip()
-    await update.message.reply_text("Введите дату старта тура (дд.мм.гг):")
+    await update.message.reply_text("Р’РІРµРґРёС‚Рµ РґР°С‚Сѓ СЃС‚Р°СЂС‚Р° С‚СѓСЂР° (РґРґ.РјРј.РіРі):")
     return CT_START
 
 async def create_tour_full_start_date(update, context):
     context.user_data['ct_start'] = (update.message.text or '').strip()
-    await update.message.reply_text("Введите дедлайн (дд.мм.гг чч:мм):")
+    await update.message.reply_text("Р’РІРµРґРёС‚Рµ РґРµРґР»Р°Р№РЅ (РґРґ.РјРј.РіРі С‡С‡:РјРј):")
     return CT_DEADLINE
 
 async def create_tour_full_deadline(update, context):
     context.user_data['ct_deadline'] = (update.message.text or '').strip()
-    await update.message.reply_text("Введите дату окончания тура (дд.мм.гг):")
+    await update.message.reply_text("Р’РІРµРґРёС‚Рµ РґР°С‚Сѓ РѕРєРѕРЅС‡Р°РЅРёСЏ С‚СѓСЂР° (РґРґ.РјРј.РіРі):")
     return CT_END
 
 async def create_tour_full_end_date(update, context):
     context.user_data['ct_end'] = (update.message.text or '').strip()
-    # Создаём тур сразу, чтобы получить id (автоинкремент)
+    # РЎРѕР·РґР°С‘Рј С‚СѓСЂ СЃСЂР°Р·Сѓ, С‡С‚РѕР±С‹ РїРѕР»СѓС‡РёС‚СЊ id (Р°РІС‚РѕРёРЅРєСЂРµРјРµРЅС‚)
     try:
         tour_id = db.create_tour(
             context.user_data['ct_name'],
@@ -952,14 +952,14 @@ async def create_tour_full_end_date(update, context):
         )
         context.user_data['ct_tour_id'] = tour_id
     except Exception as e:
-        await update.message.reply_text(f"Ошибка создания тура: {e}")
+        await update.message.reply_text(f"РћС€РёР±РєР° СЃРѕР·РґР°РЅРёСЏ С‚СѓСЂР°: {e}")
         return ConversationHandler.END
-    await update.message.reply_text("Теперь отправьте одно фото для тура сообщением с фотографией.")
+    await update.message.reply_text("РўРµРїРµСЂСЊ РѕС‚РїСЂР°РІСЊС‚Рµ РѕРґРЅРѕ С„РѕС‚Рѕ РґР»СЏ С‚СѓСЂР° СЃРѕРѕР±С‰РµРЅРёРµРј СЃ С„РѕС‚РѕРіСЂР°С„РёРµР№.")
     return CT_IMAGE
 
 async def create_tour_full_photo(update, context):
     if not update.message or not update.message.photo:
-        await update.message.reply_text("Пожалуйста, отправьте именно фото.")
+        await update.message.reply_text("РџРѕР¶Р°Р»СѓР№СЃС‚Р°, РѕС‚РїСЂР°РІСЊС‚Рµ РёРјРµРЅРЅРѕ С„РѕС‚Рѕ.")
         return CT_IMAGE
     try:
         photo = update.message.photo[-1]
@@ -971,14 +971,14 @@ async def create_tour_full_photo(update, context):
             await tg_file.download_to_drive(file_path)
         except Exception:
             await tg_file.download(custom_path=file_path)
-        # Сохраним "последнюю" картинку для показа в /tour
+        # РЎРѕС…СЂР°РЅРёРј "РїРѕСЃР»РµРґРЅСЋСЋ" РєР°СЂС‚РёРЅРєСѓ РґР»СЏ РїРѕРєР°Р·Р° РІ /tour
         try:
             with open(TOUR_IMAGE_PATH_FILE, 'w') as f:
                 f.write(filename)
         except Exception:
             logger.warning("Failed to write TOUR_IMAGE_PATH_FILE", exc_info=True)
         context.user_data['ct_image_filename'] = filename
-        # Привяжем изображение к созданному туру
+        # РџСЂРёРІСЏР¶РµРј РёР·РѕР±СЂР°Р¶РµРЅРёРµ Рє СЃРѕР·РґР°РЅРЅРѕРјСѓ С‚СѓСЂСѓ
         try:
             tour_id = context.user_data.get('ct_tour_id')
             if tour_id:
@@ -986,12 +986,12 @@ async def create_tour_full_photo(update, context):
         except Exception:
             logger.warning("Failed to update tour image in DB", exc_info=True)
         await update.message.reply_text(
-            "Фото сохранено. Теперь отправьте ростер в формате:\n"
-            "50: 28, 1, ...\n40: ... и т.д. (ровно 20 игроков)"
+            "Р¤РѕС‚Рѕ СЃРѕС…СЂР°РЅРµРЅРѕ. РўРµРїРµСЂСЊ РѕС‚РїСЂР°РІСЊС‚Рµ СЂРѕСЃС‚РµСЂ РІ С„РѕСЂРјР°С‚Рµ:\n"
+            "50: 28, 1, ...\n40: ... Рё С‚.Рґ. (СЂРѕРІРЅРѕ 20 РёРіСЂРѕРєРѕРІ)"
         )
         return CT_ROSTER
     except Exception as e:
-        await update.message.reply_text(f"Ошибка сохранения фото: {e}")
+        await update.message.reply_text(f"РћС€РёР±РєР° СЃРѕС…СЂР°РЅРµРЅРёСЏ С„РѕС‚Рѕ: {e}")
         return ConversationHandler.END
 
 async def create_tour_full_roster(update, context):
@@ -1001,7 +1001,7 @@ async def create_tour_full_roster(update, context):
     try:
         for line in lines:
             if ':' not in line:
-                await update.message.reply_text(f"Неверный формат строки: {line}")
+                await update.message.reply_text(f"РќРµРІРµСЂРЅС‹Р№ С„РѕСЂРјР°С‚ СЃС‚СЂРѕРєРё: {line}")
                 return CT_ROSTER
             cost_str, ids_str = line.split(':', 1)
             cost = int(cost_str.strip())
@@ -1009,26 +1009,26 @@ async def create_tour_full_roster(update, context):
             for pid in id_list:
                 pairs.append((cost, pid))
     except Exception as e:
-        await update.message.reply_text(f"Ошибка разбора: {e}")
+        await update.message.reply_text(f"РћС€РёР±РєР° СЂР°Р·Р±РѕСЂР°: {e}")
         return CT_ROSTER
     if len(pairs) != 20:
-        await update.message.reply_text(f"Ошибка: должно быть ровно 20 игроков, а не {len(pairs)}. Повторите ввод.")
+        await update.message.reply_text(f"РћС€РёР±РєР°: РґРѕР»Р¶РЅРѕ Р±С‹С‚СЊ СЂРѕРІРЅРѕ 20 РёРіСЂРѕРєРѕРІ, Р° РЅРµ {len(pairs)}. РџРѕРІС‚РѕСЂРёС‚Рµ РІРІРѕРґ.")
         return CT_ROSTER
-    # Проверим, что игроки существуют
+    # РџСЂРѕРІРµСЂРёРј, С‡С‚Рѕ РёРіСЂРѕРєРё СЃСѓС‰РµСЃС‚РІСѓСЋС‚
     for cost, pid in pairs:
         player = db.get_player_by_id(pid)
         if not player:
-            await update.message.reply_text(f"Игрок с id {pid} не найден! Повторите ввод.")
+            await update.message.reply_text(f"РРіСЂРѕРє СЃ id {pid} РЅРµ РЅР°Р№РґРµРЅ! РџРѕРІС‚РѕСЂРёС‚Рµ РІРІРѕРґ.")
             return CT_ROSTER
-    # Сохраняем ростер на конкретный тур в таблицу tour_players
+    # РЎРѕС…СЂР°РЅСЏРµРј СЂРѕСЃС‚РµСЂ РЅР° РєРѕРЅРєСЂРµС‚РЅС‹Р№ С‚СѓСЂ РІ С‚Р°Р±Р»РёС†Сѓ tour_players
     try:
         tour_id = context.user_data.get('ct_tour_id')
         if tour_id:
             db.clear_tour_players(tour_id)
             for cost, pid in pairs:
                 db.add_tour_player(tour_id, pid, cost)
-            # Обратная совместимость: также заполним старую таблицу tour_roster,
-            # т.к. текущая пользовательская логика читает её.
+            # РћР±СЂР°С‚РЅР°СЏ СЃРѕРІРјРµСЃС‚РёРјРѕСЃС‚СЊ: С‚Р°РєР¶Рµ Р·Р°РїРѕР»РЅРёРј СЃС‚Р°СЂСѓСЋ С‚Р°Р±Р»РёС†Сѓ tour_roster,
+            # С‚.Рє. С‚РµРєСѓС‰Р°СЏ РїРѕР»СЊР·РѕРІР°С‚РµР»СЊСЃРєР°СЏ Р»РѕРіРёРєР° С‡РёС‚Р°РµС‚ РµС‘.
             try:
                 db.clear_tour_roster()
                 for cost, pid in pairs:
@@ -1036,10 +1036,10 @@ async def create_tour_full_roster(update, context):
             except Exception:
                 logger.warning("Failed to mirror roster into legacy tour_roster", exc_info=True)
         else:
-            await update.message.reply_text("Внутренняя ошибка: tour_id отсутствует.")
+            await update.message.reply_text("Р’РЅСѓС‚СЂРµРЅРЅСЏСЏ РѕС€РёР±РєР°: tour_id РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚.")
             return ConversationHandler.END
     except Exception as e:
-        await update.message.reply_text(f"Ошибка сохранения ростера: {e}")
+        await update.message.reply_text(f"РћС€РёР±РєР° СЃРѕС…СЂР°РЅРµРЅРёСЏ СЂРѕСЃС‚РµСЂР°: {e}")
         return ConversationHandler.END
     tour_id = context.user_data.get('ct_tour_id')
     name = context.user_data.get('ct_name')
@@ -1047,18 +1047,18 @@ async def create_tour_full_roster(update, context):
     deadline = context.user_data.get('ct_deadline')
     end = context.user_data.get('ct_end')
     await update.message.reply_text(
-        "Тур создан успешно!\n"
-        f"ID: {tour_id}\nНазвание: {name}\nСтарт: {start}\nДедлайн: {deadline}\nОкончание: {end}\n"
-        f"Картинка: {context.user_data.get('ct_image_filename', '-')}. Ростер принят."
+        "РўСѓСЂ СЃРѕР·РґР°РЅ СѓСЃРїРµС€РЅРѕ!\n"
+        f"ID: {tour_id}\nРќР°Р·РІР°РЅРёРµ: {name}\nРЎС‚Р°СЂС‚: {start}\nР”РµРґР»Р°Р№РЅ: {deadline}\nРћРєРѕРЅС‡Р°РЅРёРµ: {end}\n"
+        f"РљР°СЂС‚РёРЅРєР°: {context.user_data.get('ct_image_filename', '-')}. Р РѕСЃС‚РµСЂ РїСЂРёРЅСЏС‚."
     )
-    # Очистим временные данные
+    # РћС‡РёСЃС‚РёРј РІСЂРµРјРµРЅРЅС‹Рµ РґР°РЅРЅС‹Рµ
     for k in ['ct_name', 'ct_start', 'ct_deadline', 'ct_end', 'ct_image_filename', 'ct_tour_id']:
         context.user_data.pop(k, None)
     return ConversationHandler.END
 
 async def create_tour_full_cancel(update, context):
-    await update.message.reply_text("Создание тура отменено.")
-    # Очистим временные данные
+    await update.message.reply_text("РЎРѕР·РґР°РЅРёРµ С‚СѓСЂР° РѕС‚РјРµРЅРµРЅРѕ.")
+    # РћС‡РёСЃС‚РёРј РІСЂРµРјРµРЅРЅС‹Рµ РґР°РЅРЅС‹Рµ
     for k in ['ct_name', 'ct_start', 'ct_deadline', 'ct_end', 'ct_image_filename', 'ct_tour_id']:
         context.user_data.pop(k, None)
     return ConversationHandler.END
@@ -1080,43 +1080,43 @@ create_tour_full_conv = ConversationHandler(
 async def create_tour_start(update, context):
     if not await admin_only(update, context):
         return ConversationHandler.END
-    await update.message.reply_text("Введите название тура:")
+    await update.message.reply_text("Р’РІРµРґРёС‚Рµ РЅР°Р·РІР°РЅРёРµ С‚СѓСЂР°:")
     return TOUR_NAME
 
 async def create_tour_name(update, context):
     context.user_data['tour_name'] = update.message.text.strip()
-    await update.message.reply_text("Введите дату старта тура (дд.мм.гг):")
+    await update.message.reply_text("Р’РІРµРґРёС‚Рµ РґР°С‚Сѓ СЃС‚Р°СЂС‚Р° С‚СѓСЂР° (РґРґ.РјРј.РіРі):")
     return TOUR_START
 
 async def create_tour_start_date(update, context):
     context.user_data['tour_start'] = update.message.text.strip()
-    await update.message.reply_text("Введите дедлайн (дд.мм.гг чч:мм):")
+    await update.message.reply_text("Р’РІРµРґРёС‚Рµ РґРµРґР»Р°Р№РЅ (РґРґ.РјРј.РіРі С‡С‡:РјРј):")
     return TOUR_DEADLINE
 
 async def create_tour_deadline(update, context):
     context.user_data['tour_deadline'] = update.message.text.strip()
-    await update.message.reply_text("Введите дату окончания тура (дд.мм.гг):")
+    await update.message.reply_text("Р’РІРµРґРёС‚Рµ РґР°С‚Сѓ РѕРєРѕРЅС‡Р°РЅРёСЏ С‚СѓСЂР° (РґРґ.РјРј.РіРі):")
     return TOUR_END
 
 async def create_tour_end_date(update, context):
     context.user_data['tour_end'] = update.message.text.strip()
     summary = (
-        f"Название: {context.user_data['tour_name']}\n"
-        f"Старт: {context.user_data['tour_start']}\n"
-        f"Дедлайн: {context.user_data['tour_deadline']}\n"
-        f"Окончание: {context.user_data['tour_end']}\n"
-        "\nПодтвердить создание тура? (да/нет)"
+        f"РќР°Р·РІР°РЅРёРµ: {context.user_data['tour_name']}\n"
+        f"РЎС‚Р°СЂС‚: {context.user_data['tour_start']}\n"
+        f"Р”РµРґР»Р°Р№РЅ: {context.user_data['tour_deadline']}\n"
+        f"РћРєРѕРЅС‡Р°РЅРёРµ: {context.user_data['tour_end']}\n"
+        "\nРџРѕРґС‚РІРµСЂРґРёС‚СЊ СЃРѕР·РґР°РЅРёРµ С‚СѓСЂР°? (РґР°/РЅРµС‚)"
     )
     await update.message.reply_text(summary)
     return TOUR_CONFIRM
 
 async def create_tour_confirm(update, context):
     text = update.message.text.strip().lower()
-    if text not in ("да", "нет"):
-        await update.message.reply_text("Пожалуйста, напишите 'да' или 'нет'.")
+    if text not in ("РґР°", "РЅРµС‚"):
+        await update.message.reply_text("РџРѕР¶Р°Р»СѓР№СЃС‚Р°, РЅР°РїРёС€РёС‚Рµ 'РґР°' РёР»Рё 'РЅРµС‚'.")
         return TOUR_CONFIRM
-    if text == "нет":
-        await update.message.reply_text("Создание тура отменено.")
+    if text == "РЅРµС‚":
+        await update.message.reply_text("РЎРѕР·РґР°РЅРёРµ С‚СѓСЂР° РѕС‚РјРµРЅРµРЅРѕ.")
         return ConversationHandler.END
     db.create_tour(
         context.user_data['tour_name'],
@@ -1124,11 +1124,11 @@ async def create_tour_confirm(update, context):
         context.user_data['tour_deadline'],
         context.user_data['tour_end']
     )
-    await update.message.reply_text("Тур успешно создан!")
+    await update.message.reply_text("РўСѓСЂ СѓСЃРїРµС€РЅРѕ СЃРѕР·РґР°РЅ!")
     return ConversationHandler.END
 
 async def create_tour_cancel(update, context):
-    await update.message.reply_text("Создание тура отменено.")
+    await update.message.reply_text("РЎРѕР·РґР°РЅРёРµ С‚СѓСЂР° РѕС‚РјРµРЅРµРЅРѕ.")
     return ConversationHandler.END
 
 create_tour_conv = ConversationHandler(
@@ -1148,9 +1148,9 @@ async def list_tours(update, context):
         return
     tours = db.get_all_tours()
     if not tours:
-        await update.message.reply_text("Туров пока нет.")
+        await update.message.reply_text("РўСѓСЂРѕРІ РїРѕРєР° РЅРµС‚.")
         return
-    msg = "Список туров:\n"
+    msg = "РЎРїРёСЃРѕРє С‚СѓСЂРѕРІ:\n"
     for t in tours:
         winners = "-"
         try:
@@ -1161,8 +1161,8 @@ async def list_tours(update, context):
             winners = t[6]
         msg += (
             f"\nID: {t[0]} | {t[1]}\n"
-            f"Старт: {t[2]} | Дедлайн: {t[3]} | Окончание: {t[4]}\n"
-            f"Статус: {t[5]} | Победители: {winners}\n"
+            f"РЎС‚Р°СЂС‚: {t[2]} | Р”РµРґР»Р°Р№РЅ: {t[3]} | РћРєРѕРЅС‡Р°РЅРёРµ: {t[4]}\n"
+            f"РЎС‚Р°С‚СѓСЃ: {t[5]} | РџРѕР±РµРґРёС‚РµР»Рё: {winners}\n"
         )
     await update.message.reply_text(msg)
 
@@ -1170,30 +1170,30 @@ async def list_tours(update, context):
 SEND_PUSH = 100
 
 async def send_push_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Начало процесса отправки push-уведомления"""
+    """РќР°С‡Р°Р»Рѕ РїСЂРѕС†РµСЃСЃР° РѕС‚РїСЂР°РІРєРё push-СѓРІРµРґРѕРјР»РµРЅРёСЏ"""
     if not await admin_only(update, context):
         return ConversationHandler.END
         
     await update.message.reply_text(
-        "✉️ Введите текст push-уведомления, которое будет отправлено всем пользователям бота:\n"
-        "(Вы можете использовать HTML-разметку: <b>жирный</b>, <i>курсив</i>, <a href=\"URL\">ссылка</a>)\n\n"
-        "Для отмены введите /cancel"
+        "вњ‰пёЏ Р’РІРµРґРёС‚Рµ С‚РµРєСЃС‚ push-СѓРІРµРґРѕРјР»РµРЅРёСЏ, РєРѕС‚РѕСЂРѕРµ Р±СѓРґРµС‚ РѕС‚РїСЂР°РІР»РµРЅРѕ РІСЃРµРј РїРѕР»СЊР·РѕРІР°С‚РµР»СЏРј Р±РѕС‚Р°:\n"
+        "(Р’С‹ РјРѕР¶РµС‚Рµ РёСЃРїРѕР»СЊР·РѕРІР°С‚СЊ HTML-СЂР°Р·РјРµС‚РєСѓ: <b>Р¶РёСЂРЅС‹Р№</b>, <i>РєСѓСЂСЃРёРІ</i>, <a href=\"URL\">СЃСЃС‹Р»РєР°</a>)\n\n"
+        "Р”Р»СЏ РѕС‚РјРµРЅС‹ РІРІРµРґРёС‚Рµ /cancel"
     )
     return SEND_PUSH
 
 async def send_push_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Отправка push-уведомления всем пользователям"""
+    """РћС‚РїСЂР°РІРєР° push-СѓРІРµРґРѕРјР»РµРЅРёСЏ РІСЃРµРј РїРѕР»СЊР·РѕРІР°С‚РµР»СЏРј"""
     message_text = update.message.text
     users = db.get_all_users()
     
     if not users:
-        await update.message.reply_text("❌ В базе данных нет пользователей.")
+        await update.message.reply_text("вќЊ Р’ Р±Р°Р·Рµ РґР°РЅРЅС‹С… РЅРµС‚ РїРѕР»СЊР·РѕРІР°С‚РµР»РµР№.")
         return ConversationHandler.END
     
     sent_count = 0
     failed_count = 0
     
-    progress_msg = await update.message.reply_text(f"🔄 Отправка уведомления {len(users)} пользователям...")
+    progress_msg = await update.message.reply_text(f"рџ”„ РћС‚РїСЂР°РІРєР° СѓРІРµРґРѕРјР»РµРЅРёСЏ {len(users)} РїРѕР»СЊР·РѕРІР°С‚РµР»СЏРј...")
     
     for user in users:
         try:
@@ -1209,29 +1209,29 @@ async def send_push_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             sent_count += 1
             
-            # Не спамим слишком быстро, чтобы не получить ограничение от Telegram
+            # РќРµ СЃРїР°РјРёРј СЃР»РёС€РєРѕРј Р±С‹СЃС‚СЂРѕ, С‡С‚РѕР±С‹ РЅРµ РїРѕР»СѓС‡РёС‚СЊ РѕРіСЂР°РЅРёС‡РµРЅРёРµ РѕС‚ Telegram
             if sent_count % 20 == 0:
                 await asyncio.sleep(1)
-                await progress_msg.edit_text(f"🔄 Отправлено {sent_count} из {len(users)} уведомлений...")
+                await progress_msg.edit_text(f"рџ”„ РћС‚РїСЂР°РІР»РµРЅРѕ {sent_count} РёР· {len(users)} СѓРІРµРґРѕРјР»РµРЅРёР№...")
                 
         except Exception as e:
-            logger.error(f"Ошибка при отправке уведомления пользователю {user_id}: {e}")
+            logger.error(f"РћС€РёР±РєР° РїСЂРё РѕС‚РїСЂР°РІРєРµ СѓРІРµРґРѕРјР»РµРЅРёСЏ РїРѕР»СЊР·РѕРІР°С‚РµР»СЋ {user_id}: {e}")
             failed_count += 1
     
     await progress_msg.edit_text(
-        f"✅ Рассылка завершена!\n"
-        f"• Отправлено: {sent_count}\n"
-        f"• Не удалось отправить: {failed_count}\n\n"
-        f"Текст уведомления:\n{message_text}"
+        f"вњ… Р Р°СЃСЃС‹Р»РєР° Р·Р°РІРµСЂС€РµРЅР°!\n"
+        f"вЂў РћС‚РїСЂР°РІР»РµРЅРѕ: {sent_count}\n"
+        f"вЂў РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РїСЂР°РІРёС‚СЊ: {failed_count}\n\n"
+        f"РўРµРєСЃС‚ СѓРІРµРґРѕРјР»РµРЅРёСЏ:\n{message_text}"
     )
     return ConversationHandler.END
 
 async def send_push_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Отмена отправки push-уведомления"""
-    await update.message.reply_text("❌ Отправка уведомлений отменена.")
+    """РћС‚РјРµРЅР° РѕС‚РїСЂР°РІРєРё push-СѓРІРµРґРѕРјР»РµРЅРёСЏ"""
+    await update.message.reply_text("вќЊ РћС‚РїСЂР°РІРєР° СѓРІРµРґРѕРјР»РµРЅРёР№ РѕС‚РјРµРЅРµРЅР°.")
     return ConversationHandler.END
 
-# Регистрация обработчика для команды /push
+# Р РµРіРёСЃС‚СЂР°С†РёСЏ РѕР±СЂР°Р±РѕС‚С‡РёРєР° РґР»СЏ РєРѕРјР°РЅРґС‹ /push
 push_conv = ConversationHandler(
     entry_points=[CommandHandler("push", send_push_start)],
     states={
@@ -1243,7 +1243,7 @@ push_conv = ConversationHandler(
     fallbacks=[CommandHandler("cancel", send_push_cancel)]
 )
 
-# --- Рассылка только подписчикам ---
+# --- Р Р°СЃСЃС‹Р»РєР° С‚РѕР»СЊРєРѕ РїРѕРґРїРёСЃС‡РёРєР°Рј ---
 BROADCAST_SUBS_WAIT_TEXT = 12001
 BROADCAST_SUBS_WAIT_DATETIME = 12003
 BROADCAST_SUBS_CONFIRM = 12002
@@ -1251,23 +1251,23 @@ BROADCAST_SUBS_CONFIRM = 12002
 async def broadcast_subscribers_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await admin_only(update, context):
         return ConversationHandler.END
-    await update.message.reply_text("Введите текст рассылки для подписчиков (или /cancel):")
+    await update.message.reply_text("Введите текст рассылки для подписчиков (или /cancel). Можно использовать HTML-разметку (<b>жирный</b>, <i>курсив</i>, ссылки):", parse_mode='HTML')
     return BROADCAST_SUBS_WAIT_TEXT
 
 async def broadcast_subscribers_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or '').strip()
     if not text:
-        await update.message.reply_text("Пустое сообщение. Введите текст или /cancel:")
+        await update.message.reply_text("РџСѓСЃС‚РѕРµ СЃРѕРѕР±С‰РµРЅРёРµ. Р’РІРµРґРёС‚Рµ С‚РµРєСЃС‚ РёР»Рё /cancel:")
         return BROADCAST_SUBS_WAIT_TEXT
     context.user_data['broadcast_text'] = text
     await update.message.reply_text(
-        "Укажите дату и время отправки в формате: дд.мм.гг чч:мм (МСК).\n"
-        "Например: 05.09.25 10:30"
+        "РЈРєР°Р¶РёС‚Рµ РґР°С‚Сѓ Рё РІСЂРµРјСЏ РѕС‚РїСЂР°РІРєРё РІ С„РѕСЂРјР°С‚Рµ: РґРґ.РјРј.РіРі С‡С‡:РјРј (РњРЎРљ).\n"
+        "РќР°РїСЂРёРјРµСЂ: 05.09.25 10:30"
     )
     return BROADCAST_SUBS_WAIT_DATETIME
 
 async def broadcast_subscribers_datetime(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Парсит время в МСК (UTC+3), сохраняет время в UTC и предлагает подтвердить."""
+    """РџР°СЂСЃРёС‚ РІСЂРµРјСЏ РІ РњРЎРљ (UTC+3), СЃРѕС…СЂР°РЅСЏРµС‚ РІСЂРµРјСЏ РІ UTC Рё РїСЂРµРґР»Р°РіР°РµС‚ РїРѕРґС‚РІРµСЂРґРёС‚СЊ."""
     s = (update.message.text or '').strip()
     dt_msk = None
     for fmt in ("%d.%m.%y %H:%M", "%d.%m.%Y %H:%M"):
@@ -1278,19 +1278,19 @@ async def broadcast_subscribers_datetime(update: Update, context: ContextTypes.D
             pass
     if not dt_msk:
         await update.message.reply_text(
-            "Не удалось распознать дату. Введите в формате дд.мм.гг чч:мм (МСК), например 05.09.25 10:30"
+            "РќРµ СѓРґР°Р»РѕСЃСЊ СЂР°СЃРїРѕР·РЅР°С‚СЊ РґР°С‚Сѓ. Р’РІРµРґРёС‚Рµ РІ С„РѕСЂРјР°С‚Рµ РґРґ.РјРј.РіРі С‡С‡:РјРј (РњРЎРљ), РЅР°РїСЂРёРјРµСЂ 05.09.25 10:30"
         )
         return BROADCAST_SUBS_WAIT_DATETIME
-    # Перевод МСК (UTC+3) в UTC
+    # РџРµСЂРµРІРѕРґ РњРЎРљ (UTC+3) РІ UTC
     dt_utc = dt_msk - datetime.timedelta(hours=3)
     now_utc = datetime.datetime.utcnow()
     if dt_utc < now_utc:
-        await update.message.reply_text("Указанное время в прошлом. Введите будущую дату/время (МСК):")
+        await update.message.reply_text("РЈРєР°Р·Р°РЅРЅРѕРµ РІСЂРµРјСЏ РІ РїСЂРѕС€Р»РѕРј. Р’РІРµРґРёС‚Рµ Р±СѓРґСѓС‰СѓСЋ РґР°С‚Сѓ/РІСЂРµРјСЏ (РњРЎРљ):")
         return BROADCAST_SUBS_WAIT_DATETIME
     context.user_data['broadcast_dt_utc'] = dt_utc.isoformat()
     context.user_data['broadcast_dt_input'] = s
 
-    # Подсчитать число активных подписчиков на текущий момент (для информации)
+    # РџРѕРґСЃС‡РёС‚Р°С‚СЊ С‡РёСЃР»Рѕ Р°РєС‚РёРІРЅС‹С… РїРѕРґРїРёСЃС‡РёРєРѕРІ РЅР° С‚РµРєСѓС‰РёР№ РјРѕРјРµРЅС‚ (РґР»СЏ РёРЅС„РѕСЂРјР°С†РёРё)
     subs = db.get_all_subscriptions()  # [(user_id, paid_until)]
     targets = []
     for user_id, paid_until in subs:
@@ -1303,23 +1303,32 @@ async def broadcast_subscribers_datetime(update: Update, context: ContextTypes.D
         if dtp > now_utc:
             targets.append(user_id)
     cnt = len(targets)
-    preview = (context.user_data.get('broadcast_text','')[:120] + ('…' if len(context.user_data.get('broadcast_text','')) > 120 else ''))
+    # РџРѕРєР°Р¶РµРј РїРѕР»РЅС‹Р№ С‚РµРєСЃС‚ РїРµСЂРµРґ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёРµРј, СЃ РїРѕРґРґРµСЂР¶РєРѕР№ HTML
+    try:
+        await update.message.reply_text("РџСЂРµРґРїСЂРѕСЃРјРѕС‚СЂ СЂР°СЃСЃС‹Р»РєРё:", parse_mode='HTML')
+    except Exception:
+        await update.message.reply_text("РџСЂРµРґРїСЂРѕСЃРјРѕС‚СЂ СЂР°СЃСЃС‹Р»РєРё:")
+    try:
+        await update.message.reply_text(context.user_data.get('broadcast_text',''), parse_mode='HTML', disable_web_page_preview=False)
+    except Exception:
+        await update.message.reply_text(context.user_data.get('broadcast_text',''))
+    preview = (context.user_data.get('broadcast_text','')[:120] + ('вЂ¦' if len(context.user_data.get('broadcast_text','')) > 120 else ''))
     await update.message.reply_text(
-        f"Сообщение: \n— {preview}\n\nОтправить {cnt} подписчикам в {s} (МСК)?\n"
-        "Ответьте 'да' для подтверждения или 'нет' для отмены."
+        f"РЎРѕРѕР±С‰РµРЅРёРµ: \nвЂ” {preview}\n\nРћС‚РїСЂР°РІРёС‚СЊ {cnt} РїРѕРґРїРёСЃС‡РёРєР°Рј РІ {s} (РњРЎРљ)?\n"
+        "РћС‚РІРµС‚СЊС‚Рµ 'РґР°' РґР»СЏ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ РёР»Рё 'РЅРµС‚' РґР»СЏ РѕС‚РјРµРЅС‹."
     )
     return BROADCAST_SUBS_CONFIRM
 
 async def broadcast_subscribers_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ans = (update.message.text or '').strip().lower()
-    if ans not in ("да", "д", "yes", "y", "угу", "ok", "ок"):
-        await update.message.reply_text("Рассылка отменена.")
+    if ans not in ("РґР°", "Рґ", "yes", "y", "СѓРіСѓ", "ok", "РѕРє"):
+        await update.message.reply_text("Р Р°СЃСЃС‹Р»РєР° РѕС‚РјРµРЅРµРЅР°.")
         return ConversationHandler.END
     text = context.user_data.get('broadcast_text') or ''
     if not text:
-        await update.message.reply_text("Текст рассылки не найден. Запустите заново: /broadcast_subscribers")
+        await update.message.reply_text("РўРµРєСЃС‚ СЂР°СЃСЃС‹Р»РєРё РЅРµ РЅР°Р№РґРµРЅ. Р—Р°РїСѓСЃС‚РёС‚Рµ Р·Р°РЅРѕРІРѕ: /broadcast_subscribers")
         return ConversationHandler.END
-    # Определяем, когда отправлять
+    # РћРїСЂРµРґРµР»СЏРµРј, РєРѕРіРґР° РѕС‚РїСЂР°РІР»СЏС‚СЊ
     dt_utc_str = context.user_data.get('broadcast_dt_utc')
     dt_utc = None
     if dt_utc_str:
@@ -1331,25 +1340,25 @@ async def broadcast_subscribers_confirm(update: Update, context: ContextTypes.DE
     delay = 0
     if dt_utc and dt_utc > now:
         delay = (dt_utc - now).total_seconds()
-    # Планируем отправку через JobQueue
+    # РџР»Р°РЅРёСЂСѓРµРј РѕС‚РїСЂР°РІРєСѓ С‡РµСЂРµР· JobQueue
     try:
         context.application.job_queue.run_once(
             broadcast_subscribers_job,
             when=max(0, int(delay)),
             data={'text': text}
         )
-        when_desc = context.user_data.get('broadcast_dt_input') or 'сейчас'
-        await update.message.reply_text(f"Рассылка запланирована на {when_desc} (МСК).")
+        when_desc = context.user_data.get('broadcast_dt_input') or 'СЃРµР№С‡Р°СЃ'
+        await update.message.reply_text(f"Р Р°СЃСЃС‹Р»РєР° Р·Р°РїР»Р°РЅРёСЂРѕРІР°РЅР° РЅР° {when_desc} (РњРЎРљ).")
     except Exception as e:
-        await update.message.reply_text(f"Не удалось запланировать рассылку: {e}")
+        await update.message.reply_text(f"РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РїР»Р°РЅРёСЂРѕРІР°С‚СЊ СЂР°СЃСЃС‹Р»РєСѓ: {e}")
     return ConversationHandler.END
 
 async def broadcast_subscribers_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Рассылка отменена.")
+    await update.message.reply_text("Р Р°СЃСЃС‹Р»РєР° РѕС‚РјРµРЅРµРЅР°.")
     return ConversationHandler.END
 
 async def broadcast_subscribers_job(context: ContextTypes.DEFAULT_TYPE):
-    """JobQueue callback: отправляет текст всем активным подписчикам."""
+    """JobQueue callback: РѕС‚РїСЂР°РІР»СЏРµС‚ С‚РµРєСЃС‚ РІСЃРµРј Р°РєС‚РёРІРЅС‹Рј РїРѕРґРїРёСЃС‡РёРєР°Рј."""
     text = ''
     try:
         job = getattr(context, 'job', None)
@@ -1371,12 +1380,12 @@ async def broadcast_subscribers_job(context: ContextTypes.DEFAULT_TYPE):
             users.append((user_id,))
     if not users:
         try:
-            await context.bot.send_message(chat_id=ADMIN_ID, text="Рассылка: нет активных подписчиков на момент отправки.")
+            await context.bot.send_message(chat_id=ADMIN_ID, text="Р Р°СЃСЃС‹Р»РєР°: РЅРµС‚ Р°РєС‚РёРІРЅС‹С… РїРѕРґРїРёСЃС‡РёРєРѕРІ РЅР° РјРѕРјРµРЅС‚ РѕС‚РїСЂР°РІРєРё.")
         except Exception:
             pass
         return
     try:
-        # Отправляем полный текст; включаем предпросмотр ссылок и поддерживаем эмодзи
+        # РћС‚РїСЂР°РІР»СЏРµРј РїРѕР»РЅС‹Р№ С‚РµРєСЃС‚; РІРєР»СЋС‡Р°РµРј РїСЂРµРґРїСЂРѕСЃРјРѕС‚СЂ СЃСЃС‹Р»РѕРє Рё РїРѕРґРґРµСЂР¶РёРІР°РµРј СЌРјРѕРґР·Рё
         success, failed = await send_message_to_users(
             context.bot,
             users,
@@ -1385,35 +1394,35 @@ async def broadcast_subscribers_job(context: ContextTypes.DEFAULT_TYPE):
             disable_web_page_preview=False,
         )
         try:
-            await context.bot.send_message(chat_id=ADMIN_ID, text=f"Рассылка завершена. Успешно: {success}, ошибок: {failed}.")
+            await context.bot.send_message(chat_id=ADMIN_ID, text=f"Р Р°СЃСЃС‹Р»РєР° Р·Р°РІРµСЂС€РµРЅР°. РЈСЃРїРµС€РЅРѕ: {success}, РѕС€РёР±РѕРє: {failed}.")
         except Exception:
             pass
     except Exception as e:
         try:
-            await context.bot.send_message(chat_id=ADMIN_ID, text=f"Ошибка при рассылке: {e}")
+            await context.bot.send_message(chat_id=ADMIN_ID, text=f"РћС€РёР±РєР° РїСЂРё СЂР°СЃСЃС‹Р»РєРµ: {e}")
         except Exception:
             pass
 
-# --- Активация тура админом ---
+# --- РђРєС‚РёРІР°С†РёСЏ С‚СѓСЂР° Р°РґРјРёРЅРѕРј ---
 async def activate_tour(update, context):
     if not await admin_only(update, context):
         return
     if not context.args or not context.args[0].isdigit():
-        await update.message.reply_text("Использование: /activate_tour <id>")
+        await update.message.reply_text("РСЃРїРѕР»СЊР·РѕРІР°РЅРёРµ: /activate_tour <id>")
         return
     tour_id = int(context.args[0])
     tours = db.get_all_tours()
     found = False
     for t in tours:
         if t[0] == tour_id:
-            db.update_tour_status(tour_id, "активен")
+            db.update_tour_status(tour_id, "Р°РєС‚РёРІРµРЅ")
             found = True
-        elif t[5] == "активен":
-            db.update_tour_status(t[0], "создан")
+        elif t[5] == "Р°РєС‚РёРІРµРЅ":
+            db.update_tour_status(t[0], "СЃРѕР·РґР°РЅ")
     if found:
-        await update.message.reply_text(f"Тур {tour_id} активирован.")
+        await update.message.reply_text(f"РўСѓСЂ {tour_id} Р°РєС‚РёРІРёСЂРѕРІР°РЅ.")
     else:
-        await update.message.reply_text(f"Тур с id {tour_id} не найден.")
+        await update.message.reply_text(f"РўСѓСЂ СЃ id {tour_id} РЅРµ РЅР°Р№РґРµРЅ.")
 
 # --- Utility: enhanced /addhc supporting @username or user_id ---
 async def addhc2(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1421,7 +1430,7 @@ async def addhc2(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     # Expect two arguments: identifier (@username or user_id) and amount
     if len(context.args) != 2 or not context.args[1].isdigit():
-        await update.message.reply_text('Использование: /addhc @username 100 или /addhc user_id 100')
+        await update.message.reply_text('РСЃРїРѕР»СЊР·РѕРІР°РЅРёРµ: /addhc @username 100 РёР»Рё /addhc user_id 100')
         return
     identifier = (context.args[0] or '').strip()
     amount = int(context.args[1])
@@ -1444,7 +1453,7 @@ async def addhc2(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 resolved_username = user[1] or ''
 
     if not user:
-        await update.message.reply_text('Пользователь не найден.')
+        await update.message.reply_text('РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ.')
         return
 
     db.update_hc_balance(user[0], amount)
@@ -1454,11 +1463,11 @@ async def addhc2(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         await context.bot.send_message(
             chat_id=user[0],
-            text=f'Вам начислено {amount} HC!\nТекущий баланс: {new_balance} HC'
+            text=f'Р’Р°Рј РЅР°С‡РёСЃР»РµРЅРѕ {amount} HC!\nРўРµРєСѓС‰РёР№ Р±Р°Р»Р°РЅСЃ: {new_balance} HC'
         )
     except Exception:
         pass
 
     # Reply to admin with more details
     target_label = f"@{resolved_username}" if resolved_username else f"id {user[0]}"
-    await update.message.reply_text(f'Начислено {target_label} {amount} HC.')
+    await update.message.reply_text(f'РќР°С‡РёСЃР»РµРЅРѕ {target_label} {amount} HC.')
