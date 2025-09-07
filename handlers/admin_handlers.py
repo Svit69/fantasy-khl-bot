@@ -1261,8 +1261,8 @@ async def broadcast_subscribers_text(update: Update, context: ContextTypes.DEFAU
         return BROADCAST_SUBS_WAIT_TEXT
     context.user_data['broadcast_text'] = text
     await update.message.reply_text(
-        "РЈРєР°Р¶РёС‚Рµ РґР°С‚Сѓ Рё РІСЂРµРјСЏ РѕС‚РїСЂР°РІРєРё РІ С„РѕСЂРјР°С‚Рµ: РґРґ.РјРј.РіРі С‡С‡:РјРј (РњРЎРљ).\n"
-        "РќР°РїСЂРёРјРµСЂ: 05.09.25 10:30"
+        "Укажите дату и время отправки в формате: дд.мм.гг чч:мм (МСК).\n"
+        "Например: 05.09.25 10:30"
     )
     return BROADCAST_SUBS_WAIT_DATETIME
 
@@ -1278,14 +1278,14 @@ async def broadcast_subscribers_datetime(update: Update, context: ContextTypes.D
             pass
     if not dt_msk:
         await update.message.reply_text(
-            "РќРµ СѓРґР°Р»РѕСЃСЊ СЂР°СЃРїРѕР·РЅР°С‚СЊ РґР°С‚Сѓ. Р’РІРµРґРёС‚Рµ РІ С„РѕСЂРјР°С‚Рµ РґРґ.РјРј.РіРі С‡С‡:РјРј (РњРЎРљ), РЅР°РїСЂРёРјРµСЂ 05.09.25 10:30"
+            "Неверный формат даты/времени. Введите в формате дд.мм.гг чч:мм (МСК), например: 05.09.25 10:30"
         )
         return BROADCAST_SUBS_WAIT_DATETIME
     # РџРµСЂРµРІРѕРґ РњРЎРљ (UTC+3) РІ UTC
     dt_utc = dt_msk - datetime.timedelta(hours=3)
     now_utc = datetime.datetime.utcnow()
     if dt_utc < now_utc:
-        await update.message.reply_text("РЈРєР°Р·Р°РЅРЅРѕРµ РІСЂРµРјСЏ РІ РїСЂРѕС€Р»РѕРј. Р’РІРµРґРёС‚Рµ Р±СѓРґСѓС‰СѓСЋ РґР°С‚Сѓ/РІСЂРµРјСЏ (РњРЎРљ):")
+        await update.message.reply_text("Время отправки в прошлом. Укажите дату/время в будущем (МСК):")
         return BROADCAST_SUBS_WAIT_DATETIME
     context.user_data['broadcast_dt_utc'] = dt_utc.isoformat()
     context.user_data['broadcast_dt_input'] = s
@@ -1303,30 +1303,30 @@ async def broadcast_subscribers_datetime(update: Update, context: ContextTypes.D
         if dtp > now_utc:
             targets.append(user_id)
     cnt = len(targets)
-    # РџРѕРєР°Р¶РµРј РїРѕР»РЅС‹Р№ С‚РµРєСЃС‚ РїРµСЂРµРґ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёРµРј, СЃ РїРѕРґРґРµСЂР¶РєРѕР№ HTML
     try:
-        await update.message.reply_text("РџСЂРµРґРїСЂРѕСЃРјРѕС‚СЂ СЂР°СЃСЃС‹Р»РєРё:", parse_mode='HTML')
+        await update.message.reply_text("\u041f\u0440\u0435\u0434\u043f\u0440\u043e\u0441\u043c\u043e\u0442\u0440 \u0440\u0430\u0441\u0441\u044b\u043b\u043a\u0438:", parse_mode='HTML')
     except Exception:
-        await update.message.reply_text("РџСЂРµРґРїСЂРѕСЃРјРѕС‚СЂ СЂР°СЃСЃС‹Р»РєРё:")
+        await update.message.reply_text("\u041f\u0440\u0435\u0434\u043f\u0440\u043e\u0441\u043c\u043e\u0442\u0440 \u0440\u0430\u0441\u0441\u044b\u043b\u043a\u0438:")
     try:
         await update.message.reply_text(context.user_data.get('broadcast_text',''), parse_mode='HTML', disable_web_page_preview=False)
     except Exception:
         await update.message.reply_text(context.user_data.get('broadcast_text',''))
-    preview = (context.user_data.get('broadcast_text','')[:120] + ('вЂ¦' if len(context.user_data.get('broadcast_text','')) > 120 else ''))
-    await update.message.reply_text(
-        f"РЎРѕРѕР±С‰РµРЅРёРµ: \nвЂ” {preview}\n\nРћС‚РїСЂР°РІРёС‚СЊ {cnt} РїРѕРґРїРёСЃС‡РёРєР°Рј РІ {s} (РњРЎРљ)?\n"
-        "РћС‚РІРµС‚СЊС‚Рµ 'РґР°' РґР»СЏ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ РёР»Рё 'РЅРµС‚' РґР»СЏ РѕС‚РјРµРЅС‹."
-    )
+    await update.message.reply_text(f"\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c {cnt} \u043f\u043e\u0434\u043f\u0438\u0441\u0447\u0438\u043a\u0430\u043c \u0432 {s} (\u041c\u0421\u041a)?\\n\u041d\u0430\u043f\u0438\u0448\u0438\u0442\u0435 '\u0434\u0430' \u0434\u043b\u044f \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u044f \u0438\u043b\u0438 '\u043d\u0435\u0442' \u0434\u043b\u044f \u043e\u0442\u043c\u0435\u043d\u044b.")
+    
+    
+    
+    
+    return BROADCAST_SUBS_CONFIRM
     return BROADCAST_SUBS_CONFIRM
 
 async def broadcast_subscribers_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ans = (update.message.text or '').strip().lower()
-    if ans not in ("РґР°", "Рґ", "yes", "y", "СѓРіСѓ", "ok", "РѕРє"):
-        await update.message.reply_text("Р Р°СЃСЃС‹Р»РєР° РѕС‚РјРµРЅРµРЅР°.")
+    if ans not in ("да", "д", "yes", "y", "ок", "ok", "ага"):
+        await update.message.reply_text("\u0420\u0430\u0441\u0441\u044b\u043b\u043a\u0430 \u043e\u0442\u043c\u0435\u043d\u0435\u043d\u0430.")
         return ConversationHandler.END
     text = context.user_data.get('broadcast_text') or ''
     if not text:
-        await update.message.reply_text("РўРµРєСЃС‚ СЂР°СЃСЃС‹Р»РєРё РЅРµ РЅР°Р№РґРµРЅ. Р—Р°РїСѓСЃС‚РёС‚Рµ Р·Р°РЅРѕРІРѕ: /broadcast_subscribers")
+        await update.message.reply_text("\u0422\u0435\u043a\u0441\u0442 \u0440\u0430\u0441\u0441\u044b\u043b\u043a\u0438 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d. \u0417\u0430\u043f\u0443\u0441\u0442\u0438\u0442\u0435 \u0437\u0430\u043d\u043e\u0432\u043e: /broadcast_subscribers")
         return ConversationHandler.END
     # РћРїСЂРµРґРµР»СЏРµРј, РєРѕРіРґР° РѕС‚РїСЂР°РІР»СЏС‚СЊ
     dt_utc_str = context.user_data.get('broadcast_dt_utc')
@@ -1347,12 +1347,12 @@ async def broadcast_subscribers_confirm(update: Update, context: ContextTypes.DE
             when=max(0, int(delay)),
             data={'text': text}
         )
-        when_desc = context.user_data.get('broadcast_dt_input') or 'СЃРµР№С‡Р°СЃ'
-        await update.message.reply_text(f"Р Р°СЃСЃС‹Р»РєР° Р·Р°РїР»Р°РЅРёСЂРѕРІР°РЅР° РЅР° {when_desc} (РњРЎРљ).")
+        when_desc = context.user_data.get('broadcast_dt_input') or '\u043a\u0430\u043a \u043c\u043e\u0436\u043d\u043e \u0441\u043a\u043e\u0440\u0435\u0435'
+        await update.message.reply_text(f"\u0420\u0430\u0441\u0441\u044b\u043b\u043a\u0430 \u0437\u0430\u043f\u043b\u0430\u043d\u0438\u0440\u043e\u0432\u0430\u043d\u0430 \u043d\u0430 {when_desc} (\u041c\u0421\u041a).")
     except Exception as e:
-        await update.message.reply_text(f"РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РїР»Р°РЅРёСЂРѕРІР°С‚СЊ СЂР°СЃСЃС‹Р»РєСѓ: {e}")
+    except Exception as e:
+        await update.message.reply_text(f"\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0437\u0430\u043f\u043b\u0430\u043d\u0438\u0440\u043e\u0432\u0430\u0442\u044c \u0440\u0430\u0441\u0441\u044b\u043b\u043a\u0443: {e}")
     return ConversationHandler.END
-
 async def broadcast_subscribers_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Р Р°СЃСЃС‹Р»РєР° РѕС‚РјРµРЅРµРЅР°.")
     return ConversationHandler.END
@@ -1380,7 +1380,7 @@ async def broadcast_subscribers_job(context: ContextTypes.DEFAULT_TYPE):
             users.append((user_id,))
     if not users:
         try:
-            await context.bot.send_message(chat_id=ADMIN_ID, text="Р Р°СЃСЃС‹Р»РєР°: РЅРµС‚ Р°РєС‚РёРІРЅС‹С… РїРѕРґРїРёСЃС‡РёРєРѕРІ РЅР° РјРѕРјРµРЅС‚ РѕС‚РїСЂР°РІРєРё.")
+            await context.bot.send_message(chat_id=ADMIN_ID, text="\u0420\u0430\u0441\u0441\u044b\u043b\u043a\u0430: \u043d\u0435\u0442 \u0430\u043a\u0442\u0438\u0432\u043d\u044b\u0445 \u043f\u043e\u0434\u043f\u0438\u0441\u0447\u0438\u043a\u043e\u0432 \u043d\u0430 \u043c\u043e\u043c\u0435\u043d\u0442 \u043e\u0442\u043f\u0440\u0430\u0432\u043a\u0438.")
         except Exception:
             pass
         return
@@ -1394,7 +1394,7 @@ async def broadcast_subscribers_job(context: ContextTypes.DEFAULT_TYPE):
             disable_web_page_preview=False,
         )
         try:
-            await context.bot.send_message(chat_id=ADMIN_ID, text=f"Р Р°СЃСЃС‹Р»РєР° Р·Р°РІРµСЂС€РµРЅР°. РЈСЃРїРµС€РЅРѕ: {success}, РѕС€РёР±РѕРє: {failed}.")
+            await context.bot.send_message(chat_id=ADMIN_ID, text=f"\u0420\u0430\u0441\u0441\u044b\u043b\u043a\u0430 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043d\u0430. \u0423\u0441\u043f\u0435\u0448\u043d\u043e: {success}, \u043e\u0448\u0438\u0431\u043e\u043a: {failed}.")
         except Exception:
             pass
     except Exception as e:
