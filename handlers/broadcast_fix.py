@@ -1,4 +1,6 @@
 import datetime
+import asyncio
+from types import SimpleNamespace
 from telegram.ext import ContextTypes, ConversationHandler
 from handlers.admin_handlers import broadcast_subscribers_job
 
@@ -29,14 +31,23 @@ async def broadcast_subscribers_confirm(update, context: ContextTypes.DEFAULT_TY
         delay = max(0, int((dt_utc - now).total_seconds()))
 
     try:
-        context.application.job_queue.run_once(
-            broadcast_subscribers_job,
-            when=delay,
-            data={'text': text}
-        )
+        jq = getattr(context.application, 'job_queue', None)
+        if jq is not None:
+            jq.run_once(
+                broadcast_subscribers_job,
+                when=delay,
+                data={'text': text}
+            )
+        else:
+            # Fallback: schedule via asyncio and call job handler manually
+            async def _fallback_run():
+                if delay:
+                    await asyncio.sleep(delay)
+                fake_ctx = SimpleNamespace(bot=context.bot, job=SimpleNamespace(data={'text': text}))
+                await broadcast_subscribers_job(fake_ctx)
+            asyncio.create_task(_fallback_run())
         when_desc = context.user_data.get('broadcast_dt_input') or 'как можно скорее'
         await update.message.reply_text(f"Рассылка запланирована на {when_desc} (МСК).")
     except Exception as e:
         await update.message.reply_text(f"Не удалось запланировать рассылку: {e}")
     return ConversationHandler.END
-
