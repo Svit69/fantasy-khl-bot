@@ -289,10 +289,18 @@ def record_subscription_notification(user_id: int, notify_date: str, kind: str) 
             )
 
 # --- Челленджи ---
+
+def _now_moscow():
+    import datetime, os
+    try:
+        offset = int(os.getenv('BOT_TZ_OFFSET', '3'))
+    except Exception:
+        offset = 3
+    return datetime.datetime.utcnow() + datetime.timedelta(hours=offset)
 def create_challenge(start_date: str, deadline: str, end_date: str, image_filename: str, image_file_id: str = "") -> int:
     """Создаёт запись челленджа и возвращает его id. Статус вычисляется относительно текущего времени."""
     import datetime
-    now = datetime.datetime.now()
+    now = _now_moscow()
     def _parse(s):
         try:
             return datetime.datetime.fromisoformat(s)
@@ -339,19 +347,7 @@ def get_tour_managers(tour_id: int):
         ).fetchall()
         return [dict(r) for r in rows]
 
-def _compute_challenge_status(start_date: str, deadline: str, end_date: str) -> str:
-    """Вычисляет статус челленджа на текущий момент (локальное время).
 
-    Возвращает один из: 'в ожидании' | 'активен' | 'в игре' | 'завершен'.
-    При ошибках парсинга дат — 'в ожидании'.
-    """
-    import datetime
-    def _parse(s):
-        try:
-            return datetime.datetime.fromisoformat(str(s))
-        except Exception:
-            return None
-    now = datetime.datetime.now()
     sd = _parse(start_date)
     dl = _parse(deadline)
     ed = _parse(end_date)
@@ -579,7 +575,7 @@ def challenge_cancel_and_refund(challenge_id: int, user_id: int) -> bool:
 def refund_unfinished_after_deadline() -> int:
     """Возвращает HC по незавершённым заявкам после дедлайна. Возвращает число обработанных записей."""
     import datetime
-    now = datetime.datetime.now().isoformat()
+    now = _now_moscow()
     processed = 0
     with closing(sqlite3.connect(DB_NAME)) as conn:
         with conn:
@@ -761,7 +757,7 @@ def set_tour_winners(tour_id, winners):
 # --- Получить активный тур ---
 def get_active_tour():
     import datetime
-    now = datetime.datetime.now()
+    now = _now_moscow()
     with closing(sqlite3.connect(DB_NAME)) as conn:
         conn.row_factory = sqlite3.Row
         # 1. Сначала ищем тур со статусом "активен"
@@ -813,3 +809,7 @@ def get_user_tour_roster(user_id, tour_id):
                 'timestamp': row[3]
             }
         return None
+
+
+
+
