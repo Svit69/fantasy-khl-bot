@@ -292,7 +292,7 @@ def record_subscription_notification(user_id: int, notify_date: str, kind: str) 
 def create_challenge(start_date: str, deadline: str, end_date: str, image_filename: str, image_file_id: str = "") -> int:
     """Создаёт запись челленджа и возвращает его id. Статус вычисляется относительно текущего времени."""
     import datetime
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now()
     def _parse(s):
         try:
             return datetime.datetime.fromisoformat(s)
@@ -339,14 +339,64 @@ def get_tour_managers(tour_id: int):
         ).fetchall()
         return [dict(r) for r in rows]
 
+def _compute_challenge_status(start_date: str, deadline: str, end_date: str) -> str:
+    """Вычисляет статус челленджа на текущий момент (локальное время).
+
+    Возвращает один из: 'в ожидании' | 'активен' | 'в игре' | 'завершен'.
+    При ошибках парсинга дат — 'в ожидании'.
+    """
+    import datetime
+    def _parse(s):
+        try:
+            return datetime.datetime.fromisoformat(str(s))
+        except Exception:
+            return None
+    now = datetime.datetime.now()
+    sd = _parse(start_date)
+    dl = _parse(deadline)
+    ed = _parse(end_date)
+    status = 'в ожидании'
+    if sd and dl and ed:
+        if sd <= now < dl:
+            status = 'активен'
+        elif dl <= now < ed:
+            status = 'в игре'
+        elif now >= ed:
+            status = 'завершен'
+    return status
+
 def get_latest_challenge():
     with closing(sqlite3.connect(DB_NAME)) as conn:
         row = conn.execute('SELECT id, start_date, deadline, end_date, image_filename, status, image_file_id FROM challenges ORDER BY id DESC LIMIT 1').fetchone()
-        return row
+        if not row:
+            return row
+        ch_id, start_date, deadline, end_date, image_filename, status, image_file_id = row
+        cur_status = _compute_challenge_status(start_date, deadline, end_date)
+        try:
+            if cur_status != status:
+                with conn:
+                    conn.execute('UPDATE challenges SET status = ? WHERE id = ?', (cur_status, ch_id))
+                status = cur_status
+        except Exception:
+            pass
+        return (ch_id, start_date, deadline, end_date, image_filename, status, image_file_id)
 
 def get_all_challenges():
     with closing(sqlite3.connect(DB_NAME)) as conn:
-        return conn.execute('SELECT id, start_date, deadline, end_date, image_filename, status FROM challenges ORDER BY id DESC').fetchall()
+        rows = conn.execute('SELECT id, start_date, deadline, end_date, image_filename, status FROM challenges ORDER BY id DESC').fetchall()
+        updated = []
+        for r in rows:
+            ch_id, start_date, deadline, end_date, image_filename, status = r
+            cur_status = _compute_challenge_status(start_date, deadline, end_date)
+            if cur_status != status:
+                try:
+                    with conn:
+                        conn.execute('UPDATE challenges SET status = ? WHERE id = ?', (cur_status, ch_id))
+                    status = cur_status
+                except Exception:
+                    status = cur_status
+            updated.append((ch_id, start_date, deadline, end_date, image_filename, status))
+        return updated
 
 def delete_challenge(ch_id: int) -> int:
     with closing(sqlite3.connect(DB_NAME)) as conn:
@@ -414,7 +464,19 @@ def remove_player(player_id):
 # --- Challenge entries helpers ---
 def get_challenge_by_id(ch_id: int):
     with closing(sqlite3.connect(DB_NAME)) as conn:
-        return conn.execute('SELECT id, start_date, deadline, end_date, image_filename, status, image_file_id FROM challenges WHERE id = ?', (ch_id,)).fetchone()
+        row = conn.execute('SELECT id, start_date, deadline, end_date, image_filename, status, image_file_id FROM challenges WHERE id = ?', (ch_id,)).fetchone()
+        if not row:
+            return row
+        cid, start_date, deadline, end_date, image_filename, status, image_file_id = row
+        cur_status = _compute_challenge_status(start_date, deadline, end_date)
+        try:
+            if cur_status != status:
+                with conn:
+                    conn.execute('UPDATE challenges SET status = ? WHERE id = ?', (cur_status, cid))
+                status = cur_status
+        except Exception:
+            pass
+        return (cid, start_date, deadline, end_date, image_filename, status, image_file_id)
 
 def challenge_get_entry(challenge_id: int, user_id: int):
     with closing(sqlite3.connect(DB_NAME)) as conn:
@@ -517,7 +579,7 @@ def challenge_cancel_and_refund(challenge_id: int, user_id: int) -> bool:
 def refund_unfinished_after_deadline() -> int:
     """Возвращает HC по незавершённым заявкам после дедлайна. Возвращает число обработанных записей."""
     import datetime
-    now = datetime.datetime.utcnow().isoformat()
+    now = datetime.datetime.now().isoformat()
     processed = 0
     with closing(sqlite3.connect(DB_NAME)) as conn:
         with conn:
