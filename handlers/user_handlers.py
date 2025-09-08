@@ -730,16 +730,11 @@ async def challenge_open_callback(update: Update, context: ContextTypes.DEFAULT_
         entry = None
 
     status = ch[5] if len(ch) > 5 else ''
-    # Guard by time window (UTC): start <= now < deadline
-    try:
-        start_dt = datetime.datetime.fromisoformat(str(ch[1]))
-        dl_dt = datetime.datetime.fromisoformat(str(ch[2]))
-        now = datetime.datetime.utcnow()
-        if not (start_dt <= now < dl_dt):
-            await query.edit_message_text("Челлендж недоступен: либо ещё не начался, либо дедлайн уже прошёл.")
-            return
-    except Exception:
-        pass
+    # Разрешаем сборку состава только когда челлендж активен (между start и deadline).
+    # Статус уже пересчитывается на чтении в db.py, поэтому не пересчитываем время здесь повторно.
+    if (status or '').lower() != 'активен':
+        await query.edit_message_text("Челлендж недоступен: либо ещё не начался, либо дедлайн уже прошёл.")
+        return
     if entry:
         # Если запись отменена/возвращена — считаем, что записи нет
         try:
