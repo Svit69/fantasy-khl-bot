@@ -347,7 +347,19 @@ def get_tour_managers(tour_id: int):
         ).fetchall()
         return [dict(r) for r in rows]
 
+def _compute_challenge_status(start_date: str, deadline: str, end_date: str) -> str:
+    """Вычисляет статус челленджа на текущий момент по МСК.
 
+    Возвращает: 'в ожидании' | 'активен' | 'в игре' | 'завершен'.
+    При ошибках парсинга дат — 'в ожидании'.
+    """
+    import datetime
+    def _parse(s):
+        try:
+            return datetime.datetime.fromisoformat(str(s))
+        except Exception:
+            return None
+    now = _now_moscow()
     sd = _parse(start_date)
     dl = _parse(deadline)
     ed = _parse(end_date)
