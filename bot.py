@@ -65,9 +65,11 @@ from handlers.admin_handlers import (
 
 # broadcast to subscribers
 from handlers.admin_handlers import (
-    broadcast_subscribers_start, broadcast_subscribers_text, broadcast_subscribers_datetime, broadcast_subscribers_confirm, broadcast_subscribers_cancel,
+    broadcast_subscribers_start, broadcast_subscribers_text, broadcast_subscribers_datetime, broadcast_subscribers_cancel,
     BROADCAST_SUBS_WAIT_TEXT, BROADCAST_SUBS_WAIT_DATETIME, BROADCAST_SUBS_CONFIRM,
 )
+# Override confirm handler to support Russian inputs and avoid mojibake
+from handlers.broadcast_fix import broadcast_subscribers_confirm
 
 from handlers.admin_handlers import (
     ADD_NAME, ADD_POSITION, ADD_CLUB, ADD_NATION, ADD_AGE, ADD_PRICE,

@@ -6,6 +6,7 @@ import asyncio
 import db
 from config import ADMIN_ID
 import os
+import logging
 
 IMAGES_DIR = 'images'
 TOUR_IMAGE_PATH_FILE = 'latest_tour.txt'

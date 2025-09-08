@@ -1314,9 +1314,6 @@ async def broadcast_subscribers_datetime(update: Update, context: ContextTypes.D
     await update.message.reply_text(f"\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c {cnt} \u043f\u043e\u0434\u043f\u0438\u0441\u0447\u0438\u043a\u0430\u043c \u0432 {s} (\u041c\u0421\u041a)?\\n\u041d\u0430\u043f\u0438\u0448\u0438\u0442\u0435 '\u0434\u0430' \u0434\u043b\u044f \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u044f \u0438\u043b\u0438 '\u043d\u0435\u0442' \u0434\u043b\u044f \u043e\u0442\u043c\u0435\u043d\u044b.")
     
     
-    
-    
-    return BROADCAST_SUBS_CONFIRM
     return BROADCAST_SUBS_CONFIRM
 
 async def broadcast_subscribers_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1349,7 +1346,6 @@ async def broadcast_subscribers_confirm(update: Update, context: ContextTypes.DE
         )
         when_desc = context.user_data.get('broadcast_dt_input') or '\u043a\u0430\u043a \u043c\u043e\u0436\u043d\u043e \u0441\u043a\u043e\u0440\u0435\u0435'
         await update.message.reply_text(f"\u0420\u0430\u0441\u0441\u044b\u043b\u043a\u0430 \u0437\u0430\u043f\u043b\u0430\u043d\u0438\u0440\u043e\u0432\u0430\u043d\u0430 \u043d\u0430 {when_desc} (\u041c\u0421\u041a).")
-    except Exception as e:
     except Exception as e:
         await update.message.reply_text(f"\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0437\u0430\u043f\u043b\u0430\u043d\u0438\u0440\u043e\u0432\u0430\u0442\u044c \u0440\u0430\u0441\u0441\u044b\u043b\u043a\u0443: {e}")
     return ConversationHandler.END
