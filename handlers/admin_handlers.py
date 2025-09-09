@@ -505,12 +505,12 @@ async def show_users(update, context):
                 active = dt > now
             except Exception:
                 active = False
-        status = 'вњ… РїРѕРґРїРёСЃРєР° Р°РєС‚РёРІРЅР°' if active else 'вќЊ РЅРµС‚ РїРѕРґРїРёСЃРєРё'
+        status = '✔ подписка активна' if active else '✖ нет подписки'
         lines.append(f"{user_id} | {username or '-'} | {name or '-'} | {status} | HC: {hc_balance if hc_balance is not None else 0}")
     if not lines:
-        await update.message.reply_text("РќРµС‚ РїРѕР»СЊР·РѕРІР°С‚РµР»РµР№.")
+        await update.message.reply_text("Нет пользователей.")
     else:
-        msg = 'РџРѕР»СЊР·РѕРІР°С‚РµР»Рё Рё РїРѕРґРїРёСЃРєРё:\n\n' + '\n'.join(lines)
+        msg = 'Пользователи и подписки:\n\n' + '\n'.join(lines)
         for i in range(0, len(msg), 4000):
             await update.message.reply_text(msg[i:i+4000])
 
