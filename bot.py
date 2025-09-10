@@ -33,6 +33,9 @@ from handlers.user_handlers import subscribe_stars, precheckout_callback, succes
 from handlers.admin_handlers import addhc2 as addhc, send_results, show_users
 from handlers.admin_handlers import list_challenges, delete_challenge_cmd
 from handlers.admin_handlers import challenge_rosters_cmd
+# Override with UTF‑8 safe output
+from handlers.challenge_rosters_fix import challenge_rosters_cmd as _challenge_rosters_cmd_fixed
+challenge_rosters_cmd = _challenge_rosters_cmd_fixed
 from handlers.admin_handlers import (
     send_challenge_image_start,
     challenge_input_start_date,
