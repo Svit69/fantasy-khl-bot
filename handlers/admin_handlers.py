@@ -1248,6 +1248,168 @@ BROADCAST_SUBS_WAIT_TEXT = 12001
 BROADCAST_SUBS_WAIT_DATETIME = 12003
 BROADCAST_SUBS_CONFIRM = 12002
 
+# --- Message to a single user ---
+MSG_USER_WAIT_TARGET = 12100
+MSG_USER_WAIT_TEXT = 12101
+MSG_USER_WAIT_DATETIME = 12102
+MSG_USER_CONFIRM = 12103
+
+async def message_user_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await admin_only(update, context):
+        return ConversationHandler.END
+    await update.message.reply_text(
+        "Введите @username или ID пользователя, которому отправить сообщение (или /cancel):"
+    )
+    return MSG_USER_WAIT_TARGET
+
+def _resolve_user(identifier: str):
+    """Возвращает кортеж (user_row, label) по @username или числовому id.
+    user_row — запись из таблицы users, label — строка для отображения цели."""
+    identifier = (identifier or '').strip()
+    user = None
+    label = ''
+    if not identifier:
+        return None, ''
+    if identifier.startswith('@') or not identifier.isdigit():
+        username = identifier.lstrip('@')
+        try:
+            user = db.get_user_by_username(username)
+        except Exception:
+            user = None
+        label = f"@{username}"
+    else:
+        try:
+            user_id = int(identifier)
+        except Exception:
+            user_id = None
+        if user_id is not None:
+            try:
+                user = db.get_user_by_id(user_id)
+            except Exception:
+                user = None
+            label = f"id {user_id}"
+    return user, label
+
+async def message_user_target(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    identifier = (update.message.text or '').strip()
+    user, label = _resolve_user(identifier)
+    if not user:
+        await update.message.reply_text(
+            "Пользователь не найден. Введите @username или ID ещё раз (или /cancel):"
+        )
+        return MSG_USER_WAIT_TARGET
+    context.user_data['msg_user_id'] = user[0]  # users.telegram_id
+    context.user_data['msg_user_label'] = label or (f"@{user[1]}" if user[1] else f"id {user[0]}")
+    await update.message.reply_text(
+        f"Цель: {context.user_data['msg_user_label']}\nТеперь отправьте текст сообщения (или /cancel).\n"
+        "Поддерживается HTML-разметка (<b>жирный</b>, <i>курсив</i>, ссылки).",
+        parse_mode='HTML'
+    )
+    return MSG_USER_WAIT_TEXT
+
+async def message_user_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = (update.message.text or '').strip()
+    if not text:
+        await update.message.reply_text("Текст пуст. Введите текст сообщения (или /cancel):")
+        return MSG_USER_WAIT_TEXT
+    context.user_data['msg_text'] = text
+    await update.message.reply_text(
+        "Введите дату и время по МСК: дд.мм.гг чч:мм (или /cancel).\n"
+        "Пример: 05.09.25 10:30"
+    )
+    return MSG_USER_WAIT_DATETIME
+
+async def message_user_datetime(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    s = (update.message.text or '').strip()
+    dt_msk = None
+    for fmt in ("%d.%m.%y %H:%M", "%d.%m.%Y %H:%M"):
+        try:
+            dt_msk = datetime.datetime.strptime(s, fmt)
+            break
+        except Exception:
+            pass
+    if not dt_msk:
+        await update.message.reply_text(
+            "Неверный формат даты/времени. Введите в формате дд.мм.гг чч:мм (МСК), например: 05.09.25 10:30"
+        )
+        return MSG_USER_WAIT_DATETIME
+    dt_utc = dt_msk - datetime.timedelta(hours=3)
+    now_utc = datetime.datetime.utcnow()
+    if dt_utc < now_utc:
+        await update.message.reply_text("Время уже прошло. Введите дату/время в будущем (МСК):")
+        return MSG_USER_WAIT_DATETIME
+    context.user_data['msg_dt_utc'] = dt_utc.isoformat()
+    context.user_data['msg_dt_input'] = s
+    # Preview
+    try:
+        await update.message.reply_text("Предпросмотр сообщения:", parse_mode='HTML')
+    except Exception:
+        await update.message.reply_text("Предпросмотр сообщения:")
+    try:
+        await update.message.reply_text(context.user_data.get('msg_text',''), parse_mode='HTML', disable_web_page_preview=False)
+    except Exception:
+        await update.message.reply_text(context.user_data.get('msg_text',''))
+    await update.message.reply_text(
+        f"Отправить пользователю {context.user_data.get('msg_user_label')} в {s} (МСК)?\n"
+        f"Напишите 'да' для подтверждения или 'нет' для отмены."
+    )
+    return MSG_USER_CONFIRM
+
+async def message_user_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    ans = (update.message.text or '').strip().lower()
+    ok_values = {"да", "д", "ок", "окей", "yes", "y", "ok"}
+    if ans not in ok_values:
+        await update.message.reply_text("Отправка отменена.")
+        return ConversationHandler.END
+    text = context.user_data.get('msg_text') or ''
+    user_id = context.user_data.get('msg_user_id')
+    if not text or not user_id:
+        await update.message.reply_text("Не найдены получатель или текст. Запустите заново: /message_user")
+        return ConversationHandler.END
+    dt_utc = None
+    try:
+        dt_utc_str = context.user_data.get('msg_dt_utc')
+        if dt_utc_str:
+            dt_utc = datetime.datetime.fromisoformat(dt_utc_str)
+    except Exception:
+        dt_utc = None
+    now = datetime.datetime.utcnow()
+    delay = 0
+    if dt_utc and dt_utc > now:
+        delay = max(0, int((dt_utc - now).total_seconds()))
+    try:
+        context.application.job_queue.run_once(
+            message_user_job,
+            when=delay,
+            data={'text': text, 'user_id': int(user_id)}
+        )
+        when_desc = context.user_data.get('msg_dt_input') or 'как можно скорее'
+        await update.message.reply_text(f"Сообщение запланировано на {when_desc} (МСК).")
+    except Exception as e:
+        await update.message.reply_text(f"Не удалось запланировать отправку: {e}")
+    return ConversationHandler.END
+
+async def message_user_job(context: ContextTypes.DEFAULT_TYPE):
+    """JobQueue callback: отправка сообщения одному пользователю."""
+    text = ''
+    user_id = None
+    try:
+        job = getattr(context, 'job', None)
+        if job and job.data:
+            text = job.data.get('text') or ''
+            user_id = job.data.get('user_id')
+    except Exception:
+        text = ''
+    if not text or not user_id:
+        return
+    try:
+        await context.bot.send_message(chat_id=user_id, text=text, parse_mode='HTML', disable_web_page_preview=True)
+    except Exception:
+        try:
+            await context.bot.send_message(chat_id=user_id, text=text)
+        except Exception:
+            pass
+
 async def broadcast_subscribers_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await admin_only(update, context):
         return ConversationHandler.END

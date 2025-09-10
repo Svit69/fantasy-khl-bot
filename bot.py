@@ -71,6 +71,13 @@ from handlers.admin_handlers import (
 # Override confirm handler to support Russian inputs and avoid mojibake
 from handlers.broadcast_fix import broadcast_subscribers_confirm
 
+# Send message to a single user (admin)
+from handlers.admin_handlers import (
+    message_user_start, message_user_target, message_user_text,
+    message_user_datetime, message_user_confirm,
+    MSG_USER_WAIT_TARGET, MSG_USER_WAIT_TEXT, MSG_USER_WAIT_DATETIME, MSG_USER_CONFIRM,
+)
+
 from handlers.admin_handlers import (
     ADD_NAME, ADD_POSITION, ADD_CLUB, ADD_NATION, ADD_AGE, ADD_PRICE,
     EDIT_NAME, EDIT_POSITION, EDIT_CLUB, EDIT_NATION, EDIT_AGE, EDIT_PRICE
@@ -588,6 +595,7 @@ if __name__ == '__main__':
             "• /show_users — список пользователей и подписок\n"
             "• /addhc — начислить HC пользователю \n"
             "• /broadcast_subscribers — рассылка всем активным подписчикам к указанным дате и времени (админ)\n\n"
+            "• /message_user — отправить сообщение одному пользователю по @username или ID (с подтверждением и временем МСК)\n\n"
             "<b>Управление турами:</b>\n"
             "• /send_results — разослать результаты тура\n"
             "• /set_budget — установить бюджет тура\n"
@@ -845,6 +853,20 @@ if __name__ == '__main__':
         name="broadcast_subscribers_conv",
     )
     app.add_handler(broadcast_subscribers_conv)
+
+    # --- ConversationHandler для /message_user (админ) ---
+    message_user_conv = ConversationHandler(
+        entry_points=[CommandHandler('message_user', message_user_start)],
+        states={
+            MSG_USER_WAIT_TARGET: [MessageHandler(filters.TEXT & ~filters.COMMAND, message_user_target)],
+            MSG_USER_WAIT_TEXT: [MessageHandler(filters.TEXT & ~filters.COMMAND, message_user_text)],
+            MSG_USER_WAIT_DATETIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, message_user_datetime)],
+            MSG_USER_CONFIRM: [MessageHandler(filters.TEXT & ~filters.COMMAND, message_user_confirm)],
+        },
+        fallbacks=[CommandHandler('cancel', broadcast_subscribers_cancel)],
+        name="message_user_conv",
+    )
+    app.add_handler(message_user_conv)
     # Список туров и колбэки
     app.add_handler(CommandHandler('tours', tours))
     app.add_handler(CommandHandler('tour', tours))  # для совместимости и удобства
@@ -1008,6 +1030,8 @@ if __name__ == '__main__':
         BotCommand("send_tour_image", "Разослать изображение тура (админ)"),
         BotCommand("addhc", "Начислить HC пользователю (админ)"),
         BotCommand("send_results", "Разослать результаты тура (админ)"),
+        BotCommand("broadcast_subscribers", "Рассылка подписчикам (админ)"),
+        BotCommand("message_user", "Сообщение пользователю (админ)"),
     ]
 
     # Установить команды для всех пользователей
