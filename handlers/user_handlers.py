@@ -817,6 +817,42 @@ async def challenge_open_callback(update: Update, context: ContextTypes.DEFAULT_
     buttons = [[InlineKeyboardButton("Инфо", callback_data=f"challenge_info_{ch[0]}")]]
     if status == "активен":
         buttons.append([InlineKeyboardButton("Собрать состав", callback_data=f"challenge_build_{ch[0]}")])
+    # Reformat card to requested Russian layout with MSK times before sending
+    try:
+        def _to_msk(dt_str):
+            try:
+                dt = datetime.datetime.fromisoformat(str(dt_str))
+            except Exception:
+                return None
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=datetime.timezone.utc)
+            else:
+                dt = dt.astimezone(datetime.timezone.utc)
+            try:
+                from zoneinfo import ZoneInfo
+                return dt.astimezone(ZoneInfo("Europe/Moscow"))
+            except Exception:
+                return dt.astimezone(datetime.timezone(datetime.timedelta(hours=3)))
+        def _fmt(dt):
+            months = [
+                "января", "февраля", "марта", "апреля", "мая", "июня",
+                "июля", "августа", "сентября", "октября", "ноября", "декабря",
+            ]
+            if not dt:
+                return "—"
+            return f"{dt.day} {months[dt.month - 1]} ({dt.strftime('%H:%M')} мск)"
+        start_dt = _to_msk(ch[1])
+        deadline_dt = _to_msk(ch[2])
+        end_dt = _to_msk(ch[3])
+        text = (
+            f"Челлендж №{ch[0]}\n"
+            f"Статус: {status}\n\n\n"
+            f"Старт: {_fmt(start_dt)}\n"
+            f"Дедлайн: {_fmt(deadline_dt)}\n"
+            f"Окончание: {_fmt(end_dt)}"
+        )
+    except Exception:
+        pass
     await context.bot.send_message(chat_id=update.effective_chat.id, text=text, reply_markup=InlineKeyboardMarkup(buttons))
 
 
