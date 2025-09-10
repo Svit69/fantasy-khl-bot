@@ -1378,11 +1378,22 @@ async def message_user_confirm(update: Update, context: ContextTypes.DEFAULT_TYP
     if dt_utc and dt_utc > now:
         delay = max(0, int((dt_utc - now).total_seconds()))
     try:
-        context.application.job_queue.run_once(
-            message_user_job,
-            when=delay,
-            data={'text': text, 'user_id': int(user_id)}
-        )
+        jq = getattr(getattr(context, 'application', None), 'job_queue', None)
+        if jq is not None:
+            jq.run_once(
+                message_user_job,
+                when=delay,
+                data={'text': text, 'user_id': int(user_id)}
+            )
+        else:
+            # Fallback: schedule via asyncio and call job handler manually
+            from types import SimpleNamespace
+            async def _fallback_run():
+                if delay:
+                    await asyncio.sleep(delay)
+                fake_ctx = SimpleNamespace(bot=context.bot, job=SimpleNamespace(data={'text': text, 'user_id': int(user_id)}))
+                await message_user_job(fake_ctx)
+            asyncio.create_task(_fallback_run())
         when_desc = context.user_data.get('msg_dt_input') or 'как можно скорее'
         await update.message.reply_text(f"Сообщение запланировано на {when_desc} (МСК).")
     except Exception as e:
