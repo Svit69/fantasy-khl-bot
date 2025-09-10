@@ -24,7 +24,7 @@ from handlers.user_handlers import start, hc, IMAGES_DIR, \
     restart_tour_callback, tour_captain_callback, rules, referral, subscribe, \
     premium_add_pool_callback, premium_team_input, premium_position_selected, \
     challenge_command, challenge_level_callback, \
-    challenge_open_callback, _challenge_info_fixed, challenge_build_callback, \
+    challenge_open_callback, challenge_info_callback, challenge_build_callback, \
     challenge_pick_pos_callback, challenge_team_input, challenge_pick_player_callback, \
     challenge_cancel_callback, challenge_reshuffle_callback, \
     tours, tour_open_callback, tour_build_callback
