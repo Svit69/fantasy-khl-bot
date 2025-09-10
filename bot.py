@@ -72,6 +72,7 @@ from handlers.admin_handlers import (
     BROADCAST_SUBS_WAIT_TEXT, BROADCAST_SUBS_WAIT_DATETIME, BROADCAST_SUBS_CONFIRM,
 )
 # Override confirm handler to support Russian inputs and avoid mojibake
+from handlers.broadcast_fix import broadcast_subscribers_confirm
 from handlers.challenge_info_fix import challenge_info_callback as _challenge_info_fixed
 challenge_info_callback = _challenge_info_fixed
 
@@ -1048,6 +1049,7 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('rules', rules))
     app.add_handler(CommandHandler('shop', shop))
     app.run_polling()
+
 
 
 
