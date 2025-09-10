@@ -24,7 +24,7 @@ from handlers.user_handlers import start, hc, IMAGES_DIR, \
     restart_tour_callback, tour_captain_callback, rules, referral, subscribe, \
     premium_add_pool_callback, premium_team_input, premium_position_selected, \
     challenge_command, challenge_level_callback, \
-    challenge_open_callback, challenge_info_callback, challenge_build_callback, \
+    challenge_open_callback, _challenge_info_fixed, challenge_build_callback, \
     challenge_pick_pos_callback, challenge_team_input, challenge_pick_player_callback, \
     challenge_cancel_callback, challenge_reshuffle_callback, \
     tours, tour_open_callback, tour_build_callback
@@ -72,7 +72,8 @@ from handlers.admin_handlers import (
     BROADCAST_SUBS_WAIT_TEXT, BROADCAST_SUBS_WAIT_DATETIME, BROADCAST_SUBS_CONFIRM,
 )
 # Override confirm handler to support Russian inputs and avoid mojibake
-from handlers.broadcast_fix import broadcast_subscribers_confirm
+from handlers.challenge_info_fix import challenge_info_callback as _challenge_info_fixed
+challenge_info_callback = _challenge_info_fixed
 
 # Send message to a single user (admin)
 from handlers.admin_handlers import (
@@ -1047,3 +1048,9 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('rules', rules))
     app.add_handler(CommandHandler('shop', shop))
     app.run_polling()
+
+
+
+
+
+
