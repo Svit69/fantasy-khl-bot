@@ -83,7 +83,8 @@ from handlers.admin_handlers import (
     BROADCAST_SUBS_WAIT_TEXT, BROADCAST_SUBS_WAIT_DATETIME, BROADCAST_SUBS_CONFIRM,
 )
 # Override confirm handler to support Russian inputs and avoid mojibake
-from handlers.broadcast_fix import broadcast_subscribers_confirm
+from handlers.addhc_fix import addhc2 as _addhc2_fixed
+addhc = _addhc2_fixed
 from handlers.list_tours_fix import list_tours as _list_tours_fixed
 list_tours = _list_tours_fixed
 from handlers.challenge_send_image_fix import (send_challenge_image_start as _scimg_start, challenge_input_start_date as _scimg_start_date, challenge_input_deadline as _scimg_deadline, challenge_input_end_date as _scimg_end_date, send_challenge_image_photo as _scimg_photo, send_challenge_image_cancel as _scimg_cancel)
@@ -1084,6 +1085,9 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('rules', rules))
     app.add_handler(CommandHandler('shop', shop))
     app.run_polling()
+
+
+
 
 
 
