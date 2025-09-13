@@ -56,7 +56,18 @@ from handlers.admin_handlers import (
     edit_player_nation, edit_player_age, edit_player_price, edit_player_cancel,
     set_tour_roster_start, set_tour_roster_process, get_tour_roster,
     set_budget_start, set_budget_process,
-    create_tour_conv, create_tour_full_conv, list_tours, activate_tour
+    create_tour_conv, list_tours, activate_tour
+)
+from handlers.create_tour_full_fix import (
+    start as ctff_start,
+    name as ctff_name,
+    start_date as ctff_start_date,
+    deadline as ctff_deadline,
+    end_date as ctff_end_date,
+    photo as ctff_photo,
+    roster as ctff_roster,
+    cancel as ctff_cancel,
+    FCT_NAME, FCT_START, FCT_DEADLINE, FCT_END, FCT_IMAGE, FCT_ROSTER,
 )
 from handlers.admin_handlers import (
     add_image_shop_start, add_image_shop_text, add_image_shop_photo, add_image_shop_cancel,
@@ -1015,7 +1026,24 @@ if __name__ == '__main__':
 
     # --- Турнирные туры ---
     app.add_handler(create_tour_conv)
-    app.add_handler(create_tour_full_conv)
+    # app.add_handler(create_tour_full_conv)
+    # Fixed /create_tour_full with UTF-8 prompts
+    create_tour_full_conv_fixed = ConversationHandler(
+        entry_points=[CommandHandler('create_tour_full', ctff_start)],
+        states={
+            FCT_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, ctff_name)],
+            FCT_START: [MessageHandler(filters.TEXT & ~filters.COMMAND, ctff_start_date)],
+            FCT_DEADLINE: [MessageHandler(filters.TEXT & ~filters.COMMAND, ctff_deadline)],
+            FCT_END: [MessageHandler(filters.TEXT & ~filters.COMMAND, ctff_end_date)],
+            FCT_IMAGE: [MessageHandler(filters.PHOTO, ctff_photo)],
+            FCT_ROSTER: [MessageHandler(filters.TEXT & ~filters.COMMAND, ctff_roster)],
+        },
+        fallbacks=[CommandHandler('cancel', ctff_cancel)],
+        name='create_tour_full_conv_fixed',
+        allow_reentry=True,
+    )
+    app.add_handler(create_tour_full_conv_fixed)
+    
     app.add_handler(CommandHandler('list_tours', list_tours))
     app.add_handler(CommandHandler('activate_tour', activate_tour))
 
@@ -1049,6 +1077,8 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('rules', rules))
     app.add_handler(CommandHandler('shop', shop))
     app.run_polling()
+
+
 
 
 
