@@ -84,8 +84,8 @@ from handlers.admin_handlers import (
 )
 # Override confirm handler to support Russian inputs and avoid mojibake
 from handlers.broadcast_fix import broadcast_subscribers_confirm
-from handlers.challenge_info_fix import challenge_info_callback as _challenge_info_fixed
-challenge_info_callback = _challenge_info_fixed
+from handlers.list_tours_fix import list_tours as _list_tours_fixed
+list_tours = _list_tours_fixed
 
 # Send message to a single user (admin)
 from handlers.admin_handlers import (
@@ -1077,6 +1077,7 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('rules', rules))
     app.add_handler(CommandHandler('shop', shop))
     app.run_polling()
+
 
 
 
