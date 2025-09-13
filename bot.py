@@ -83,6 +83,14 @@ from handlers.admin_handlers import (
     BROADCAST_SUBS_WAIT_TEXT, BROADCAST_SUBS_WAIT_DATETIME, BROADCAST_SUBS_CONFIRM,
 )
 # Override confirm handler to support Russian inputs and avoid mojibake
+try:
+    from handlers.broadcast_fix import broadcast_subscribers_confirm as _broadcast_subscribers_confirm
+except Exception:
+    try:
+        from handlers.admin_handlers import broadcast_subscribers_confirm as _broadcast_subscribers_confirm
+    except Exception:
+        _broadcast_subscribers_confirm = None
+broadcast_subscribers_confirm = _broadcast_subscribers_confirm
 from handlers.addhc_fix import addhc2 as _addhc2_fixed
 addhc = _addhc2_fixed
 from handlers.list_tours_fix import list_tours as _list_tours_fixed
