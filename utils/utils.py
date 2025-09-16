@@ -8,6 +8,8 @@ from config import ADMIN_ID
 import os
 import logging
 
+SUBSCRIPTION_STARS = int(os.getenv('SUBSCRIPTION_STARS', '199'))
+
 IMAGES_DIR = 'images'
 TOUR_IMAGE_PATH_FILE = 'latest_tour.txt'
 CHALLENGE_IMAGE_PATH_FILE = 'latest_challenge.txt'
