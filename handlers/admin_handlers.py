@@ -337,11 +337,11 @@ async def remove_player(update, context):
         return
     try:
         if db.remove_player(player_id):
-            await update.message.reply_text(f"РРіСЂРѕРє {player[1]} (ID: {player_id}) СѓРґР°Р»РµРЅ.")
+            await update.message.reply_text(f"Игрок {player[1]} (ID: {player_id}) удалён.")
         else:
-            await update.message.reply_text("РћС€РёР±РєР° РїСЂРё СѓРґР°Р»РµРЅРёРё РёРіСЂРѕРєР°.")
+            await update.message.reply_text("Ошибка при удалении игрока.")
     except Exception as e:
-        await update.message.reply_text(f"РћС€РёР±РєР° РїСЂРё СѓРґР°Р»РµРЅРёРё РёРіСЂРѕРєР°: {e}")
+        await update.message.reply_text(f"Ошибка при удалении игрока: {e}")
 
 # --- Р РµРґР°РєС‚РёСЂРѕРІР°РЅРёРµ РёРіСЂРѕРєР° ---
 async def edit_player_start(update, context):
