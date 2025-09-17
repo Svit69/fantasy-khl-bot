@@ -1252,11 +1252,18 @@ BROADCAST_SUBS_CONFIRM = 12002
 MSG_USER_WAIT_TARGET = 12100
 MSG_USER_WAIT_TEXT = 12101
 MSG_USER_WAIT_DATETIME = 12102
-MSG_USER_CONFIRM = 12103
+MSG_USER_WAIT_PHOTO_DECISION = 12103
+MSG_USER_WAIT_PHOTO = 12104
+MSG_USER_CONFIRM = 12105
+
+_MSG_USER_YES = {'да', 'д', 'yes', 'y', 'ок', 'ok', 'ага'}
+_MSG_USER_NO = {'нет', 'н', 'no', 'n', 'не'}
 
 async def message_user_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await admin_only(update, context):
         return ConversationHandler.END
+    for key in ('msg_user_id', 'msg_user_label', 'msg_text', 'msg_dt_utc', 'msg_dt_input', 'msg_photo_file_id'):
+        context.user_data.pop(key, None)
     await update.message.reply_text(
         "Введите @username или ID пользователя, которому отправить сообщение (или /cancel):"
     )
@@ -1340,29 +1347,90 @@ async def message_user_datetime(update: Update, context: ContextTypes.DEFAULT_TY
         return MSG_USER_WAIT_DATETIME
     context.user_data['msg_dt_utc'] = dt_utc.isoformat()
     context.user_data['msg_dt_input'] = s
-    # Preview
+    context.user_data.pop('msg_photo_file_id', None)
+    await update.message.reply_text("Хотите добавить картинку к сообщению? Напишите 'да' или 'нет'.")
+    return MSG_USER_WAIT_PHOTO_DECISION
+
+async def _send_message_with_optional_photo(bot, chat_id, text, photo_id):
+    text = text or ''
+    if photo_id:
+        caption = text if text and len(text) <= 1024 else None
+        sent_caption = False
+        try:
+            if caption:
+                await bot.send_photo(chat_id=chat_id, photo=photo_id, caption=caption, parse_mode='HTML')
+                sent_caption = True
+            else:
+                await bot.send_photo(chat_id=chat_id, photo=photo_id)
+        except Exception:
+            if caption:
+                try:
+                    await bot.send_photo(chat_id=chat_id, photo=photo_id, caption=caption)
+                    sent_caption = True
+                except Exception:
+                    await bot.send_photo(chat_id=chat_id, photo=photo_id)
+            else:
+                await bot.send_photo(chat_id=chat_id, photo=photo_id)
+        if text and (not sent_caption or len(text) > 1024):
+            try:
+                await bot.send_message(chat_id=chat_id, text=text, parse_mode='HTML', disable_web_page_preview=True)
+            except Exception:
+                await bot.send_message(chat_id=chat_id, text=text)
+    elif text:
+        try:
+            await bot.send_message(chat_id=chat_id, text=text, parse_mode='HTML', disable_web_page_preview=True)
+        except Exception:
+            await bot.send_message(chat_id=chat_id, text=text)
+
+async def _message_user_show_preview(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = context.user_data.get('msg_text', '')
+    photo_id = context.user_data.get('msg_photo_file_id')
+    when_desc = context.user_data.get('msg_dt_input') or 'указанное время'
     try:
         await update.message.reply_text("Предпросмотр сообщения:", parse_mode='HTML')
     except Exception:
         await update.message.reply_text("Предпросмотр сообщения:")
-    try:
-        await update.message.reply_text(context.user_data.get('msg_text',''), parse_mode='HTML', disable_web_page_preview=False)
-    except Exception:
-        await update.message.reply_text(context.user_data.get('msg_text',''))
+    await _send_message_with_optional_photo(context.bot, update.effective_chat.id, text, photo_id)
+    target_label = context.user_data.get('msg_user_label') or 'указанного пользователя'
     await update.message.reply_text(
-        f"Отправить пользователю {context.user_data.get('msg_user_label')} в {s} (МСК)?\n"
-        f"Напишите 'да' для подтверждения или 'нет' для отмены."
+        f"Отправить пользователю {target_label} в {when_desc} (МСК)?\nНапишите 'да' для подтверждения или 'нет' для отмены."
     )
     return MSG_USER_CONFIRM
 
+async def message_user_photo_decision(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    ans = (update.message.text or '').strip().lower()
+    if ans in _MSG_USER_YES:
+        context.user_data.pop('msg_photo_file_id', None)
+        await update.message.reply_text("Прикрепите картинку (отправьте фото или напишите 'нет' для отправки без картинки, /cancel для отмены).")
+        return MSG_USER_WAIT_PHOTO
+    if ans in _MSG_USER_NO:
+        context.user_data.pop('msg_photo_file_id', None)
+        return await _message_user_show_preview(update, context)
+    await update.message.reply_text("Пожалуйста, ответьте 'да' или 'нет'.")
+    return MSG_USER_WAIT_PHOTO_DECISION
+
+async def message_user_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.message
+    if message and message.photo:
+        context.user_data['msg_photo_file_id'] = message.photo[-1].file_id
+        return await _message_user_show_preview(update, context)
+    text = (message.text or '').strip().lower() if message and message.text else ''
+    if text in _MSG_USER_NO:
+        context.user_data.pop('msg_photo_file_id', None)
+        return await _message_user_show_preview(update, context)
+    await update.message.reply_text("Не удалось распознать изображение. Отправьте фото или напишите 'нет' для отправки без картинки (или /cancel).")
+    return MSG_USER_WAIT_PHOTO
+
 async def message_user_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ans = (update.message.text or '').strip().lower()
-    ok_values = {"да", "д", "ок", "окей", "yes", "y", "ok"}
-    if ans not in ok_values:
+    if ans not in _MSG_USER_YES:
+        for key in ('msg_user_id', 'msg_user_label', 'msg_text', 'msg_dt_utc', 'msg_dt_input', 'msg_photo_file_id'):
+            context.user_data.pop(key, None)
         await update.message.reply_text("Отправка отменена.")
         return ConversationHandler.END
     text = context.user_data.get('msg_text') or ''
     user_id = context.user_data.get('msg_user_id')
+    photo_id = context.user_data.get('msg_photo_file_id')
     if not text or not user_id:
         await update.message.reply_text("Не найдены получатель или текст. Запустите заново: /message_user")
         return ConversationHandler.END
@@ -1379,45 +1447,50 @@ async def message_user_confirm(update: Update, context: ContextTypes.DEFAULT_TYP
         delay = max(0, int((dt_utc - now).total_seconds()))
     try:
         jq = getattr(getattr(context, 'application', None), 'job_queue', None)
+        job_data = {'text': text, 'user_id': int(user_id), 'photo': photo_id}
         if jq is not None:
             jq.run_once(
                 message_user_job,
                 when=delay,
-                data={'text': text, 'user_id': int(user_id)}
+                data=job_data
             )
         else:
-            # Fallback: schedule via asyncio and call job handler manually
             from types import SimpleNamespace
             async def _fallback_run():
                 if delay:
                     await asyncio.sleep(delay)
-                fake_ctx = SimpleNamespace(bot=context.bot, job=SimpleNamespace(data={'text': text, 'user_id': int(user_id)}))
+                fake_ctx = SimpleNamespace(bot=context.bot, job=SimpleNamespace(data=job_data))
                 await message_user_job(fake_ctx)
             asyncio.create_task(_fallback_run())
         when_desc = context.user_data.get('msg_dt_input') or 'как можно скорее'
         await update.message.reply_text(f"Сообщение запланировано на {when_desc} (МСК).")
     except Exception as e:
         await update.message.reply_text(f"Не удалось запланировать отправку: {e}")
+    finally:
+        for key in ('msg_user_id', 'msg_user_label', 'msg_text', 'msg_dt_utc', 'msg_dt_input', 'msg_photo_file_id'):
+            context.user_data.pop(key, None)
     return ConversationHandler.END
 
 async def message_user_job(context: ContextTypes.DEFAULT_TYPE):
     """JobQueue callback: отправка сообщения одному пользователю."""
     text = ''
     user_id = None
+    photo_id = None
     try:
         job = getattr(context, 'job', None)
         if job and job.data:
             text = job.data.get('text') or ''
             user_id = job.data.get('user_id')
+            photo_id = job.data.get('photo')
     except Exception:
         text = ''
     if not text or not user_id:
         return
     try:
-        await context.bot.send_message(chat_id=user_id, text=text, parse_mode='HTML', disable_web_page_preview=True)
+        await _send_message_with_optional_photo(context.bot, int(user_id), text, photo_id)
     except Exception:
         try:
-            await context.bot.send_message(chat_id=user_id, text=text)
+            await context.bot.send_message(chat_id=int(user_id), text=text)
         except Exception:
             pass
 

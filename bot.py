@@ -106,8 +106,8 @@ send_challenge_image_cancel = _scimg_cancel
 # Send message to a single user (admin)
 from handlers.admin_handlers import (
     message_user_start, message_user_target, message_user_text,
-    message_user_datetime, message_user_confirm,
-    MSG_USER_WAIT_TARGET, MSG_USER_WAIT_TEXT, MSG_USER_WAIT_DATETIME, MSG_USER_CONFIRM,
+    message_user_datetime, message_user_photo_decision, message_user_photo, message_user_confirm,
+    MSG_USER_WAIT_TARGET, MSG_USER_WAIT_TEXT, MSG_USER_WAIT_DATETIME, MSG_USER_WAIT_PHOTO_DECISION, MSG_USER_WAIT_PHOTO, MSG_USER_CONFIRM,
 )
 
 from handlers.admin_handlers import (
@@ -892,6 +892,11 @@ if __name__ == '__main__':
             MSG_USER_WAIT_TARGET: [MessageHandler(filters.TEXT & ~filters.COMMAND, message_user_target)],
             MSG_USER_WAIT_TEXT: [MessageHandler(filters.TEXT & ~filters.COMMAND, message_user_text)],
             MSG_USER_WAIT_DATETIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, message_user_datetime)],
+            MSG_USER_WAIT_PHOTO_DECISION: [MessageHandler(filters.TEXT & ~filters.COMMAND, message_user_photo_decision)],
+            MSG_USER_WAIT_PHOTO: [
+                MessageHandler(filters.PHOTO, message_user_photo),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, message_user_photo),
+            ],
             MSG_USER_CONFIRM: [MessageHandler(filters.TEXT & ~filters.COMMAND, message_user_confirm)],
         },
         fallbacks=[CommandHandler('cancel', broadcast_subscribers_cancel)],
