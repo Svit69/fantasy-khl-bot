@@ -230,7 +230,7 @@ async def add_player_start(update, context):
         logger.warning("Admin check failed in add_player_start")
         return ConversationHandler.END
     logger.info("Sending name prompt")
-    await update.message.reply_text("Р’РІРµРґРёС‚Рµ РёРјСЏ Рё С„Р°РјРёР»РёСЋ РёРіСЂРѕРєР°:")
+    await update.message.reply_text("Введите имя и фамилию игрока:")
     logger.info(f"Returning ADD_NAME state: {ADD_NAME}")
     return ADD_NAME
 
@@ -238,40 +238,40 @@ async def add_player_name(update, context):
     try:
         logger.info(f"add_player_name called with text: {update.message.text}")
         if not update.message or not update.message.text or not update.message.text.strip():
-            await update.message.reply_text("РџРѕР¶Р°Р»СѓР№СЃС‚Р°, РІРІРµРґРёС‚Рµ РєРѕСЂСЂРµРєС‚РЅРѕРµ РёРјСЏ РёРіСЂРѕРєР°.")
+            await update.message.reply_text("Пожалуйста, введите корректное имя игрока.")
             return ADD_NAME
             
         context.user_data['name'] = update.message.text.strip()
         logger.info(f"Set name to: {context.user_data['name']}")
         logger.info(f"Sending position prompt, will return ADD_POSITION: {ADD_POSITION}")
         
-        await update.message.reply_text("Р’РІРµРґРёС‚Рµ РїРѕР·РёС†РёСЋ (РЅР°РїР°РґР°СЋС‰РёР№/Р·Р°С‰РёС‚РЅРёРє/РІСЂР°С‚Р°СЂСЊ):")
+        await update.message.reply_text("Введите позицию (нападающий/защитник/вратарь):")
         return ADD_POSITION
         
     except Exception as e:
         logger.error(f"Error in add_player_name: {str(e)}", exc_info=True)
         if update and update.message:
             await update.message.reply_text("РџСЂРѕРёР·РѕС€Р»Р° РѕС€РёР±РєР° РїСЂРё РѕР±СЂР°Р±РѕС‚РєРµ РёРјРµРЅРё РёРіСЂРѕРєР°. РџРѕР¶Р°Р»СѓР№СЃС‚Р°, РїРѕРїСЂРѕР±СѓР№С‚Рµ РµС‰Рµ СЂР°Р·.")
-        return ADD_NAME  # Р’РѕР·РІСЂР°С‰Р°РµРјСЃСЏ Рє РІРІРѕРґСѓ РёРјРµРЅРё
+        return ADD_NAME  # Возвращаемся к вводу имени
 
 async def add_player_position(update, context):
     context.user_data['position'] = (update.message.text or '').strip()
-    await update.message.reply_text("Р’РІРµРґРёС‚Рµ РєР»СѓР±:")
+    await update.message.reply_text("Введите клуб:")
     return ADD_CLUB
 
 async def add_player_club(update, context):
     context.user_data['club'] = (update.message.text or '').strip()
-    await update.message.reply_text("Р’РІРµРґРёС‚Рµ РЅР°С†РёСЋ:")
+    await update.message.reply_text("Введите нацию:")
     return ADD_NATION
 
 async def add_player_nation(update, context):
     context.user_data['nation'] = (update.message.text or '').strip()
-    await update.message.reply_text("Р’РІРµРґРёС‚Рµ РІРѕР·СЂР°СЃС‚ (С‡РёСЃР»Рѕ):")
+    await update.message.reply_text("Введите возраст (число):")
     return ADD_AGE
 
 async def add_player_age(update, context):
     context.user_data['age'] = (update.message.text or '').strip()
-    await update.message.reply_text("Р’РІРµРґРёС‚Рµ СЃС‚РѕРёРјРѕСЃС‚СЊ (HC, С‡РёСЃР»Рѕ):")
+    await update.message.reply_text("Введите стоимость (HC, число):")
     return ADD_PRICE
 
 async def add_player_price(update, context):
@@ -283,13 +283,13 @@ async def add_player_price(update, context):
         age = int(context.user_data.get('age', '0'))
         price = int((update.message.text or '0').strip())
         db.add_player(name, position, club, nation, age, price)
-        await update.message.reply_text("РРіСЂРѕРє РґРѕР±Р°РІР»РµРЅ!")
+        await update.message.reply_text("Игрок добавлен!")
     except Exception as e:
         await update.message.reply_text(f"РћС€РёР±РєР° РїСЂРё РґРѕР±Р°РІР»РµРЅРёРё: {e}")
     return ConversationHandler.END
 
 async def add_player_cancel(update, context):
-    await update.message.reply_text("Р”РѕР±Р°РІР»РµРЅРёРµ РѕС‚РјРµРЅРµРЅРѕ.")
+    await update.message.reply_text("Добавление отменено.")
     return ConversationHandler.END
 
 # --- РЎРїРёСЃРѕРє / РїРѕРёСЃРє / СѓРґР°Р»РµРЅРёРµ РёРіСЂРѕРєРѕРІ ---
@@ -302,10 +302,10 @@ async def list_players(update, context):
         await update.message.reply_text(f"РћС€РёР±РєР° РїРѕР»СѓС‡РµРЅРёСЏ СЃРїРёСЃРєР° РёРіСЂРѕРєРѕРІ: {e}")
         return
     if not players:
-        await update.message.reply_text("РЎРїРёСЃРѕРє РёРіСЂРѕРєРѕРІ РїСѓСЃС‚.")
+        await update.message.reply_text("Список игроков пуст.")
         return
     msg = "\n".join([
-        f"{p[0]}. {p[1]} | {p[2]} | {p[3]} | {p[4]} | {p[5]} Р»РµС‚ | {p[6]} HC" for p in players
+        f"{p[0]}. {p[1]} | {p[2]} | {p[3]} | {p[4]} | {p[5]} лет | {p[6]} HC" for p in players
     ])
     for i in range(0, len(msg), 3500):
         await update.message.reply_text(msg[i:i+3500])
@@ -314,21 +314,21 @@ async def find_player(update, context):
     if not await admin_only(update, context):
         return
     if not context.args or not str(context.args[0]).isdigit():
-        await update.message.reply_text("РСЃРїРѕР»СЊР·РѕРІР°РЅРёРµ: /find_player <id>")
+        await update.message.reply_text("Использование: /find_player <id>")
         return
     player_id = int(context.args[0])
     player = db.get_player_by_id(player_id)
     if not player:
         await update.message.reply_text("Игрок не найден.")
         return
-    msg = f"{player[0]}. {player[1]} | {player[2]} | {player[3]} | {player[4]} | {player[5]} Р»РµС‚ | {player[6]} HC"
+    msg = f"{player[0]}. {player[1]} | {player[2]} | {player[3]} | {player[4]} | {player[5]} лет | {player[6]} HC"
     await update.message.reply_text(msg)
 
 async def remove_player(update, context):
     if not await admin_only(update, context):
         return
     if not context.args or not str(context.args[0]).isdigit():
-        await update.message.reply_text("РСЃРїРѕР»СЊР·РѕРІР°РЅРёРµ: /remove_player <id>")
+        await update.message.reply_text("Использование: /remove_player <id>")
         return
     player_id = int(context.args[0])
     player = db.get_player_by_id(player_id)
@@ -482,7 +482,7 @@ async def get_tour_roster(update, context):
         return
     msg = "РЎРѕСЃС‚Р°РІ РЅР° С‚СѓСЂ:\n"
     for cost, pid, name, pos, club, nation, age, price in roster:
-        msg += f"{cost}: {pid}. {name} | {pos} | {club} | {nation} | {age} Р»РµС‚ | {price} HC\n"
+        msg += f"{cost}: {pid}. {name} | {pos} | {club} | {nation} | {age} лет | {price} HC\n"
     await update.message.reply_text(msg)
 
 # --- РЎРїРёСЃРѕРє РїРѕР»СЊР·РѕРІР°С‚РµР»РµР№ Рё РїРѕРґРїРёСЃРѕРє ---
