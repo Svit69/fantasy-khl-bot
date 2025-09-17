@@ -319,7 +319,7 @@ async def find_player(update, context):
     player_id = int(context.args[0])
     player = db.get_player_by_id(player_id)
     if not player:
-        await update.message.reply_text("РРіСЂРѕРє РЅРµ РЅР°Р№РґРµРЅ.")
+        await update.message.reply_text("Игрок не найден.")
         return
     msg = f"{player[0]}. {player[1]} | {player[2]} | {player[3]} | {player[4]} | {player[5]} Р»РµС‚ | {player[6]} HC"
     await update.message.reply_text(msg)
@@ -333,7 +333,7 @@ async def remove_player(update, context):
     player_id = int(context.args[0])
     player = db.get_player_by_id(player_id)
     if not player:
-        await update.message.reply_text("РРіСЂРѕРє РЅРµ РЅР°Р№РґРµРЅ.")
+        await update.message.reply_text("Игрок не найден.")
         return
     try:
         if db.remove_player(player_id):
@@ -348,40 +348,40 @@ async def edit_player_start(update, context):
     if not await admin_only(update, context):
         return ConversationHandler.END
     if not context.args or not str(context.args[0]).isdigit():
-        await update.message.reply_text("РСЃРїРѕР»СЊР·РѕРІР°РЅРёРµ: /edit_player <id>")
+        await update.message.reply_text("Использование: /edit_player <id>")
         return ConversationHandler.END
     player_id = int(context.args[0])
     player = db.get_player_by_id(player_id)
     if not player:
-        await update.message.reply_text("РРіСЂРѕРє РЅРµ РЅР°Р№РґРµРЅ.")
+        await update.message.reply_text("Игрок не найден.")
         return ConversationHandler.END
     context.user_data['edit_player_id'] = player_id
-    await update.message.reply_text("Р’РІРµРґРёС‚Рµ РЅРѕРІРѕРµ РёРјСЏ Рё С„Р°РјРёР»РёСЋ РёРіСЂРѕРєР°:")
+    await update.message.reply_text("Введите новое имя и фамилию игрока:")
     return EDIT_NAME
 
 async def edit_player_name(update, context):
     context.user_data['edit_name'] = (update.message.text or '').strip()
-    await update.message.reply_text("Р’РІРµРґРёС‚Рµ РЅРѕРІСѓСЋ РїРѕР·РёС†РёСЋ (РЅР°РїР°РґР°СЋС‰РёР№/Р·Р°С‰РёС‚РЅРёРє/РІСЂР°С‚Р°СЂСЊ):")
+    await update.message.reply_text("Введите новую позицию (нападающий/защитник/вратарь):")
     return EDIT_POSITION
 
 async def edit_player_position(update, context):
     context.user_data['edit_position'] = (update.message.text or '').strip()
-    await update.message.reply_text("Р’РІРµРґРёС‚Рµ РЅРѕРІС‹Р№ РєР»СѓР±:")
+    await update.message.reply_text("Введите новый клуб:")
     return EDIT_CLUB
 
 async def edit_player_club(update, context):
     context.user_data['edit_club'] = (update.message.text or '').strip()
-    await update.message.reply_text("Р’РІРµРґРёС‚Рµ РЅРѕРІСѓСЋ РЅР°С†РёСЋ:")
+    await update.message.reply_text("Введите новую нацию:")
     return EDIT_NATION
 
 async def edit_player_nation(update, context):
     context.user_data['edit_nation'] = (update.message.text or '').strip()
-    await update.message.reply_text("Р’РІРµРґРёС‚Рµ РЅРѕРІС‹Р№ РІРѕР·СЂР°СЃС‚ (С‡РёСЃР»Рѕ):")
+    await update.message.reply_text("Введите новый возраст (число):")
     return EDIT_AGE
 
 async def edit_player_age(update, context):
     context.user_data['edit_age'] = (update.message.text or '').strip()
-    await update.message.reply_text("Р’РІРµРґРёС‚Рµ РЅРѕРІСѓСЋ СЃС‚РѕРёРјРѕСЃС‚СЊ (HC, С‡РёСЃР»Рѕ):")
+    await update.message.reply_text("Введите новую стоимость (HC, число):")
     return EDIT_PRICE
 
 async def edit_player_price(update, context):
@@ -395,18 +395,18 @@ async def edit_player_price(update, context):
         price = int((update.message.text or '0').strip())
         ok = db.update_player(player_id, name, position, club, nation, age, price)
         if ok:
-            await update.message.reply_text("РРіСЂРѕРє СѓСЃРїРµС€РЅРѕ РѕР±РЅРѕРІР»С‘РЅ!")
+            await update.message.reply_text("Игрок успешно обновлён!")
         else:
-            await update.message.reply_text("РќРµ СѓРґР°Р»РѕСЃСЊ РѕР±РЅРѕРІРёС‚СЊ РёРіСЂРѕРєР°.")
+            await update.message.reply_text("Не удалось обновить игрока.")
     except Exception as e:
-        await update.message.reply_text(f"РћС€РёР±РєР° РїСЂРё РѕР±РЅРѕРІР»РµРЅРёРё: {e}")
+        await update.message.reply_text(f"Ошибка при обновлении: {e}")
     finally:
         for k in ('edit_player_id','edit_name','edit_position','edit_club','edit_nation','edit_age'):
             context.user_data.pop(k, None)
     return ConversationHandler.END
 
 async def edit_player_cancel(update, context):
-    await update.message.reply_text("Р РµРґР°РєС‚РёСЂРѕРІР°РЅРёРµ РѕС‚РјРµРЅРµРЅРѕ.")
+    await update.message.reply_text("Редактирование отменено.")
     return ConversationHandler.END
 
 # --- РўСѓСЂ: РґРѕР±Р°РІРёС‚СЊ Рё РІС‹РІРµСЃС‚Рё СЃРѕСЃС‚Р°РІ ---
