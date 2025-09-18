@@ -1259,6 +1259,27 @@ MSG_USER_CONFIRM = 12105
 _MSG_USER_YES = {'да', 'д', 'yes', 'y', 'ок', 'ok', 'ага'}
 _MSG_USER_NO = {'нет', 'н', 'no', 'n', 'не'}
 
+BLOCK_USER_WAIT_TARGET = 12200
+BLOCK_USER_WAIT_USERNAME = 12201
+BLOCK_USER_WAIT_PASSWORD = 12202
+BLOCK_USER_WAIT_CONFIRM = 12203
+
+_BLOCK_USER_YES = {'да', 'д', 'yes', 'y', 'ок', 'ok'}
+_BLOCK_USER_NO = {'нет', 'н', 'no', 'n'}
+
+
+_BLOCK_USER_NOTIFICATION = (
+    "⚠️ Обнаружена подозрительная активность на вашем аккаунте. "
+    "Мы вынуждены временно заблокировать доступ до выяснения обстоятельств.\n\n"
+    "Возможные причины:\n"
+    "- Нарушение правил платформы;\n"
+    "- Нарушение законодательства;\n"
+    "- Подозрение в мошенничестве;\n"
+    "- Накрутка ботов или другой искусственной активности.\n\n"
+    "Если вы уверены, что произошла ошибка, пожалуйста, свяжитесь с поддержкой для проверки."
+)
+
+
 async def message_user_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await admin_only(update, context):
         return ConversationHandler.END
@@ -1470,6 +1491,173 @@ async def message_user_confirm(update: Update, context: ContextTypes.DEFAULT_TYP
         for key in ('msg_user_id', 'msg_user_label', 'msg_text', 'msg_dt_utc', 'msg_dt_input', 'msg_photo_file_id'):
             context.user_data.pop(key, None)
     return ConversationHandler.END
+
+
+
+async def block_user_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await admin_only(update, context):
+        return ConversationHandler.END
+    prompt = (
+        "Введите ID пользователя, которого нужно заблокировать (или /cancel для отмены):"
+    )
+    await update.message.reply_text(prompt)
+    return BLOCK_USER_WAIT_TARGET
+
+
+
+async def block_user_target(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    raw_id = (update.message.text or '').strip()
+    if not raw_id.isdigit():
+        await update.message.reply_text(
+            "ID должен состоять только из цифр. Введите корректный ID (или /cancel для отмены):"
+        )
+        return BLOCK_USER_WAIT_TARGET
+    target_id = int(raw_id)
+    try:
+        user_row = db.get_user_by_id(target_id)
+    except Exception:
+        user_row = None
+    if not user_row:
+        await update.message.reply_text(
+            "Пользователь с таким ID не найден. Введите ID ещё раз (или /cancel для отмены):"
+        )
+        return BLOCK_USER_WAIT_TARGET
+    if db.is_user_blocked(target_id):
+        await update.message.reply_text("Этот пользователь уже заблокирован.")
+        return ConversationHandler.END
+    db_username = (user_row[1] or '').lower()
+    context.user_data['block_user_id'] = target_id
+    context.user_data['block_user_db_username'] = db_username
+    context.user_data['block_user_username'] = ''
+    context.user_data['block_user_label'] = f"ID {target_id}"
+    await update.message.reply_text(
+        "Введите @username пользователя (или '-' если его нет, /cancel для отмены):"
+    )
+    return BLOCK_USER_WAIT_USERNAME
+
+
+async def block_user_username(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    target_id = context.user_data.get('block_user_id')
+    if not target_id:
+        await update.message.reply_text("Не удалось обработать следующий шаг. Начните заново: /block_user")
+        return ConversationHandler.END
+    raw_username = (update.message.text or '').strip()
+    db_username = (context.user_data.get('block_user_db_username') or '').lower()
+    if raw_username == '-':
+        if db_username:
+            await update.message.reply_text(
+                "В базе у пользователя указан username. Введите его в формате @username:"
+            )
+            return BLOCK_USER_WAIT_USERNAME
+        username = ''
+    else:
+        if not raw_username.startswith('@') or len(raw_username) <= 1:
+            await update.message.reply_text(
+                "Укажите username в формате @username или '-' если его нет:"
+            )
+            return BLOCK_USER_WAIT_USERNAME
+        username = raw_username[1:].strip()
+        if not username:
+            await update.message.reply_text(
+                "Укажите username в формате @username или '-' если его нет:"
+            )
+            return BLOCK_USER_WAIT_USERNAME
+        if db_username and username.lower() != db_username:
+            await update.message.reply_text(
+                "Введённый username не совпадает с данными в базе. Проверьте ввод и попробуйте ещё раз:"
+            )
+            return BLOCK_USER_WAIT_USERNAME
+        try:
+            other = db.get_user_by_username(username)
+        except Exception:
+            other = None
+        if other and int(other[0]) != int(target_id):
+            await update.message.reply_text(
+                "Этот username принадлежит другому пользователю. Укажите корректный @username или '-':"
+            )
+            return BLOCK_USER_WAIT_USERNAME
+    label = f"ID {target_id}"
+    if raw_username != '-':
+        label = f"ID {target_id} (@{username})"
+        context.user_data['block_user_username'] = username
+    else:
+        context.user_data['block_user_username'] = ''
+    context.user_data['block_user_label'] = label
+    await update.message.reply_text("Введите пароль (или /cancel для отмены):")
+    return BLOCK_USER_WAIT_PASSWORD
+
+
+
+async def block_user_password(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    checker = _get_purge_password_checker()
+    pw = (update.message.text or '').strip()
+    if not checker(pw):
+        await update.message.reply_text('Неверный пароль. Операция отменена.')
+        for key in ('block_user_id', 'block_user_label', 'block_user_username', 'block_user_db_username', 'block_user_reason'):
+            context.user_data.pop(key, None)
+        return ConversationHandler.END
+    label = context.user_data.get('block_user_label', 'пользователь')
+    context.user_data['block_user_reason'] = _BLOCK_USER_NOTIFICATION
+    preview = "\n".join([
+        f"Подтвердите блокировку пользователя {label}.",
+        "",
+        f"Пользователь получит уведомление:\n{_BLOCK_USER_NOTIFICATION}",
+        "",
+        "Подтвердить блокировку? (да/нет)",
+    ])
+    await update.message.reply_text(preview)
+    return BLOCK_USER_WAIT_CONFIRM
+
+
+
+async def block_user_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    answer = (update.message.text or '').strip().lower()
+    if answer in _BLOCK_USER_NO:
+        await update.message.reply_text('Операция отменена.')
+        for key in ('block_user_id', 'block_user_label', 'block_user_username', 'block_user_db_username', 'block_user_reason'):
+            context.user_data.pop(key, None)
+        return ConversationHandler.END
+    if answer not in _BLOCK_USER_YES:
+        await update.message.reply_text("Напишите 'да' для подтверждения или 'нет' для отмены.")
+        return BLOCK_USER_WAIT_CONFIRM
+    target_id = context.user_data.get('block_user_id')
+    label = context.user_data.get('block_user_label', 'пользователь')
+    if not target_id:
+        await update.message.reply_text('Не удалось определить пользователя. Попробуйте снова: /block_user')
+        return ConversationHandler.END
+    admin = update.effective_user
+    reason_text = context.user_data.get('block_user_reason', _BLOCK_USER_NOTIFICATION)
+    try:
+        db.block_user(target_id, admin.id if admin else None, reason_text)
+    except Exception as e:
+        await update.message.reply_text(f'Не удалось заблокировать пользователя: {e}')
+        for key in ('block_user_id', 'block_user_label', 'block_user_username', 'block_user_db_username', 'block_user_reason'):
+            context.user_data.pop(key, None)
+        return ConversationHandler.END
+    try:
+        await context.bot.send_message(chat_id=target_id, text=reason_text)
+    except Exception:
+        pass
+    await update.message.reply_text(f'Пользователь {label} заблокирован.')
+    try:
+        await context.bot.send_message(
+            chat_id=ADMIN_ID,
+            text=f'Администратор {admin.id if admin else ""} заблокировал пользователя {label}.'
+        )
+    except Exception:
+        pass
+    for key in ('block_user_id', 'block_user_label', 'block_user_username', 'block_user_db_username', 'block_user_reason'):
+        context.user_data.pop(key, None)
+    return ConversationHandler.END
+
+
+
+async def block_user_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text('Операция отменена.')
+    for key in ('block_user_id', 'block_user_label', 'block_user_username', 'block_user_db_username', 'block_user_reason'):
+        context.user_data.pop(key, None)
+    return ConversationHandler.END
+
 
 async def message_user_job(context: ContextTypes.DEFAULT_TYPE):
     """JobQueue callback: отправка сообщения одному пользователю."""

@@ -108,6 +108,8 @@ from handlers.admin_handlers import (
     message_user_start, message_user_target, message_user_text,
     message_user_datetime, message_user_photo_decision, message_user_photo, message_user_confirm,
     MSG_USER_WAIT_TARGET, MSG_USER_WAIT_TEXT, MSG_USER_WAIT_DATETIME, MSG_USER_WAIT_PHOTO_DECISION, MSG_USER_WAIT_PHOTO, MSG_USER_CONFIRM,
+    block_user_start, block_user_target, block_user_username, block_user_password, block_user_confirm, block_user_cancel,
+    BLOCK_USER_WAIT_TARGET, BLOCK_USER_WAIT_USERNAME, BLOCK_USER_WAIT_PASSWORD, BLOCK_USER_WAIT_CONFIRM,
 )
 
 from handlers.admin_handlers import (
@@ -903,6 +905,19 @@ if __name__ == '__main__':
         name="message_user_conv",
     )
     app.add_handler(message_user_conv)
+
+    block_user_conv = ConversationHandler(
+        entry_points=[CommandHandler('block_user', block_user_start)],
+        states={
+            BLOCK_USER_WAIT_TARGET: [MessageHandler(filters.TEXT & ~filters.COMMAND, block_user_target)],
+            BLOCK_USER_WAIT_USERNAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, block_user_username)],
+            BLOCK_USER_WAIT_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, block_user_password)],
+            BLOCK_USER_WAIT_CONFIRM: [MessageHandler(filters.TEXT & ~filters.COMMAND, block_user_confirm)],
+        },
+        fallbacks=[CommandHandler('cancel', block_user_cancel)],
+        name="block_user_conv",
+    )
+    app.add_handler(block_user_conv)
     # Список туров и колбэки
     app.add_handler(CommandHandler('tours', tours))
     app.add_handler(CommandHandler('tour', tours))  # для совместимости и удобства
