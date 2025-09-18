@@ -648,7 +648,6 @@ async def send_tour_image(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     # Р•СЃР»Рё РєРѕРјР°РЅРґР° РІС‹Р·РІР°РЅР° Р±РµР· С„РѕС‚Рѕ, Р·Р°РїСЂР°С€РёРІР°РµРј С„РѕС‚Рѕ
 
-
     if not update.message.photo:
         context.user_data['awaiting_tour_image'] = True
         chat_id = update.effective_chat.id
@@ -1294,7 +1293,6 @@ _BLOCK_USER_NOTIFICATION = (
     "- Нарушение законодательства;\n"
     "- Подозрение в мошенничестве;\n"
     "- Накрутка ботов или другой искусственной активности.\n\n"
-    "Если вы уверены, что произошла ошибка, пожалуйста, свяжитесь с поддержкой для проверки."
 )
 
 
