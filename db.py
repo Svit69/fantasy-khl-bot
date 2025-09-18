@@ -931,6 +931,26 @@ def try_reward_referral(user_id: int, referrer_id: int, amount: int) -> dict:
             balance = balance_row[0] if balance_row else None
             return {'status': 'rewarded', 'amount': amount, 'balance': balance, 'counts': counts}
 
+def get_active_tour():
+    import datetime
+    now = _now_moscow()
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute('SELECT * FROM tours WHERE status = ? ORDER BY start_date ASC LIMIT 1', ("активен",)).fetchone()
+        if row:
+            return dict(row)
+        rows = conn.execute('SELECT * FROM tours').fetchall()
+        for r in rows:
+            try:
+                start = datetime.datetime.strptime(r['start_date'], "%d.%m.%y")
+                deadline = datetime.datetime.strptime(r['deadline'], "%d.%m.%y %H:%M")
+                if start <= now < deadline:
+                    return dict(r)
+            except Exception:
+                continue
+        return None
+
+
 def clear_user_tour_roster(user_id, tour_id):
     with closing(sqlite3.connect(DB_NAME)) as conn:
         with conn:
