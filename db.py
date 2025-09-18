@@ -1,7 +1,22 @@
 import sqlite3
 from contextlib import closing
+import datetime
+try:
+    from zoneinfo import ZoneInfo
+except Exception:
+    ZoneInfo = None
+
 
 DB_NAME = 'fantasy_khl.db'
+
+# Referral anti-abuse thresholds (configurable)
+REFERRAL_LIMIT_24H = 5
+REFERRAL_LIMIT_7D = 20
+REFERRAL_LIMIT_30D = 60
+REFERRAL_LIMIT_TOTAL = 200
+REFERRAL_NEW_LIMIT_24H = 15
+REFERRAL_FLAGGED_THRESHOLD = 3
+
 
 # --- Новая таблица для платежей ЮKassa ---
 def init_payments_table():
@@ -46,9 +61,33 @@ def init_db():
                     telegram_id INTEGER PRIMARY KEY,
                     username TEXT,
                     name TEXT,
-                    hc_balance INTEGER DEFAULT 0
+                    hc_balance INTEGER DEFAULT 0,
+                    is_blocked INTEGER DEFAULT 0,
+                    blocked_at TEXT,
+                    blocked_reason TEXT,
+                    blocked_by INTEGER
                 )
             ''')
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
+            if 'is_blocked' not in columns:
+                conn.execute("ALTER TABLE users ADD COLUMN is_blocked INTEGER DEFAULT 0")
+            if 'blocked_at' not in columns:
+                conn.execute("ALTER TABLE users ADD COLUMN blocked_at TEXT")
+            if 'blocked_reason' not in columns:
+                conn.execute("ALTER TABLE users ADD COLUMN blocked_reason TEXT")
+            if 'blocked_by' not in columns:
+                conn.execute("ALTER TABLE users ADD COLUMN blocked_by INTEGER")
+
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS user_block_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    blocked_by INTEGER,
+                    reason TEXT,
+                    created_at TEXT
+                )
+            ''')
+
             # Таблица игроков
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS players (
@@ -248,6 +287,40 @@ def update_hc_balance(telegram_id, amount):
     with closing(sqlite3.connect(DB_NAME)) as conn:
         with conn:
             conn.execute('UPDATE users SET hc_balance = hc_balance + ? WHERE telegram_id = ?', (amount, telegram_id))
+
+def block_user(telegram_id: int, blocked_by: int = None, reason: str = None) -> None:
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            conn.execute(
+                'UPDATE users SET is_blocked = 1, blocked_at = ?, blocked_reason = ?, blocked_by = ? WHERE telegram_id = ?',
+                (now, reason or '', blocked_by, telegram_id)
+            )
+            conn.execute(
+                'INSERT INTO user_block_log (user_id, blocked_by, reason, created_at) VALUES (?, ?, ?, ?)',
+                (telegram_id, blocked_by, reason or '', now)
+            )
+
+
+def unblock_user(telegram_id: int) -> None:
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            conn.execute(
+                'UPDATE users SET is_blocked = 0, blocked_at = NULL, blocked_reason = NULL, blocked_by = NULL WHERE telegram_id = ?',
+                (telegram_id,)
+            )
+
+
+def is_user_blocked(telegram_id: int) -> bool:
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        row = conn.execute(
+            'SELECT is_blocked FROM users WHERE telegram_id = ?',
+            (telegram_id,)
+        ).fetchone()
+    if not row:
+        return False
+    return bool(row[0])
+
 
 def get_all_users():
     with closing(sqlite3.connect(DB_NAME)) as conn:
@@ -735,65 +808,134 @@ def delete_tour_by_id(tour_id: int) -> int:
             return cur.rowcount or 0
 
 # --- Реферальная система ---
+
 def init_referrals_table():
     with closing(sqlite3.connect(DB_NAME)) as conn:
         with conn:
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS referrals (
                     user_id INTEGER PRIMARY KEY,
-                    referrer_id INTEGER
+                    referrer_id INTEGER,
+                    created_at TEXT,
+                    status TEXT,
+                    reward_amount INTEGER DEFAULT 0,
+                    rewarded_at TEXT,
+                    note TEXT
                 )
             ''')
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(referrals)")}
+            if 'created_at' not in columns:
+                conn.execute("ALTER TABLE referrals ADD COLUMN created_at TEXT")
+            if 'status' not in columns:
+                conn.execute("ALTER TABLE referrals ADD COLUMN status TEXT")
+            if 'reward_amount' not in columns:
+                conn.execute("ALTER TABLE referrals ADD COLUMN reward_amount INTEGER DEFAULT 0")
+            if 'rewarded_at' not in columns:
+                conn.execute("ALTER TABLE referrals ADD COLUMN rewarded_at TEXT")
+            if 'note' not in columns:
+                conn.execute("ALTER TABLE referrals ADD COLUMN note TEXT")
+            conn.execute("UPDATE referrals SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP)")
+            conn.execute("UPDATE referrals SET status = COALESCE(status, 'legacy')")
+            conn.execute("UPDATE referrals SET reward_amount = COALESCE(reward_amount, 0)")
+
 
 def add_referral_if_new(user_id: int, referrer_id: int) -> bool:
     """Сохраняет пару (user_id -> referrer_id), если для user_id ещё не было записи.
-    Возвращает True, если запись была добавлена (т.е. первый раз), иначе False.
+    Возвращает True, если запись была добавлена (т.е. referral новый), иначе False.
     """
     if user_id == referrer_id:
         return False
+    now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
     with closing(sqlite3.connect(DB_NAME)) as conn:
         with conn:
             exists = conn.execute('SELECT 1 FROM referrals WHERE user_id = ?', (user_id,)).fetchone()
             if exists:
                 return False
-            conn.execute('INSERT INTO referrals (user_id, referrer_id) VALUES (?, ?)', (user_id, referrer_id))
+            conn.execute(
+                'INSERT INTO referrals (user_id, referrer_id, created_at, status, reward_amount, rewarded_at, note) VALUES (?, ?, ?, ?, 0, NULL, NULL)',
+                (user_id, referrer_id, now_iso, 'pending')
+            )
             return True
 
-def set_tour_winners(tour_id, winners):
-    import json
-    winners_str = json.dumps(winners)
-    with closing(sqlite3.connect(DB_NAME)) as conn:
-        with conn:
-            conn.execute('UPDATE tours SET winners = ? WHERE id = ?', (winners_str, tour_id))
 
-# --- Получить активный тур ---
-def get_active_tour():
-    import datetime
-    now = _now_moscow()
+
+def _count_referrals(conn, referrer_id: int, *, statuses=None, since_hours=None, use_rewarded_timestamp=False, now=None):
+    if now is None:
+        now = datetime.datetime.now(datetime.timezone.utc)
+    query = 'SELECT COUNT(*) FROM referrals WHERE referrer_id = ?'
+    params = [referrer_id]
+    if statuses:
+        placeholders = ','.join('?' for _ in statuses)
+        query += f" AND status IN ({placeholders})"
+        params.extend(statuses)
+    if since_hours is not None:
+        since = now - datetime.timedelta(hours=since_hours)
+        column = 'rewarded_at' if use_rewarded_timestamp else 'created_at'
+        query += f" AND {column} >= ?"
+        params.append(since.isoformat())
+    cur = conn.execute(query, params)
+    row = cur.fetchone()
+    return int(row[0]) if row and row[0] is not None else 0
+
+
+
+def try_reward_referral(user_id: int, referrer_id: int, amount: int) -> dict:
+    """Пытается начислить бонус рефереру с учётом антинакрутки.
+    Возвращает словарь со статусом и дополнительными данными."""
+    now = datetime.datetime.now(datetime.timezone.utc)
+    now_iso = now.isoformat()
     with closing(sqlite3.connect(DB_NAME)) as conn:
         conn.row_factory = sqlite3.Row
-        # 1. Сначала ищем тур со статусом "активен"
-        row = conn.execute('SELECT * FROM tours WHERE status = ? ORDER BY start_date ASC LIMIT 1', ("активен",)).fetchone()
-        if row:
-            return dict(row)
-        # 2. Если нет — ищем тур по дате
-        rows = conn.execute('SELECT * FROM tours').fetchall()
-        for r in rows:
-            try:
-                start = datetime.datetime.strptime(r['start_date'], "%d.%m.%y")
-                deadline = datetime.datetime.strptime(r['deadline'], "%d.%m.%y %H:%M")
-                if start <= now < deadline:
-                    return dict(r)
-            except Exception:
-                continue
-        return None
+        with conn:
+            row = conn.execute('SELECT status FROM referrals WHERE user_id = ?', (user_id,)).fetchone()
+            if not row:
+                return {'status': 'missing'}
+            current_status = (row['status'] or '').lower() if row['status'] is not None else 'pending'
+            if current_status != 'pending':
+                return {'status': current_status}
 
-# --- Финальный состав пользователя на тур ---
+            counts = {
+                'rewarded_24h': _count_referrals(conn, referrer_id, statuses=('rewarded',), since_hours=24, use_rewarded_timestamp=True, now=now),
+                'rewarded_7d': _count_referrals(conn, referrer_id, statuses=('rewarded',), since_hours=24 * 7, use_rewarded_timestamp=True, now=now),
+                'rewarded_30d': _count_referrals(conn, referrer_id, statuses=('rewarded',), since_hours=24 * 30, use_rewarded_timestamp=True, now=now),
+                'rewarded_total': _count_referrals(conn, referrer_id, statuses=('rewarded',), use_rewarded_timestamp=True, now=now),
+                'created_24h': _count_referrals(conn, referrer_id, since_hours=24, now=now),
+                'flagged_48h': _count_referrals(conn, referrer_id, statuses=('flagged',), since_hours=48, now=now),
+            }
+
+            reasons = []
+            if counts['rewarded_24h'] >= REFERRAL_LIMIT_24H:
+                reasons.append('limit_24h')
+            if counts['rewarded_7d'] >= REFERRAL_LIMIT_7D:
+                reasons.append('limit_7d')
+            if counts['rewarded_30d'] >= REFERRAL_LIMIT_30D:
+                reasons.append('limit_30d')
+            if counts['rewarded_total'] >= REFERRAL_LIMIT_TOTAL:
+                reasons.append('limit_total')
+            if counts['created_24h'] >= REFERRAL_NEW_LIMIT_24H:
+                reasons.append('spike_new_24h')
+            if counts['flagged_48h'] >= REFERRAL_FLAGGED_THRESHOLD:
+                reasons.append('recent_flags')
+
+            if reasons:
+                note = ','.join(reasons)
+                conn.execute('UPDATE referrals SET status = ?, note = ? WHERE user_id = ?', ('flagged', note, user_id))
+                return {'status': 'flagged', 'reason': note, 'counts': counts}
+
+            conn.execute('UPDATE users SET hc_balance = hc_balance + ? WHERE telegram_id = ?', (amount, referrer_id))
+            conn.execute(
+                'UPDATE referrals SET status = ?, reward_amount = ?, rewarded_at = ?, note = NULL WHERE user_id = ?',
+                ('rewarded', amount, now_iso, user_id)
+            )
+            balance_row = conn.execute('SELECT hc_balance FROM users WHERE telegram_id = ?', (referrer_id,)).fetchone()
+            balance = balance_row[0] if balance_row else None
+            return {'status': 'rewarded', 'amount': amount, 'balance': balance, 'counts': counts}
 
 def clear_user_tour_roster(user_id, tour_id):
     with closing(sqlite3.connect(DB_NAME)) as conn:
         with conn:
             conn.execute('DELETE FROM user_tour_roster WHERE user_id = ? AND tour_id = ?', (user_id, tour_id))
+
 
 def save_user_tour_roster(user_id, tour_id, roster_dict, captain_id, spent):
     import json
@@ -804,6 +946,7 @@ def save_user_tour_roster(user_id, tour_id, roster_dict, captain_id, spent):
                 INSERT OR REPLACE INTO user_tour_roster (user_id, tour_id, roster_json, captain_id, spent, timestamp)
                 VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             ''', (user_id, tour_id, roster_json, captain_id, spent))
+
 
 def get_user_tour_roster(user_id, tour_id):
     import json

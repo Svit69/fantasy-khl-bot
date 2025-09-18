@@ -8,6 +8,25 @@ import os
 from utils import is_admin, IMAGES_DIR, logger, CHALLENGE_IMAGE_PATH_FILE
 import datetime
 
+def _is_user_blocked_safe(user_id: int) -> bool:
+    checker = getattr(db, 'is_user_blocked', None)
+    if callable(checker):
+        try:
+            return bool(checker(user_id))
+        except Exception:
+            pass
+    try:
+        row = db.get_user_by_id(user_id)
+    except Exception:
+        row = None
+    if not row:
+        return False
+    try:
+        return bool(row[4])
+    except Exception:
+        return False
+
+
 # --- Time guards: block actions after deadlines ---
 def _tour_deadline_passed(context) -> bool:
     try:
@@ -63,6 +82,31 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     elif message is None and hasattr(update, "callback_query"):
         message = update.callback_query.message
     user = update.effective_user
+    if getattr(user, 'is_bot', False):
+        logger.warning('Bot account attempted to interact: %s', user.id)
+        try:
+            if message is not None:
+                await message.reply_text('Боты не могут участвовать в игре. Регистрация отменена.')
+        except Exception:
+            pass
+        try:
+            username = user.username or '—'
+            await context.bot.send_message(
+                chat_id=ADMIN_ID,
+                text=f'⚠️ Попытка взаимодействия бота: ID {user.id} (@{username})'
+            )
+        except Exception:
+            pass
+        return
+    if _is_user_blocked_safe(user.id):
+        try:
+            if message is not None:
+                await message.reply_text(
+                    'Ваш аккаунт заблокирован. Пожалуйста, свяжитесь с администрацией для уточнения деталей.'
+                )
+        except Exception:
+            pass
+        return
     registered = db.register_user(user.id, user.username, user.full_name)
 
     # --- Реферал: если пользователь пришёл по ссылке ref_<id>,
@@ -83,22 +127,80 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                                 bonus = 100 if is_subscription_active(referrer_id) else 50
                             except Exception:
                                 bonus = 50
-                            db.update_hc_balance(referrer_id, bonus)
-                            # Уведомим реферера (если можно)
+                            referral_result = {}
                             try:
-                                new_balance = db.get_user_by_id(referrer_id)
-                                new_balance = new_balance[3] if new_balance else '—'
-                                await context.bot.send_message(
-                                    chat_id=referrer_id,
-                                    text=f'🎉 По вашей реферальной ссылке зарегистрировался новый участник!\n+{bonus} HC начислено. Текущий баланс: {new_balance} HC.'
+                                referral_result = db.try_reward_referral(user.id, referrer_id, bonus)
+                            except Exception as exc:
+                                referral_result = {'status': 'error', 'error': str(exc)}
+                            status = (referral_result.get('status') or '').lower()
+                            ref_row = db.get_user_by_id(referrer_id)
+                            ref_username = ref_row[1] if ref_row else ''
+                            ref_balance = referral_result.get('balance')
+                            if ref_balance is None and ref_row:
+                                try:
+                                    ref_balance = ref_row[3]
+                                except Exception:
+                                    ref_balance = None
+                            message_text = None
+                            if status == 'rewarded':
+                                try:
+                                    balance_display = ref_balance if ref_balance is not None else '—'
+                                    await context.bot.send_message(
+                                        chat_id=referrer_id,
+                                        text=(
+                                            '🎉 Новый реферал прошёл проверку!\n'
+                                            f'+{bonus} HC начислены. Баланс: {balance_display} HC.'
+                                        )
+                                    )
+                                except Exception:
+                                    pass
+                                message_text = 'Реферальная ссылка учтена. Спасибо за приглашение!'
+                            elif status == 'flagged':
+                                reason_note = referral_result.get('reason', 'manual_review')
+                                counts = referral_result.get('counts', {}) or {}
+                                try:
+                                    await context.bot.send_message(
+                                        chat_id=referrer_id,
+                                        text=(
+                                            '⚠️ Реферальный бонус временно приостановлен и проверяется.\n'
+                                            'Лимиты: до 5 подтверждённых приглашений в сутки и 20 за неделю.'
+                                        )
+                                    )
+                                except Exception:
+                                    pass
+                                ref_label = f"@{ref_username}" if ref_username else f"id {referrer_id}"
+                                invited_label = f"@{user.username}" if user.username else f"id {user.id}"
+                                stats_line = (
+                                    f"24h={counts.get('rewarded_24h', 0)}, 7d={counts.get('rewarded_7d', 0)}, "
+                                    f"30d={counts.get('rewarded_30d', 0)}, total={counts.get('rewarded_total', 0)}, "
+                                    f"new24h={counts.get('created_24h', 0)}, flagged48h={counts.get('flagged_48h', 0)}"
                                 )
-                            except Exception:
-                                pass
-                            # Сообщим пользователю, что он пришёл по ссылке
-                            try:
-                                await message.reply_text('Вы зарегистрировались по реферальной ссылке — добро пожаловать!')
-                            except Exception:
-                                pass
+                                try:
+                                    await context.bot.send_message(
+                                        chat_id=ADMIN_ID,
+                                        text=(
+                                            '⚠️ Подозрительный реферал.\n'
+                                            f'Реферер: {ref_label}.\n'
+                                            f'Приглашённый: {invited_label}.\n'
+                                            f'Причины: {reason_note}.\n'
+                                            f'Статистика: {stats_line}.'
+                                        )
+                                    )
+                                except Exception:
+                                    pass
+                                message_text = 'Реферал учтён, бонус начислится после проверки.'
+                            elif status == 'error':
+                                message_text = 'Реферальный бонус не удалось обработать. Попробуйте позже.'
+                            elif status in ('missing', 'legacy', 'rewarded'):
+                                message_text = 'Эта реферальная ссылка уже использовалась ранее.'
+                            else:
+                                message_text = 'Реферальная ссылка обработана.'
+                            
+                            if message_text:
+                                try:
+                                    await message.reply_text(message_text)
+                                except Exception:
+                                    pass
     except Exception as e:
         # Не прерываем старт при ошибке реферальной обработки
         try:
@@ -153,6 +255,9 @@ async def referral(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f"{link}\n\n"
         f"Приглашайте друзей! За каждого нового участника вы получите +{bonus} HC после его регистрации."
     )
+    text += ("\n⚠️ Бонусы начисляются после проверки. Лимиты: до 5 подтверждённых приглашений в сутки и 20 за неделю.")
+
+
     keyboard = [[InlineKeyboardButton('Скопировать ссылку', url=link)]]
     await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
 

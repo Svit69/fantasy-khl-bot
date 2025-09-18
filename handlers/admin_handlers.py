@@ -11,6 +11,24 @@ from telegram.ext import ContextTypes, CommandHandler, MessageHandler, filters, 
 import asyncio
 import datetime
 
+def _is_user_blocked_safe(user_id: int) -> bool:
+    checker = getattr(db, 'is_user_blocked', None)
+    if callable(checker):
+        try:
+            return bool(checker(user_id))
+        except Exception:
+            pass
+    try:
+        row = db.get_user_by_id(user_id)
+    except Exception:
+        row = None
+    if not row:
+        return False
+    try:
+        return bool(row[4])
+    except Exception:
+        return False
+
 # --- Р”РѕР±Р°РІР»РµРЅРёРµ РёРіСЂРѕРєР° ---
 ADD_NAME, ADD_POSITION, ADD_CLUB, ADD_NATION, ADD_AGE, ADD_PRICE = range(6)
 
@@ -1522,7 +1540,7 @@ async def block_user_target(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Пользователь с таким ID не найден. Введите ID ещё раз (или /cancel для отмены):"
         )
         return BLOCK_USER_WAIT_TARGET
-    if db.is_user_blocked(target_id):
+    if _is_user_blocked_safe(target_id):
         await update.message.reply_text("Этот пользователь уже заблокирован.")
         return ConversationHandler.END
     db_username = (user_row[1] or '').lower()
