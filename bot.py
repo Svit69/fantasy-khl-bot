@@ -33,6 +33,7 @@ from handlers.user_handlers import subscribe_stars, precheckout_callback, succes
 from handlers.admin_handlers import addhc2 as addhc, send_results, show_users
 from handlers.admin_handlers import list_challenges, delete_challenge_cmd
 from handlers.admin_handlers import challenge_rosters_cmd
+from handlers.show_hc_users import show_hc_users
 # Override with UTF‑8 safe output
 from handlers.challenge_rosters_fix import challenge_rosters_cmd as _challenge_rosters_cmd_fixed
 challenge_rosters_cmd = _challenge_rosters_cmd_fixed
@@ -606,6 +607,7 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('referral', referral))
     app.add_handler(CommandHandler('refferal', referral))
     app.add_handler(CommandHandler('show_users', show_users))  # Только для админа
+    app.add_handler(CommandHandler('show_hc_users', show_hc_users))  # Только для админа
     app.add_handler(CommandHandler('subscribe', subscribe_stars))
     # Telegram Stars payments handlers
     from telegram.ext import PreCheckoutQueryHandler as _PreCheckoutQueryHandler  # local import to avoid top-level churn
@@ -626,6 +628,7 @@ if __name__ == '__main__':
             "<b>Админские команды</b>\n\n"
             "<b>Управление пользователями:</b>\n" 
             "• /show_users — список пользователей и подписок\n"
+            "• /show_hc_users — пользователи с балансом HC > 0\n"
             "• /addhc — начислить HC пользователю \n"
             "• /broadcast_subscribers — рассылка всем активным подписчикам к указанным дате и времени (админ)\n\n"
             "• /message_user — отправить сообщение одному пользователю по @username или ID (с подтверждением и временем МСК)\n"
