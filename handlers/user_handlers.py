@@ -120,13 +120,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                     referrer_id = int(ref_str)
                     if referrer_id != user.id:
                         # Вставим запись реферала, если для этого user_id её ещё не было
-                        if db.add_referral_if_new(user.id, referrer_id):
+                        added_referral = db.add_referral_if_new(user.id, referrer_id)
+                        if added_referral:
                             # Бонус зависит от активности подписки у реферера
                             try:
                                 from db import is_subscription_active
                                 bonus = 100 if is_subscription_active(referrer_id) else 50
                             except Exception:
                                 bonus = 50
+
+
                             referral_result = {}
                             try:
                                 referral_result = db.try_reward_referral(user.id, referrer_id, bonus)
@@ -141,66 +144,61 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                                     ref_balance = ref_row[3]
                                 except Exception:
                                     ref_balance = None
+
+                            async def _notify_referrer(text: str) -> None:
+                                try:
+                                    await context.bot.send_message(chat_id=referrer_id, text=text)
+                                except Exception:
+                                    pass
+
                             message_text = None
                             if status == 'rewarded':
-                                try:
-                                    balance_display = ref_balance if ref_balance is not None else '—'
-                                    await context.bot.send_message(
-                                        chat_id=referrer_id,
-                                        text=(
-                                            '🎉 Новый реферал прошёл проверку!\n'
-                                            f'+{bonus} HC начислены. Баланс: {balance_display} HC.'
-                                        )
-                                    )
-                                except Exception:
-                                    pass
-                                message_text = 'Реферальная ссылка учтена. Спасибо за приглашение!'
-                            elif status == 'flagged':
-                                reason_note = referral_result.get('reason', 'manual_review')
-                                counts = referral_result.get('counts', {}) or {}
-                                try:
-                                    await context.bot.send_message(
-                                        chat_id=referrer_id,
-                                        text=(
-                                            '⚠️ Реферальный бонус временно приостановлен и проверяется.\n'
-                                            'Лимиты: до 5 подтверждённых приглашений в сутки и 20 за неделю.'
-                                        )
-                                    )
-                                except Exception:
-                                    pass
-                                ref_label = f"@{ref_username}" if ref_username else f"id {referrer_id}"
-                                invited_label = f"@{user.username}" if user.username else f"id {user.id}"
-                                stats_line = (
-                                    f"24h={counts.get('rewarded_24h', 0)}, 7d={counts.get('rewarded_7d', 0)}, "
-                                    f"30d={counts.get('rewarded_30d', 0)}, total={counts.get('rewarded_total', 0)}, "
-                                    f"new24h={counts.get('created_24h', 0)}, flagged48h={counts.get('flagged_48h', 0)}"
+                                balance_display = ref_balance if ref_balance is not None else '—'
+                                await _notify_referrer(
+                                    '🎉 Новый реферал засчитан!
+'
+                                    f'+{bonus} HC начислены. Текущий баланс: {balance_display} HC.'
                                 )
-                                try:
-                                    await context.bot.send_message(
-                                        chat_id=ADMIN_ID,
-                                        text=(
-                                            '⚠️ Подозрительный реферал.\n'
-                                            f'Реферер: {ref_label}.\n'
-                                            f'Приглашённый: {invited_label}.\n'
-                                            f'Причины: {reason_note}.\n'
-                                            f'Статистика: {stats_line}.'
-                                        )
+                                message_text = 'Реферальная ссылка учтена. Спасибо за приглашение!'
+                            elif status == 'pending_admin':
+                                counts = referral_result.get('counts', {}) or {}
+                                pending_amount = referral_result.get('amount') or bonus
+                                new_pending = referral_result.get('new_pending', False)
+                                if new_pending:
+                                    await _notify_referrer(
+                                        '⚠️ Достигнут лимит 5 подтверждённых рефералов за сутки. Бонус отправлен на проверку администратора.'
                                     )
-                                except Exception:
-                                    pass
-                                message_text = 'Реферал учтён, бонус начислится после проверки.'
+                                    await _notify_admin_referral_review(context, referrer_id, user, pending_amount, counts)
+                                message_text = 'Реферальная ссылка учтена, бонус начислится после проверки администратора.'
+                            elif status == 'limit_month':
+                                await _notify_referrer('⚠️ Достигнут лимит 10 подтверждённых рефералов за 30 дней. Бонусы временно не начисляются.')
+                                message_text = 'За последние 30 дней достигнут лимит 10 подтверждённых рефералов. Бонус не начислен.'
+                            elif status == 'limit_total':
+                                await _notify_referrer('⚠️ Достигнут общий лимит 20 подтверждённых рефералов. Новые бонусы не начисляются.')
+                                message_text = 'Достигнут общий лимит 20 рефералов. Бонусы больше не начисляются.'
+                            elif status == 'disabled':
+                                await _notify_referrer('⚠️ Ваша реферальная ссылка отключена администратором.')
+                                message_text = 'Реферальная ссылка не активна.'
                             elif status == 'error':
                                 message_text = 'Реферальный бонус не удалось обработать. Попробуйте позже.'
-                            elif status in ('missing', 'legacy', 'rewarded'):
+                            elif status in ('missing', 'legacy'):
                                 message_text = 'Эта реферальная ссылка уже использовалась ранее.'
                             else:
                                 message_text = 'Реферальная ссылка обработана.'
-                            
+
                             if message_text:
                                 try:
                                     await message.reply_text(message_text)
                                 except Exception:
                                     pass
+
+                        else:
+                            if db.is_referrer_disabled(referrer_id):
+                                try:
+                                    await message.reply_text('Реферальная ссылка не активна.')
+                                except Exception:
+                                    pass
+
     except Exception as e:
         # Не прерываем старт при ошибке реферальной обработки
         try:

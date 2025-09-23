@@ -1,0 +1,120 @@
+BROADCAST_SUBS_WAIT_DATETIME = 12003
+BROADCAST_SUBS_CONFIRM = 12002
+
+async def broadcast_subscribers_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await admin_only(update, context):
+        return ConversationHandler.END
+    await update.message.reply_text("Введите текст рассылки для подписчиков (или /cancel). Можно использовать HTML-разметку (<b>жирный</b>, <i>курсив</i>, ссылки):", parse_mode='HTML')
+    return BROADCAST_SUBS_WAIT_TEXT
+
+async def broadcast_subscribers_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = (update.message.text or '').strip()
+    if not text:
+        await update.message.reply_text("РџСѓСЃС‚РѕРµ СЃРѕРѕР±С‰РµРЅРёРµ. Р’РІРµРґРёС‚Рµ С‚РµРєСЃС‚ РёР»Рё /cancel:")
+        return BROADCAST_SUBS_WAIT_TEXT
+    context.user_data['broadcast_text'] = text
+    await update.message.reply_text(
+        "Укажите дату и время отправки в формате: дд.мм.гг чч:мм (МСК).\n"
+        "Например: 05.09.25 10:30"
+    )
+    return BROADCAST_SUBS_WAIT_DATETIME
+
+async def broadcast_subscribers_datetime(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """РџР°СЂСЃРёС‚ РІСЂРµРјСЏ РІ РњРЎРљ (UTC+3), СЃРѕС…СЂР°РЅСЏРµС‚ РІСЂРµРјСЏ РІ UTC Рё РїСЂРµРґР»Р°РіР°РµС‚ РїРѕРґС‚РІРµСЂРґРёС‚СЊ."""
+    s = (update.message.text or '').strip()
+    dt_msk = None
+    for fmt in ("%d.%m.%y %H:%M", "%d.%m.%Y %H:%M"):
+        try:
+            dt_msk = datetime.datetime.strptime(s, fmt)
+            break
+        except Exception:
+            pass
+    if not dt_msk:
+        await update.message.reply_text(
+            "Неверный формат даты/времени. Введите в формате дд.мм.гг чч:мм (МСК), например: 05.09.25 10:30"
+        )
+        return BROADCAST_SUBS_WAIT_DATETIME
+    # РџРµСЂРµРІРѕРґ РњРЎРљ (UTC+3) РІ UTC
+    dt_utc = dt_msk - datetime.timedelta(hours=3)
+    now_utc = datetime.datetime.utcnow()
+    if dt_utc < now_utc:
+
+async def broadcast_subscribers_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = (update.message.text or '').strip()
+    if not text:
+        await update.message.reply_text("РџСѓСЃС‚РѕРµ СЃРѕРѕР±С‰РµРЅРёРµ. Р’РІРµРґРёС‚Рµ С‚РµРєСЃС‚ РёР»Рё /cancel:")
+        return BROADCAST_SUBS_WAIT_TEXT
+    context.user_data['broadcast_text'] = text
+    await update.message.reply_text(
+        "Укажите дату и время отправки в формате: дд.мм.гг чч:мм (МСК).\n"
+        "Например: 05.09.25 10:30"
+    )
+    return BROADCAST_SUBS_WAIT_DATETIME
+
+async def broadcast_subscribers_datetime(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """РџР°СЂСЃРёС‚ РІСЂРµРјСЏ РІ РњРЎРљ (UTC+3), СЃРѕС…СЂР°РЅСЏРµС‚ РІСЂРµРјСЏ РІ UTC Рё РїСЂРµРґР»Р°РіР°РµС‚ РїРѕРґС‚РІРµСЂРґРёС‚СЊ."""
+    s = (update.message.text or '').strip()
+    dt_msk = None
+    for fmt in ("%d.%m.%y %H:%M", "%d.%m.%Y %H:%M"):
+        try:
+            dt_msk = datetime.datetime.strptime(s, fmt)
+            break
+        except Exception:
+            pass
+    if not dt_msk:
+        await update.message.reply_text(
+            "Неверный формат даты/времени. Введите в формате дд.мм.гг чч:мм (МСК), например: 05.09.25 10:30"
+        )
+        return BROADCAST_SUBS_WAIT_DATETIME
+    # РџРµСЂРµРІРѕРґ РњРЎРљ (UTC+3) РІ UTC
+    dt_utc = dt_msk - datetime.timedelta(hours=3)
+    now_utc = datetime.datetime.utcnow()
+    if dt_utc < now_utc:
+        await update.message.reply_text("Время отправки в прошлом. Укажите дату/время в будущем (МСК):")
+        return BROADCAST_SUBS_WAIT_DATETIME
+    context.user_data['broadcast_dt_utc'] = dt_utc.isoformat()
+    context.user_data['broadcast_dt_input'] = s
+
+    # РџРѕРґСЃС‡РёС‚Р°С‚СЊ С‡РёСЃР»Рѕ Р°РєС‚РёРІРЅС‹С… РїРѕРґРїРёСЃС‡РёРєРѕРІ РЅР° С‚РµРєСѓС‰РёР№ РјРѕРјРµРЅС‚ (РґР»СЏ РёРЅС„РѕСЂРјР°С†РёРё)
+    subs = db.get_all_subscriptions()  # [(user_id, paid_until)]
+    targets = []
+    context.user_data['broadcast_text'] = text
+    await update.message.reply_text(
+        "Укажите дату и время отправки в формате: дд.мм.гг чч:мм (МСК).\n"
+        "Например: 05.09.25 10:30"
+    )
+    return BROADCAST_SUBS_WAIT_DATETIME
+
+async def broadcast_subscribers_datetime(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """РџР°СЂСЃРёС‚ РІСЂРµРјСЏ РІ РњРЎРљ (UTC+3), СЃРѕС…СЂР°РЅСЏРµС‚ РІСЂРµРјСЏ РІ UTC Рё РїСЂРµРґР»Р°РіР°РµС‚ РїРѕРґС‚РІРµСЂРґРёС‚СЊ."""
+    s = (update.message.text or '').strip()
+    dt_msk = None
+    for fmt in ("%d.%m.%y %H:%M", "%d.%m.%Y %H:%M"):
+        try:
+            dt_msk = datetime.datetime.strptime(s, fmt)
+            break
+        except Exception:
+            pass
+    if not dt_msk:
+        await update.message.reply_text(
+            "Неверный формат даты/времени. Введите в формате дд.мм.гг чч:мм (МСК), например: 05.09.25 10:30"
+        )
+        return BROADCAST_SUBS_WAIT_DATETIME
+    # РџРµСЂРµРІРѕРґ РњРЎРљ (UTC+3) РІ UTC
+    dt_utc = dt_msk - datetime.timedelta(hours=3)
+    now_utc = datetime.datetime.utcnow()
+    if dt_utc < now_utc:
+        await update.message.reply_text("Время отправки в прошлом. Укажите дату/время в будущем (МСК):")
+        return BROADCAST_SUBS_WAIT_DATETIME
+    context.user_data['broadcast_dt_utc'] = dt_utc.isoformat()
+    context.user_data['broadcast_dt_input'] = s
+
+    # РџРѕРґСЃС‡РёС‚Р°С‚СЊ С‡РёСЃР»Рѕ Р°РєС‚РёРІРЅС‹С… РїРѕРґРїРёСЃС‡РёРєРѕРІ РЅР° С‚РµРєСѓС‰РёР№ РјРѕРјРµРЅС‚ (РґР»СЏ РёРЅС„РѕСЂРјР°С†РёРё)
+    subs = db.get_all_subscriptions()  # [(user_id, paid_until)]
+    targets = []
+    for user_id, paid_until in subs:
+        if not paid_until:
+            continue
+        try:
+            dtp = datetime.datetime.fromisoformat(str(paid_until))
+        except Exception:

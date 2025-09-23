@@ -11,11 +11,8 @@ DB_NAME = 'fantasy_khl.db'
 
 # Referral anti-abuse thresholds (configurable)
 REFERRAL_LIMIT_24H = 5
-REFERRAL_LIMIT_7D = 20
-REFERRAL_LIMIT_30D = 60
-REFERRAL_LIMIT_TOTAL = 200
-REFERRAL_NEW_LIMIT_24H = 15
-REFERRAL_FLAGGED_THRESHOLD = 3
+REFERRAL_LIMIT_30D = 10
+REFERRAL_LIMIT_TOTAL = 20
 
 
 # --- Новая таблица для платежей ЮKassa ---
@@ -77,6 +74,8 @@ def init_db():
                 conn.execute("ALTER TABLE users ADD COLUMN blocked_reason TEXT")
             if 'blocked_by' not in columns:
                 conn.execute("ALTER TABLE users ADD COLUMN blocked_by INTEGER")
+            if 'referral_disabled' not in columns:
+                conn.execute("ALTER TABLE users ADD COLUMN referral_disabled INTEGER DEFAULT 0")
 
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS user_block_log (
@@ -834,9 +833,14 @@ def init_referrals_table():
                 conn.execute("ALTER TABLE referrals ADD COLUMN rewarded_at TEXT")
             if 'note' not in columns:
                 conn.execute("ALTER TABLE referrals ADD COLUMN note TEXT")
+            if 'reviewed_at' not in columns:
+                conn.execute("ALTER TABLE referrals ADD COLUMN reviewed_at TEXT")
+            if 'reviewed_by' not in columns:
+                conn.execute("ALTER TABLE referrals ADD COLUMN reviewed_by INTEGER")
             conn.execute("UPDATE referrals SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP)")
             conn.execute("UPDATE referrals SET status = COALESCE(status, 'legacy')")
             conn.execute("UPDATE referrals SET reward_amount = COALESCE(reward_amount, 0)")
+
 
 
 def add_referral_if_new(user_id: int, referrer_id: int) -> bool:
@@ -848,6 +852,9 @@ def add_referral_if_new(user_id: int, referrer_id: int) -> bool:
     now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
     with closing(sqlite3.connect(DB_NAME)) as conn:
         with conn:
+            disabled = conn.execute('SELECT referral_disabled FROM users WHERE telegram_id = ?', (referrer_id,)).fetchone()
+            if disabled and disabled[0]:
+                return False
             exists = conn.execute('SELECT 1 FROM referrals WHERE user_id = ?', (user_id,)).fetchone()
             if exists:
                 return False
@@ -879,57 +886,62 @@ def _count_referrals(conn, referrer_id: int, *, statuses=None, since_hours=None,
 
 
 
+
+
 def try_reward_referral(user_id: int, referrer_id: int, amount: int) -> dict:
-    """Пытается начислить бонус рефереру с учётом антинакрутки.
-    Возвращает словарь со статусом и дополнительными данными."""
+    """Пытается начислить бонус рефереру с учётом ограничений и антинакрутки."""
     now = datetime.datetime.now(datetime.timezone.utc)
     now_iso = now.isoformat()
     with closing(sqlite3.connect(DB_NAME)) as conn:
         conn.row_factory = sqlite3.Row
         with conn:
-            row = conn.execute('SELECT status FROM referrals WHERE user_id = ?', (user_id,)).fetchone()
+            row = conn.execute('SELECT status, reward_amount FROM referrals WHERE user_id = ?', (user_id,)).fetchone()
             if not row:
                 return {'status': 'missing'}
             current_status = (row['status'] or '').lower() if row['status'] is not None else 'pending'
-            if current_status != 'pending':
+            stored_amount = row['reward_amount'] if 'reward_amount' in row.keys() else None
+            if current_status not in ('pending', 'pending_admin'):
                 return {'status': current_status}
+
+            disabled_row = conn.execute('SELECT referral_disabled FROM users WHERE telegram_id = ?', (referrer_id,)).fetchone()
+            if disabled_row and disabled_row[0]:
+                conn.execute('UPDATE referrals SET status = ?, note = ? WHERE user_id = ?', ('disabled', 'referrer_disabled', user_id))
+                return {'status': 'disabled'}
 
             counts = {
                 'rewarded_24h': _count_referrals(conn, referrer_id, statuses=('rewarded',), since_hours=24, use_rewarded_timestamp=True, now=now),
-                'rewarded_7d': _count_referrals(conn, referrer_id, statuses=('rewarded',), since_hours=24 * 7, use_rewarded_timestamp=True, now=now),
                 'rewarded_30d': _count_referrals(conn, referrer_id, statuses=('rewarded',), since_hours=24 * 30, use_rewarded_timestamp=True, now=now),
                 'rewarded_total': _count_referrals(conn, referrer_id, statuses=('rewarded',), use_rewarded_timestamp=True, now=now),
-                'created_24h': _count_referrals(conn, referrer_id, since_hours=24, now=now),
-                'flagged_48h': _count_referrals(conn, referrer_id, statuses=('flagged',), since_hours=48, now=now),
             }
 
-            reasons = []
-            if counts['rewarded_24h'] >= REFERRAL_LIMIT_24H:
-                reasons.append('limit_24h')
-            if counts['rewarded_7d'] >= REFERRAL_LIMIT_7D:
-                reasons.append('limit_7d')
-            if counts['rewarded_30d'] >= REFERRAL_LIMIT_30D:
-                reasons.append('limit_30d')
-            if counts['rewarded_total'] >= REFERRAL_LIMIT_TOTAL:
-                reasons.append('limit_total')
-            if counts['created_24h'] >= REFERRAL_NEW_LIMIT_24H:
-                reasons.append('spike_new_24h')
-            if counts['flagged_48h'] >= REFERRAL_FLAGGED_THRESHOLD:
-                reasons.append('recent_flags')
+            if current_status == 'pending_admin':
+                pending_amount = stored_amount if stored_amount is not None else amount
+                return {'status': 'pending_admin', 'amount': pending_amount, 'counts': counts}
 
-            if reasons:
-                note = ','.join(reasons)
-                conn.execute('UPDATE referrals SET status = ?, note = ? WHERE user_id = ?', ('flagged', note, user_id))
-                return {'status': 'flagged', 'reason': note, 'counts': counts}
+            if counts['rewarded_total'] >= REFERRAL_LIMIT_TOTAL:
+                conn.execute('UPDATE referrals SET status = ?, note = ? WHERE user_id = ?', ('limit_total', 'total_limit', user_id))
+                return {'status': 'limit_total', 'counts': counts}
+
+            if counts['rewarded_30d'] >= REFERRAL_LIMIT_30D:
+                conn.execute('UPDATE referrals SET status = ?, note = ? WHERE user_id = ?', ('limit_month', 'monthly_limit', user_id))
+                return {'status': 'limit_month', 'counts': counts}
+
+            if counts['rewarded_24h'] >= REFERRAL_LIMIT_24H:
+                conn.execute(
+                    'UPDATE referrals SET status = ?, reward_amount = ?, note = ? WHERE user_id = ?',
+                    ('pending_admin', amount, 'daily_limit', user_id)
+                )
+                return {'status': 'pending_admin', 'amount': amount, 'counts': counts}
 
             conn.execute('UPDATE users SET hc_balance = hc_balance + ? WHERE telegram_id = ?', (amount, referrer_id))
             conn.execute(
-                'UPDATE referrals SET status = ?, reward_amount = ?, rewarded_at = ?, note = NULL WHERE user_id = ?',
-                ('rewarded', amount, now_iso, user_id)
+                'UPDATE referrals SET status = ?, reward_amount = ?, rewarded_at = ?, note = NULL, reviewed_at = ?, reviewed_by = NULL WHERE user_id = ?',
+                ('rewarded', amount, now_iso, now_iso, user_id)
             )
             balance_row = conn.execute('SELECT hc_balance FROM users WHERE telegram_id = ?', (referrer_id,)).fetchone()
             balance = balance_row[0] if balance_row else None
             return {'status': 'rewarded', 'amount': amount, 'balance': balance, 'counts': counts}
+
 
 def get_active_tour():
     import datetime
@@ -949,6 +961,67 @@ def get_active_tour():
             except Exception:
                 continue
         return None
+
+
+
+
+def approve_referral(user_id: int, admin_id: int) -> dict:
+    """Одобряет отложенный реферал и начисляет бонус."""
+    now = datetime.datetime.now(datetime.timezone.utc)
+    now_iso = now.isoformat()
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        conn.row_factory = sqlite3.Row
+        with conn:
+            row = conn.execute('SELECT referrer_id, reward_amount, status FROM referrals WHERE user_id = ?', (user_id,)).fetchone()
+            if not row:
+                return {'status': 'missing'}
+            status = (row['status'] or '').lower() if row['status'] is not None else 'pending'
+            if status != 'pending_admin':
+                return {'status': status or 'invalid'}
+            referrer_id = row['referrer_id']
+            amount = row['reward_amount'] or 0
+            if amount:
+                conn.execute('UPDATE users SET hc_balance = hc_balance + ? WHERE telegram_id = ?', (amount, referrer_id))
+            conn.execute(
+                'UPDATE referrals SET status = ?, reward_amount = ?, rewarded_at = ?, note = NULL, reviewed_at = ?, reviewed_by = ? WHERE user_id = ?',
+                ('rewarded', amount, now_iso, now_iso, admin_id, user_id)
+            )
+            balance_row = conn.execute('SELECT hc_balance FROM users WHERE telegram_id = ?', (referrer_id,)).fetchone()
+            balance = balance_row[0] if balance_row else None
+            return {'status': 'rewarded', 'amount': amount, 'referrer_id': referrer_id, 'balance': balance}
+
+
+def deny_referral(user_id: int, admin_id: int, reason: str = '') -> dict:
+    """Отклоняет отложенный реферал и учитывает страйки."""
+    now = datetime.datetime.now(datetime.timezone.utc)
+    now_iso = now.isoformat()
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        conn.row_factory = sqlite3.Row
+        with conn:
+            row = conn.execute('SELECT referrer_id, status FROM referrals WHERE user_id = ?', (user_id,)).fetchone()
+            if not row:
+                return {'status': 'missing'}
+            status = (row['status'] or '').lower() if row['status'] is not None else 'pending'
+            if status not in ('pending', 'pending_admin'):
+                return {'status': status or 'invalid'}
+            referrer_id = row['referrer_id']
+            conn.execute(
+                'UPDATE referrals SET status = ?, note = ?, reward_amount = 0, rewarded_at = NULL, reviewed_at = ?, reviewed_by = ? WHERE user_id = ?',
+                ('denied', reason or 'denied', now_iso, admin_id, user_id)
+            )
+            strikes_row = conn.execute('SELECT COUNT(*) FROM referrals WHERE referrer_id = ? AND status = ?', (referrer_id, 'denied')).fetchone()
+            strike_count = int(strikes_row[0]) if strikes_row and strikes_row[0] is not None else 0
+            disabled = False
+            if strike_count >= 3:
+                conn.execute('UPDATE users SET referral_disabled = 1 WHERE telegram_id = ?', (referrer_id,))
+                disabled = True
+            return {'status': 'denied', 'referrer_id': referrer_id, 'strike_count': strike_count, 'disabled': disabled}
+
+
+def is_referrer_disabled(referrer_id: int) -> bool:
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        row = conn.execute('SELECT referral_disabled FROM users WHERE telegram_id = ?', (referrer_id,)).fetchone()
+    return bool(row[0]) if row else False
 
 
 def clear_user_tour_roster(user_id, tour_id):

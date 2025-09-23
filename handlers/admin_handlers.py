@@ -533,6 +533,8 @@ async def show_users(update, context):
             await update.message.reply_text(msg[i:i+4000])
 
 # --- Р§РµР»Р»РµРЅРґР¶: РІС‹РІРѕРґ СЃРѕСЃС‚Р°РІРѕРІ РїРѕ id ---
+
+
 async def challenge_rosters_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """РђРґРјРёРЅ-РєРѕРјР°РЅРґР°: /challenge_rosters <challenge_id>
     РџРѕРєР°Р·С‹РІР°РµС‚ СЃРїРёСЃРѕРє РїРѕР»СЊР·РѕРІР°С‚РµР»РµР№, РёС… СЃС‚Р°С‚СѓСЃ Р·Р°СЏРІРєРё, СЃС‚Р°РІРєСѓ Рё РІС‹Р±СЂР°РЅРЅС‹С… РёРіСЂРѕРєРѕРІ (РЅР°РїР°РґР°СЋС‰РёР№/Р·Р°С‰РёС‚РЅРёРє/РІСЂР°С‚Р°СЂСЊ).
@@ -1666,6 +1668,95 @@ async def block_user_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE)
         context.user_data.pop(key, None)
     return ConversationHandler.END
 
+
+
+
+async def referral_review_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    if not await admin_only(update, context):
+        return
+    data = (query.data or '').split(':')
+    if len(data) != 4:
+        try:
+            await query.edit_message_text('⚠️ Некорректные данные заявки.')
+        except Exception:
+            pass
+        return
+    action, user_id_str, referrer_id_str = data[1], data[2], data[3]
+    try:
+        invited_id = int(user_id_str)
+        referrer_id = int(referrer_id_str)
+    except ValueError:
+        try:
+            await query.edit_message_text('⚠️ Некорректные параметры заявки.')
+        except Exception:
+            pass
+        return
+
+    admin = update.effective_user
+    admin_id = admin.id if admin else None
+
+    if action == 'approve':
+        result = db.approve_referral(invited_id, admin_id)
+        if result.get('status') != 'rewarded':
+            try:
+                await query.edit_message_text('⚠️ Заявка уже обработана или не найдена.')
+            except Exception:
+                pass
+            return
+        amount = result.get('amount', 0)
+        balance = result.get('balance')
+        balance_text = balance if balance is not None else '—'
+        try:
+            await context.bot.send_message(
+                chat_id=result.get('referrer_id'),
+                text=(
+                    '🎉 Реферальный бонус подтверждён администратором.
+'
+                    f'+{amount} HC начислены. Текущий баланс: {balance_text} HC.'
+                )
+            )
+        except Exception:
+            pass
+        try:
+            await query.edit_message_text(f'✅ Реферал {invited_id} одобрен. Начислено {amount} HC.')
+        except Exception:
+            pass
+        return
+
+    if action == 'deny':
+        result = db.deny_referral(invited_id, admin_id, 'admin_denied')
+        if result.get('status') != 'denied':
+            try:
+                await query.edit_message_text('⚠️ Заявка уже обработана или не найдена.')
+            except Exception:
+                pass
+            return
+        strike_count = result.get('strike_count', 0)
+        disabled = result.get('disabled', False)
+        try:
+            text = '🚫 Реферальный бонус отклонён администратором.'
+            if strike_count:
+                text += f' Страйков: {strike_count}.'
+            if disabled:
+                text += ' Реферальная ссылка отключена.'
+            await context.bot.send_message(chat_id=result.get('referrer_id'), text=text)
+        except Exception:
+            pass
+        reply = f'🚫 Реферал {invited_id} отклонён. Страйков: {strike_count}.'
+        if disabled:
+            reply += ' Ссылка отключена.'
+        try:
+            await query.edit_message_text(reply)
+        except Exception:
+            pass
+        return
+
+    try:
+        await query.edit_message_text('⚠️ Неизвестное действие для заявки.')
+    except Exception:
+        pass
 
 
 async def block_user_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
