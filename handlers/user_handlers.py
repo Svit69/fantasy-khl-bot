@@ -155,8 +155,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                             if status == 'rewarded':
                                 balance_display = ref_balance if ref_balance is not None else '—'
                                 await _notify_referrer(
-                                    '🎉 Новый реферал засчитан!
-'
+                                    '🎉 Новый реферал засчитан!\n'
                                     f'+{bonus} HC начислены. Текущий баланс: {balance_display} HC.'
                                 )
                                 message_text = 'Реферальная ссылка учтена. Спасибо за приглашение!'

@@ -1712,8 +1712,7 @@ async def referral_review_callback(update: Update, context: ContextTypes.DEFAULT
             await context.bot.send_message(
                 chat_id=result.get('referrer_id'),
                 text=(
-                    '🎉 Реферальный бонус подтверждён администратором.
-'
+                    '🎉 Реферальный бонус подтверждён администратором.\n'
                     f'+{amount} HC начислены. Текущий баланс: {balance_text} HC.'
                 )
             )
