@@ -690,91 +690,70 @@ async def challenge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     try:
         from db import is_subscription_active
         if not is_subscription_active(user.id):
-            await update.message.reply_text("Функция доступна только подписчикам. Оформите подписку: /subscribe")
+            await update.message.reply_text('Функция доступна только подписчикам. Оформите подписку: /subscribe')
             return
     except Exception:
-        await update.message.reply_text("Не удалось проверить подписку. Попробуйте позже или оформите /subscribe.")
+        await update.message.reply_text('Не удалось проверить подписку. Попробуйте позже или оформите /subscribe.')
         return
 
-    # Список доступных челленджей: все со статусом "активен" и "в игре". Если таких нет — показать последний "завершен".
     challenges = []
     try:
         challenges = db.get_all_challenges() or []
     except Exception:
         challenges = []
 
-    active_or_play = [c for c in challenges if len(c) > 5 and c[5] in ("активен", "в игре")]
-    last_finished = None
-    if challenges:
-        # выбрать последний завершенный по end_date
-        try:
-            import datetime
-            finished = [c for c in challenges if len(c) > 5 and c[5] == "завершен"]
-            def parse_iso(s):
-                try:
-                    return datetime.datetime.fromisoformat(str(s))
-                except Exception:
-                    return datetime.datetime.min
-            if finished:
-                last_finished = sorted(finished, key=lambda c: parse_iso(c[3]) or datetime.datetime.min)[-1]
-        except Exception:
-            pass
+    active_challenges = []
+    for item in challenges:
+        status = item[5] if len(item) > 5 else ''
+        if (status or '').lower() == 'активен':
+            active_challenges.append(item)
 
-    list_to_show = active_or_play if active_or_play else ([last_finished] if last_finished else [])
-
-    if not list_to_show:
-        await update.message.reply_text("Сейчас нет доступных челленджей. Загляните позже.")
+    if not active_challenges:
+        await update.message.reply_text('Сейчас нет активных челленджей. Загляните позже.')
         return
 
-    lines = ["*Доступные челленджи:*"]
-    # Вспомогательная функция: ISO -> текст в МСК (Europe/Moscow)
     def iso_to_msk_text(dt_str: str) -> str:
         import datetime as _dt
-        months = [
-            "января", "февраля", "марта", "апреля", "мая", "июня",
-            "июля", "августа", "сентября", "октября", "ноября", "декабря"
-        ]
+        months = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+                  'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
         if not dt_str:
-            return ""
+            return ''
         try:
             dt = _dt.datetime.fromisoformat(str(dt_str))
         except Exception:
             return str(dt_str)
-        # Считаем, что хранимое время — UTC (наивное -> проставим UTC)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=_dt.timezone.utc)
-        else:
-            dt = dt.astimezone(_dt.timezone.utc)
-        # Перевод в МСК
         try:
-            from zoneinfo import ZoneInfo  # Python 3.9+
-            msk = dt.astimezone(ZoneInfo("Europe/Moscow"))
+            from zoneinfo import ZoneInfo
+            msk_tz = ZoneInfo('Europe/Moscow')
         except Exception:
-            # Фолбэк: фиксированный UTC+3 (Москва без перехода)
-            msk = dt.astimezone(_dt.timezone(_dt.timedelta(hours=3)))
-        day = msk.day
-        month_name = months[msk.month - 1]
-        time_part = msk.strftime("%H:%M")
-        return f"{day} {month_name} {time_part} (мск)"
-    buttons = []
-    for c in list_to_show:
-        # c: (id, start, deadline, end, image_filename, status, [image_file_id])
-        cid = c[0]
-        deadline = c[2]
-        end = c[3]
-        status = c[5] if len(c) > 5 else ''
-        if status == 'завершен':
-            line = f"🔺 №{cid} [завершен] посмотреть результаты"
-        elif status == 'в игре':
-            line = f"🔹 №{cid} [начался] подведение итогов: {iso_to_msk_text(end)}"
-        elif status == 'активен':
-            line = f"🔸 №{cid} [сбор составов] дедлайн сборки состава: {iso_to_msk_text(deadline)}"
+            msk_tz = _dt.timezone(_dt.timedelta(hours=3))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=msk_tz)
         else:
-            line = f"№{cid} [{status}]"
-        lines.append(line)
-        buttons.append([InlineKeyboardButton(f"Открыть #{cid}", callback_data=f"challenge_open_{cid}")])
+            dt = dt.astimezone(msk_tz)
+        day = dt.day
+        month_name = months[dt.month - 1]
+        time_part = dt.strftime('%H:%M')
+        return f'{day} {month_name} {time_part} (мск)'
 
-    await update.message.reply_text("\n\n".join(lines), reply_markup=InlineKeyboardMarkup(buttons), parse_mode='Markdown')
+    lines = ['*Активные челленджи:*']
+    buttons = []
+    for challenge in active_challenges:
+        cid = challenge[0]
+        deadline = challenge[2]
+        deadline_text = iso_to_msk_text(deadline)
+        line = f'🔸 №{cid} [сбор составов]'
+        if deadline_text:
+            line += f' дедлайн: {deadline_text}'
+        lines.append(line)
+        buttons.append([InlineKeyboardButton(f'Открыть #{cid}', callback_data=f'challenge_open_{cid}')])
+
+    await update.message.reply_text(
+        '\n\n'.join(lines),
+        reply_markup=InlineKeyboardMarkup(buttons),
+        parse_mode='Markdown'
+    )
+
 
 
 async def challenge_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):

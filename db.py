@@ -362,25 +362,53 @@ def record_subscription_notification(user_id: int, notify_date: str, kind: str) 
 
 # --- Челленджи ---
 
-def _now_moscow():
+def _get_moscow_timezone():
     import datetime, os
-    try:
-        offset = int(os.getenv('BOT_TZ_OFFSET', '3'))
-    except Exception:
-        offset = 3
-    return datetime.datetime.utcnow() + datetime.timedelta(hours=offset)
-def create_challenge(start_date: str, deadline: str, end_date: str, image_filename: str, image_file_id: str = "") -> int:
-    """Создаёт запись челленджа и возвращает его id. Статус вычисляется относительно текущего времени."""
-    import datetime
-    now = _now_moscow()
-    def _parse(s):
+    override = os.getenv('BOT_TZ_OFFSET')
+    if override is not None:
         try:
-            return datetime.datetime.fromisoformat(s)
+            offset_hours = int(override)
+            return datetime.timezone(datetime.timedelta(hours=offset_hours))
         except Exception:
-            return None
-    sd = _parse(start_date)
-    dl = _parse(deadline)
-    ed = _parse(end_date)
+            pass
+    if ZoneInfo is not None:
+        try:
+            return ZoneInfo('Europe/Moscow')
+        except Exception:
+            pass
+    return datetime.timezone(datetime.timedelta(hours=3))
+
+
+def _ensure_moscow_datetime(value):
+    if value is None:
+        return None
+    tz = _get_moscow_timezone()
+    if value.tzinfo is None:
+        return value.replace(tzinfo=tz)
+    return value.astimezone(tz)
+
+
+def _parse_challenge_datetime(raw: str):
+    import datetime as _dt
+    if not raw:
+        return None
+    try:
+        dt = _dt.datetime.fromisoformat(str(raw))
+    except Exception:
+        return None
+    return _ensure_moscow_datetime(dt)
+
+
+def _now_moscow():
+    import datetime
+    return datetime.datetime.now(_get_moscow_timezone())
+
+def create_challenge(start_date: str, deadline: str, end_date: str, image_filename: str, image_file_id: str = '') -> int:
+    """Создаёт запись челленджа и возвращает его id. Статус вычисляется относительно текущего времени."""
+    now = _now_moscow()
+    sd = _parse_challenge_datetime(start_date)
+    dl = _parse_challenge_datetime(deadline)
+    ed = _parse_challenge_datetime(end_date)
     status = 'в ожидании'
     if sd and dl and ed:
         if sd <= now < dl:
@@ -389,11 +417,14 @@ def create_challenge(start_date: str, deadline: str, end_date: str, image_filena
             status = 'в игре'
         elif now >= ed:
             status = 'завершен'
+    start_value = sd.isoformat() if sd else (start_date or '')
+    deadline_value = dl.isoformat() if dl else (deadline or '')
+    end_value = ed.isoformat() if ed else (end_date or '')
     with closing(sqlite3.connect(DB_NAME)) as conn:
         with conn:
             cur = conn.execute(
                 'INSERT INTO challenges (start_date, deadline, end_date, image_filename, status, image_file_id) VALUES (?, ?, ?, ?, ?, ?)',
-                (start_date, deadline, end_date, image_filename, status, image_file_id or "")
+                (start_value, deadline_value, end_value, image_filename, status, image_file_id or '')
             )
             return cur.lastrowid
 
@@ -425,16 +456,10 @@ def _compute_challenge_status(start_date: str, deadline: str, end_date: str) -> 
     Возвращает: 'в ожидании' | 'активен' | 'в игре' | 'завершен'.
     При ошибках парсинга дат — 'в ожидании'.
     """
-    import datetime
-    def _parse(s):
-        try:
-            return datetime.datetime.fromisoformat(str(s))
-        except Exception:
-            return None
     now = _now_moscow()
-    sd = _parse(start_date)
-    dl = _parse(deadline)
-    ed = _parse(end_date)
+    sd = _parse_challenge_datetime(start_date)
+    dl = _parse_challenge_datetime(deadline)
+    ed = _parse_challenge_datetime(end_date)
     status = 'в ожидании'
     if sd and dl and ed:
         if sd <= now < dl:
@@ -444,6 +469,7 @@ def _compute_challenge_status(start_date: str, deadline: str, end_date: str) -> 
         elif now >= ed:
             status = 'завершен'
     return status
+
 
 def get_latest_challenge():
     with closing(sqlite3.connect(DB_NAME)) as conn:
@@ -629,55 +655,51 @@ def challenge_cancel_and_refund(challenge_id: int, user_id: int) -> bool:
     """Если запись в статусе in_progress, возвращаем stake пользователю и помечаем как canceled, либо удаляем.
     Возвращает True, если возврат произведён.
     """
-    import datetime
     with closing(sqlite3.connect(DB_NAME)) as conn:
         with conn:
-            # Получаем запись и дедлайн челленджа
             row = conn.execute('SELECT id, stake, status FROM challenge_entries WHERE challenge_id = ? AND user_id = ?', (challenge_id, user_id)).fetchone()
             if not row:
                 return False
-            ch = conn.execute('SELECT deadline FROM challenges WHERE id = ?', (challenge_id,)).fetchone()
-            deadline = ch[0] if ch else None
-            now_iso = datetime.datetime.utcnow().isoformat()
+
+            deadline_row = conn.execute('SELECT deadline FROM challenges WHERE id = ?', (challenge_id,)).fetchone()
+            deadline_dt = _parse_challenge_datetime(deadline_row[0]) if deadline_row else None
+            now_dt = _now_moscow()
 
             stake = row[1] or 0
             status = (row[2] or 'in_progress').lower()
 
-            # Блокируем повторные возвраты/отмены
             if status in ('canceled', 'refunded'):
                 return False
 
-            # Разрешаем отмену ДО дедлайна даже если пользователь успел подтвердить (completed)
-            if deadline and now_iso < str(deadline):
+            if deadline_dt and now_dt < deadline_dt:
                 conn.execute('UPDATE users SET hc_balance = hc_balance + ? WHERE telegram_id = ?', (stake, user_id))
                 conn.execute('UPDATE challenge_entries SET status = ? WHERE id = ?', ('canceled', row[0]))
                 return True
 
-            # После дедлайна отмена запрещена
             return False
+
 
 def refund_unfinished_after_deadline() -> int:
     """Возвращает HC по незавершённым заявкам после дедлайна. Возвращает число обработанных записей."""
-    import datetime
     now = _now_moscow()
     processed = 0
     with closing(sqlite3.connect(DB_NAME)) as conn:
         with conn:
-            # Берём все активные/в игре челленджи, у которых дедлайн уже прошёл
             rows = conn.execute('SELECT id, deadline FROM challenges').fetchall()
             for ch in rows:
-                ch_id, deadline = ch[0], str(ch[1])
+                ch_id, deadline_raw = ch[0], ch[1]
                 try:
-                    if deadline and deadline < now:
-                        # Возвращаем всем in_progress
+                    deadline_dt = _parse_challenge_datetime(deadline_raw)
+                    if deadline_dt and now >= deadline_dt:
                         entries = conn.execute('SELECT id, user_id, stake FROM challenge_entries WHERE challenge_id = ? AND status = ?', (ch_id, 'in_progress')).fetchall()
-                        for e in entries:
-                            conn.execute('UPDATE users SET hc_balance = hc_balance + ? WHERE telegram_id = ?', (e[2] or 0, e[1]))
-                            conn.execute('UPDATE challenge_entries SET status = ? WHERE id = ?', ('refunded', e[0]))
+                        for entry in entries:
+                            conn.execute('UPDATE users SET hc_balance = hc_balance + ? WHERE telegram_id = ?', (entry[2] or 0, entry[1]))
+                            conn.execute('UPDATE challenge_entries SET status = ? WHERE id = ?', ('refunded', entry[0]))
                             processed += 1
                 except Exception:
                     continue
     return processed
+
 
 # --- Магазин ---
 def set_shop_content(text: str, image_filename: str = '', image_file_id: str = '') -> None:
