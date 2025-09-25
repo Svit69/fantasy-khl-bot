@@ -35,17 +35,13 @@ def _tour_deadline_passed(context) -> bool:
         if not tour_id:
             return False
         row = _db.get_tour_by_id(tour_id)
-        dl_str = row[3]
-        # Parse deadline in MSK
-        dl = datetime.datetime.strptime(str(dl_str), "%d.%m.%y %H:%M")
-        try:
-            from zoneinfo import ZoneInfo
-            dl = dl.replace(tzinfo=ZoneInfo("Europe/Moscow"))
-            now = datetime.datetime.now(ZoneInfo("Europe/Moscow"))
-        except Exception:
-            # Fallback: approximate by shifting UTC by +3
-            now = datetime.datetime.utcnow() + datetime.timedelta(hours=3)
-        return now >= dl
+        if not row:
+            return False
+        deadline_dt = _db.parse_tour_deadline_datetime(row[3])
+        if not deadline_dt:
+            return False
+        now = _db.get_moscow_now()
+        return now >= deadline_dt
     except Exception:
         return False
 
@@ -1473,20 +1469,23 @@ async def tour_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         message = update.callback_query.message
 
     # --- Определяем активный тур ---
-    from db import get_active_tour, get_user_tour_roster, get_player_by_id
+    from db import (
+        get_active_tour,
+        get_user_tour_roster,
+        get_player_by_id,
+        parse_tour_deadline_datetime,
+        get_moscow_now,
+    )
     active_tour = get_active_tour()
     if not active_tour:
         await message.reply_text("Нет активного тура для сбора состава. Обратитесь к администратору.")
         return ConversationHandler.END
     context.user_data['active_tour_id'] = active_tour['id']
     # Guard: stop if deadline already passed
-    try:
-        dl = datetime.datetime.strptime(str(active_tour.get('deadline')), "%d.%m.%y %H:%M")
-        if datetime.datetime.now() >= dl:
-            await message.reply_text("Дедлайн тура уже прошёл. Сбор и изменения состава закрыты.")
-            return ConversationHandler.END
-    except Exception:
-        pass
+    deadline_dt = parse_tour_deadline_datetime(active_tour.get('deadline'))
+    if deadline_dt and get_moscow_now() >= deadline_dt:
+        await message.reply_text('Дедлайн тура уже прошёл. Сбор и изменения состава закрыты.')
+        return ConversationHandler.END
 
     user_id = update.effective_user.id
     tour_id = active_tour['id']

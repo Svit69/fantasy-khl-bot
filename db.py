@@ -399,9 +399,47 @@ def _parse_challenge_datetime(raw: str):
     return _ensure_moscow_datetime(dt)
 
 
+def _parse_tour_datetime(raw: str, include_time: bool):
+    import datetime as _dt
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    if not text:
+        return None
+    dt = None
+    try:
+        dt = _dt.datetime.fromisoformat(text)
+    except Exception:
+        dt = None
+    if dt is None:
+        formats = ['%d.%m.%Y %H:%M', '%d.%m.%y %H:%M'] if include_time else ['%d.%m.%Y', '%d.%m.%y']
+        for fmt in formats:
+            try:
+                dt = _dt.datetime.strptime(text, fmt)
+                break
+            except Exception:
+                continue
+    if dt is None:
+        return None
+    if not include_time:
+        dt = dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    return _ensure_moscow_datetime(dt)
+
+
+def parse_tour_start_datetime(raw: str):
+    return _parse_tour_datetime(raw, include_time=False)
+
+
+def parse_tour_deadline_datetime(raw: str):
+    return _parse_tour_datetime(raw, include_time=True)
+
+
 def _now_moscow():
     import datetime
     return datetime.datetime.now(_get_moscow_timezone())
+
+def get_moscow_now():
+    return _now_moscow()
 
 def create_challenge(start_date: str, deadline: str, end_date: str, image_filename: str, image_file_id: str = '') -> int:
     """Создаёт запись челленджа и возвращает его id. Статус вычисляется относительно текущего времени."""
@@ -975,13 +1013,10 @@ def get_active_tour():
             return dict(row)
         rows = conn.execute('SELECT * FROM tours').fetchall()
         for r in rows:
-            try:
-                start = datetime.datetime.strptime(r['start_date'], "%d.%m.%y")
-                deadline = datetime.datetime.strptime(r['deadline'], "%d.%m.%y %H:%M")
-                if start <= now < deadline:
-                    return dict(r)
-            except Exception:
-                continue
+            start_dt = parse_tour_start_datetime(r['start_date'])
+            deadline_dt = parse_tour_deadline_datetime(r['deadline'])
+            if start_dt and deadline_dt and start_dt <= now < deadline_dt:
+                return dict(r)
         return None
 
 
