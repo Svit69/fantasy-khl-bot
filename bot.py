@@ -30,7 +30,7 @@ from handlers.user_handlers import start, hc, IMAGES_DIR, \
     tours, tour_open_callback, tour_build_callback
 from handlers.user_handlers import shop, shop_item_callback
 from handlers.user_handlers import subscribe_stars, precheckout_callback, successful_payment_handler
-from handlers.admin_handlers import addhc2 as addhc, send_results, show_users
+from handlers.admin_handlers import addhc2 as addhc, send_results, show_users, list_active_subscribers
 from handlers.admin_handlers import list_challenges, delete_challenge_cmd
 from handlers.admin_handlers import challenge_rosters_cmd
 from handlers.show_hc_users import show_hc_users
@@ -204,6 +204,7 @@ async def on_startup(app):
     admin_commands = user_commands + [
         BotCommand("admin_help", "Справка по админ-командам"),
     ]
+    admin_commands.append(BotCommand("list_active_subscribers", "показать активных подписчиков"))
     admin_commands.append(BotCommand("refresh_commands", "обновить меню команд"))
     try:
         # Очистим команды на всякий случай (default и ru)
@@ -607,6 +608,7 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('referral', referral))
     app.add_handler(CommandHandler('refferal', referral))
     app.add_handler(CommandHandler('show_users', show_users))  # Только для админа
+    app.add_handler(CommandHandler('list_active_subscribers', list_active_subscribers))  # Только для админа
     app.add_handler(CommandHandler('show_hc_users', show_hc_users))  # Только для админа
     app.add_handler(CommandHandler('subscribe', subscribe_stars))
     # Telegram Stars payments handlers
@@ -629,6 +631,7 @@ if __name__ == '__main__':
             "<b>Управление пользователями:</b>\n" 
             "• /show_users — список пользователей и подписок\n"
             "• /show_hc_users — пользователи с балансом HC > 0\n"
+            "• /list_active_subscribers — активные подписчики, баланс и окончание подписки\n"
             "• /addhc — начислить HC пользователю \n"
             "• /broadcast_subscribers — рассылка всем активным подписчикам к указанным дате и времени (админ)\n\n"
             "• /message_user — отправить сообщение одному пользователю по @username или ID (с подтверждением и временем МСК)\n"

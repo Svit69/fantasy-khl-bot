@@ -535,6 +535,72 @@ async def show_users(update, context):
 # --- Р§РµР»Р»РµРЅРґР¶: РІС‹РІРѕРґ СЃРѕСЃС‚Р°РІРѕРІ РїРѕ id ---
 
 
+
+# --- Пользователи с активной подпиской ---
+async def list_active_subscribers(update, context):
+    if not await admin_only(update, context):
+        return
+    import datetime
+    try:
+        from zoneinfo import ZoneInfo
+    except Exception:
+        ZoneInfo = None
+    tz = None
+    if ZoneInfo is not None:
+        try:
+            tz = ZoneInfo('Europe/Moscow')
+        except Exception:
+            tz = None
+    if tz is None:
+        tz = datetime.timezone(datetime.timedelta(hours=3))
+    now = db.get_moscow_now().astimezone(tz)
+    with db.closing(db.sqlite3.connect(db.DB_NAME)) as conn:
+        conn.row_factory = db.sqlite3.Row
+        rows = conn.execute(
+            '''
+            SELECT u.telegram_id,
+                   u.username,
+                   u.name,
+                   u.hc_balance,
+                   MAX(s.paid_until) AS paid_until
+            FROM subscriptions AS s
+            JOIN users AS u ON u.telegram_id = s.user_id
+            WHERE s.paid_until IS NOT NULL
+            GROUP BY u.telegram_id, u.username, u.name, u.hc_balance
+            '''
+        ).fetchall()
+    def _parse_paid_until(value):
+        if value is None:
+            return None
+        try:
+            dt = datetime.datetime.fromisoformat(str(value))
+        except Exception:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=tz)
+        else:
+            dt = dt.astimezone(tz)
+        return dt
+    active_rows = []
+    for row in rows:
+        paid_until_dt = _parse_paid_until(row['paid_until'])
+        if paid_until_dt and paid_until_dt > now:
+            active_rows.append((paid_until_dt, row))
+    if not active_rows:
+        await update.message.reply_text('Нет активных подписчиков.')
+        return
+    active_rows.sort(key=lambda item: item[0], reverse=True)
+    lines = []
+    for paid_until_dt, row in active_rows:
+        formatted_until = paid_until_dt.strftime('%d.%m.%Y %H:%M')
+        lines.append(
+            f"{row['telegram_id']} | {row['username'] or '-'} | {row['name'] or '-'} | HC: {row['hc_balance'] if row['hc_balance'] is not None else 0} | подписка до: {formatted_until}"
+        )
+    header = 'Активные подписчики:\n\n'
+    message = header + '\n'.join(lines)
+    for i in range(0, len(message), 4000):
+        await update.message.reply_text(message[i:i + 4000])
+
 async def challenge_rosters_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """РђРґРјРёРЅ-РєРѕРјР°РЅРґР°: /challenge_rosters <challenge_id>
     РџРѕРєР°Р·С‹РІР°РµС‚ СЃРїРёСЃРѕРє РїРѕР»СЊР·РѕРІР°С‚РµР»РµР№, РёС… СЃС‚Р°С‚СѓСЃ Р·Р°СЏРІРєРё, СЃС‚Р°РІРєСѓ Рё РІС‹Р±СЂР°РЅРЅС‹С… РёРіСЂРѕРєРѕРІ (РЅР°РїР°РґР°СЋС‰РёР№/Р·Р°С‰РёС‚РЅРёРє/РІСЂР°С‚Р°СЂСЊ).
