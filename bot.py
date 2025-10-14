@@ -108,7 +108,10 @@ send_challenge_image_cancel = _scimg_cancel
 from handlers.admin_handlers import (
     message_user_start, message_user_target, message_user_text,
     message_user_datetime, message_user_photo_decision, message_user_photo, message_user_confirm,
+    message_users_bulk_start, message_users_bulk_recipients, message_users_bulk_text,
+    message_users_bulk_schedule, message_users_bulk_photo_decision, message_users_bulk_photo, message_users_bulk_cancel,
     MSG_USER_WAIT_TARGET, MSG_USER_WAIT_TEXT, MSG_USER_WAIT_DATETIME, MSG_USER_WAIT_PHOTO_DECISION, MSG_USER_WAIT_PHOTO, MSG_USER_CONFIRM,
+    BULK_MSG_WAIT_RECIPIENTS, BULK_MSG_WAIT_TEXT, BULK_MSG_WAIT_SCHEDULE, BULK_MSG_WAIT_PHOTO_DECISION, BULK_MSG_WAIT_PHOTO,
     block_user_start, block_user_target, block_user_username, block_user_password, block_user_confirm, block_user_cancel,
     BLOCK_USER_WAIT_TARGET, BLOCK_USER_WAIT_USERNAME, BLOCK_USER_WAIT_PASSWORD, BLOCK_USER_WAIT_CONFIRM,
 )
@@ -204,6 +207,7 @@ async def on_startup(app):
     admin_commands = user_commands + [
         BotCommand("admin_help", "Справка по админ-командам"),
     ]
+    admin_commands.append(BotCommand("message_users", "рассылка по списку пользователей"))
     admin_commands.append(BotCommand("list_active_subscribers", "показать активных подписчиков"))
     admin_commands.append(BotCommand("refresh_commands", "обновить меню команд"))
     try:
@@ -635,6 +639,7 @@ if __name__ == '__main__':
             "• /addhc — начислить HC пользователю \n"
             "• /broadcast_subscribers — рассылка всем активным подписчикам к указанным дате и времени (админ)\n\n"
             "• /message_user — отправить сообщение одному пользователю по @username или ID (с подтверждением и временем МСК)\n"
+            "• /message_users — рассылка по списку пользователей (текст, расписание и картинка)\n"
             "• /block_user — заблокировать пользователя (ID + @username + пароль + подтверждение)\n\n"
             "<b>Управление турами:</b>\n"
             "• /send_results — разослать результаты тура\n"
@@ -912,6 +917,23 @@ if __name__ == '__main__':
         name="message_user_conv",
     )
     app.add_handler(message_user_conv)
+
+    message_users_conv = ConversationHandler(
+        entry_points=[CommandHandler('message_users', message_users_bulk_start)],
+        states={
+            BULK_MSG_WAIT_RECIPIENTS: [MessageHandler(filters.TEXT & ~filters.COMMAND, message_users_bulk_recipients)],
+            BULK_MSG_WAIT_TEXT: [MessageHandler(filters.TEXT & ~filters.COMMAND, message_users_bulk_text)],
+            BULK_MSG_WAIT_SCHEDULE: [MessageHandler(filters.TEXT & ~filters.COMMAND, message_users_bulk_schedule)],
+            BULK_MSG_WAIT_PHOTO_DECISION: [MessageHandler(filters.TEXT & ~filters.COMMAND, message_users_bulk_photo_decision)],
+            BULK_MSG_WAIT_PHOTO: [
+                MessageHandler(filters.PHOTO, message_users_bulk_photo),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, message_users_bulk_photo),
+            ],
+        },
+        fallbacks=[CommandHandler('cancel', message_users_bulk_cancel)],
+        name="message_users_bulk_conv",
+    )
+    app.add_handler(message_users_conv)
 
     block_user_conv = ConversationHandler(
         entry_points=[CommandHandler('block_user', block_user_start)],

@@ -601,6 +601,263 @@ async def list_active_subscribers(update, context):
     for i in range(0, len(message), 4000):
         await update.message.reply_text(message[i:i + 4000])
 
+
+# --- Рассылка по списку пользователей ---
+async def message_users_bulk_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await admin_only(update, context):
+        return ConversationHandler.END
+    for key in (
+        'bulk_targets',
+        'bulk_text',
+        'bulk_dt_utc',
+        'bulk_dt_desc',
+        'bulk_photo_file_id',
+    ):
+        context.user_data.pop(key, None)
+    await update.message.reply_text(
+        'Вставьте список пользователей (по одному @username или ID на строку). Можно использовать /cancel для отмены.'
+    )
+    return BULK_MSG_WAIT_RECIPIENTS
+
+
+async def message_users_bulk_recipients(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    raw_text = (update.message.text or '').strip()
+    if not raw_text:
+        await update.message.reply_text('Список пуст. Вставьте пользователей ещё раз (или /cancel).')
+        return BULK_MSG_WAIT_RECIPIENTS
+    identifiers = [line.strip() for line in raw_text.splitlines() if line.strip()]
+    targets = []
+    missing = []
+    seen_ids = set()
+    for identifier in identifiers:
+        user, label = _resolve_user(identifier)
+        if not user:
+            missing.append(identifier)
+            continue
+        user_id = user[0]
+        if user_id in seen_ids:
+            continue
+        seen_ids.add(user_id)
+        display = label or (f"@{user[1]}" if user[1] else f"id {user_id}")
+        name = user[2] or ''
+        if name:
+            display = f"{display} ({name})"
+        targets.append({'user_id': int(user_id), 'label': display})
+    if not targets:
+        msg = 'Не удалось найти ни одного пользователя из списка. Проверьте @username и отправьте снова (или /cancel).'
+        if missing:
+            msg += '\nНе найдены: ' + ', '.join(missing)
+        await update.message.reply_text(msg)
+        return BULK_MSG_WAIT_RECIPIENTS
+    context.user_data['bulk_targets'] = targets
+    summary_lines = [f"Найдено получателей: {len(targets)}"]
+    preview = [f"• {item['label']}" for item in targets]
+    max_preview = 20
+    if len(preview) > max_preview:
+        summary_lines.extend(preview[:max_preview])
+        summary_lines.append(f"… и ещё {len(preview) - max_preview}")
+    else:
+        summary_lines.extend(preview)
+    if missing:
+        summary_lines.append('')
+        summary_lines.append('Не найдены и будут пропущены:')
+        summary_lines.extend([f"• {item}" for item in missing])
+    await update.message.reply_text('\n'.join(summary_lines))
+    await update.message.reply_text(
+        'Введите текст сообщения. HTML-разметка поддерживается (или /cancel).'
+    )
+    return BULK_MSG_WAIT_TEXT
+
+
+async def message_users_bulk_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = (update.message.text or '').strip()
+    if not text:
+        await update.message.reply_text('Пустой текст. Введите сообщение (или /cancel).')
+        return BULK_MSG_WAIT_TEXT
+    context.user_data['bulk_text'] = text
+    await update.message.reply_text(
+        "Когда отправить? Напишите 'сейчас' или дату и время в формате дд.мм.гг чч:мм (МСК), например: 05.09.25 10:30"
+    )
+    return BULK_MSG_WAIT_SCHEDULE
+
+
+async def message_users_bulk_schedule(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    import datetime
+    value = (update.message.text or '').strip()
+    if not value:
+        await update.message.reply_text(
+            "Ответ не распознан. Напишите 'сейчас' или дату/время в формате дд.мм.гг чч:мм (МСК)."
+        )
+        return BULK_MSG_WAIT_SCHEDULE
+    lower = value.lower()
+    if lower in {'сейчас', 'now', 'сразу', 'немедленно'}:
+        context.user_data['bulk_dt_utc'] = None
+        context.user_data['bulk_dt_desc'] = 'как можно скорее'
+    else:
+        dt_msk = None
+        for fmt in ('%d.%m.%y %H:%M', '%d.%m.%Y %H:%M'):
+            try:
+                dt_msk = datetime.datetime.strptime(value, fmt)
+                break
+            except Exception:
+                continue
+        if dt_msk is None:
+            await update.message.reply_text(
+                "Неверный формат даты/времени. Укажите в формате дд.мм.гг чч:мм (МСК), например: 05.09.25 10:30"
+            )
+            return BULK_MSG_WAIT_SCHEDULE
+        try:
+            from zoneinfo import ZoneInfo
+            tz = ZoneInfo('Europe/Moscow')
+        except Exception:
+            tz = datetime.timezone(datetime.timedelta(hours=3))
+        if dt_msk.tzinfo is None:
+            dt_msk = dt_msk.replace(tzinfo=tz)
+        else:
+            dt_msk = dt_msk.astimezone(tz)
+        dt_utc = dt_msk.astimezone(datetime.timezone.utc)
+        now_utc = datetime.datetime.now(datetime.timezone.utc)
+        if dt_utc <= now_utc + datetime.timedelta(seconds=30):
+            await update.message.reply_text('Время должно быть в будущем. Укажите дату/время в формате дд.мм.гг чч:мм (МСК).')
+            return BULK_MSG_WAIT_SCHEDULE
+        context.user_data['bulk_dt_utc'] = dt_utc.isoformat()
+        context.user_data['bulk_dt_desc'] = value
+    await update.message.reply_text('Нужна ли картинка? (да/нет)')
+    return BULK_MSG_WAIT_PHOTO_DECISION
+
+
+async def message_users_bulk_photo_decision(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    ans = (update.message.text or '').strip().lower()
+    if ans in _MSG_USER_NO:
+        context.user_data['bulk_photo_file_id'] = None
+        return await _complete_message_users_bulk(update, context)
+    if ans in _MSG_USER_YES:
+        await update.message.reply_text("Отправьте изображение одним сообщением (или напишите 'нет').")
+        return BULK_MSG_WAIT_PHOTO
+    await update.message.reply_text("Ответьте 'да' или 'нет'.")
+    return BULK_MSG_WAIT_PHOTO_DECISION
+
+
+async def message_users_bulk_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.photo:
+        photo_id = update.message.photo[-1].file_id
+        context.user_data['bulk_photo_file_id'] = photo_id
+        return await _complete_message_users_bulk(update, context)
+    text = (update.message.text or '').strip().lower()
+    if text in _MSG_USER_NO:
+        context.user_data['bulk_photo_file_id'] = None
+        return await _complete_message_users_bulk(update, context)
+    await update.message.reply_text('Не удалось распознать фото. Отправьте изображение или напишите "нет".')
+    return BULK_MSG_WAIT_PHOTO
+
+
+async def message_users_bulk_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    for key in (
+        'bulk_targets',
+        'bulk_text',
+        'bulk_dt_utc',
+        'bulk_dt_desc',
+        'bulk_photo_file_id',
+    ):
+        context.user_data.pop(key, None)
+    await update.message.reply_text('Рассылка по списку отменена.')
+    return ConversationHandler.END
+
+
+async def _complete_message_users_bulk(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    import datetime
+    targets = context.user_data.get('bulk_targets') or []
+    text = context.user_data.get('bulk_text') or ''
+    dt_utc_str = context.user_data.get('bulk_dt_utc')
+    dt_desc = context.user_data.get('bulk_dt_desc') or 'как можно скорее'
+    photo_id = context.user_data.get('bulk_photo_file_id')
+    if not targets or not text:
+        await update.message.reply_text('Получатели или текст не найдены. Запустите заново: /message_users.')
+        return ConversationHandler.END
+    dt_utc = None
+    if dt_utc_str:
+        try:
+            dt_utc = datetime.datetime.fromisoformat(dt_utc_str)
+        except Exception:
+            dt_utc = None
+    job_queue = getattr(getattr(context, 'application', None), 'job_queue', None)
+    if dt_utc:
+        now = datetime.datetime.now(datetime.timezone.utc)
+        delay = max(0, int((dt_utc - now).total_seconds())) if dt_utc > now else 0
+        job_data = {
+            'text': text,
+            'photo': photo_id,
+            'targets': targets,
+            'admin_chat_id': update.effective_chat.id if update.effective_chat else None,
+        }
+        if job_queue is not None:
+            job_queue.run_once(message_users_bulk_job, when=delay, data=job_data)
+        else:
+            import asyncio
+            from types import SimpleNamespace
+            async def _fallback():
+                if delay:
+                    await asyncio.sleep(delay)
+                fake_ctx = SimpleNamespace(bot=context.bot, job=SimpleNamespace(data=job_data), application=context.application)
+                await message_users_bulk_job(fake_ctx)
+            asyncio.create_task(_fallback())
+        await update.message.reply_text(f'Рассылка запланирована на {dt_desc} (МСК).')
+    else:
+        successes, failures = await _dispatch_bulk_messages(context.bot, targets, text, photo_id)
+        result_text = f'Рассылка отправлена. Успешно: {successes} из {len(targets)}.'
+        if failures:
+            failed_labels = ', '.join(f['label'] for f in failures[:10])
+            if len(failures) > 10:
+                failed_labels += f" и ещё {len(failures) - 10}"
+            result_text += f'\nНе удалось доставить: {failed_labels}'
+        await update.message.reply_text(result_text)
+    for key in ('bulk_targets', 'bulk_text', 'bulk_dt_utc', 'bulk_dt_desc', 'bulk_photo_file_id'):
+        context.user_data.pop(key, None)
+    return ConversationHandler.END
+
+
+async def message_users_bulk_job(context: ContextTypes.DEFAULT_TYPE):
+    job = getattr(context, 'job', None)
+    data = job.data if job and job.data else {}
+    targets = data.get('targets') or []
+    text = data.get('text') or ''
+    photo_id = data.get('photo')
+    admin_chat_id = data.get('admin_chat_id')
+    if not text or not targets:
+        return
+    successes, failures = await _dispatch_bulk_messages(context.bot, targets, text, photo_id)
+    if admin_chat_id:
+        summary = f'Рассылка завершена. Успешно: {successes} из {len(targets)}.'
+        if failures:
+            failed_labels = ', '.join(f['label'] for f in failures[:10])
+            if len(failures) > 10:
+                failed_labels += f" и ещё {len(failures) - 10}"
+            summary += f'\nНе удалось доставить: {failed_labels}'
+        try:
+            await context.bot.send_message(chat_id=admin_chat_id, text=summary)
+        except Exception:
+            pass
+
+
+async def _dispatch_bulk_messages(bot, targets, text, photo_id):
+    successes = 0
+    failures = []
+    for target in targets:
+        chat_id = target.get('user_id')
+        label = target.get('label', str(chat_id))
+        try:
+            await _send_message_with_optional_photo(bot, int(chat_id), text, photo_id)
+            successes += 1
+        except Exception as exc:
+            failures.append({'label': label, 'error': str(exc)})
+            try:
+                await bot.send_message(chat_id=int(chat_id), text=text)
+            except Exception:
+                pass
+            logger.warning('Failed to send bulk message to %s: %s', label, exc)
+    return successes, failures
+
+
 async def challenge_rosters_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """РђРґРјРёРЅ-РєРѕРјР°РЅРґР°: /challenge_rosters <challenge_id>
     РџРѕРєР°Р·С‹РІР°РµС‚ СЃРїРёСЃРѕРє РїРѕР»СЊР·РѕРІР°С‚РµР»РµР№, РёС… СЃС‚Р°С‚СѓСЃ Р·Р°СЏРІРєРё, СЃС‚Р°РІРєСѓ Рё РІС‹Р±СЂР°РЅРЅС‹С… РёРіСЂРѕРєРѕРІ (РЅР°РїР°РґР°СЋС‰РёР№/Р·Р°С‰РёС‚РЅРёРє/РІСЂР°С‚Р°СЂСЊ).
@@ -1334,6 +1591,12 @@ BROADCAST_SUBS_WAIT_DATETIME = 12003
 BROADCAST_SUBS_CONFIRM = 12002
 
 # --- Message to a single user ---
+BULK_MSG_WAIT_RECIPIENTS = 12110
+BULK_MSG_WAIT_TEXT = 12111
+BULK_MSG_WAIT_SCHEDULE = 12112
+BULK_MSG_WAIT_PHOTO_DECISION = 12113
+BULK_MSG_WAIT_PHOTO = 12114
+
 MSG_USER_WAIT_TARGET = 12100
 MSG_USER_WAIT_TEXT = 12101
 MSG_USER_WAIT_DATETIME = 12102
