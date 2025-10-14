@@ -186,6 +186,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                                     await message.reply_text(message_text)
                                 except Exception:
                                     pass
+                            await _maybe_notify_referral_limit(context, referrer_id)
 
                         else:
                             if db.is_referrer_disabled(referrer_id):
@@ -2294,3 +2295,60 @@ async def hc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             '🚫 Тебя еще нет в списке генменеджеров Фентези Драфт КХЛ\n\n'
             'Зарегистрируйся через /start — и вперёд к сборке состава!'
         )
+
+
+async def _maybe_notify_referral_limit(context, referrer_id: int) -> None:
+    try:
+        summary = db.check_referral_limit_state(referrer_id)
+    except Exception as exc:
+        logger.warning('Не удалось проверить лимит рефералов для %s: %s', referrer_id, exc)
+        return
+    if not summary.get('notify'):
+        return
+    referrals = summary.get('referrals') or []
+    try:
+        ref_row = db.get_user_by_id(referrer_id)
+    except Exception:
+        ref_row = None
+    username = ref_row[1] if ref_row and len(ref_row) > 1 else ''
+    name = ref_row[2] if ref_row and len(ref_row) > 2 else ''
+    label = f"@{username}" if username else f"id {referrer_id}"
+    if name:
+        label = f"{label} ({name})"
+    lines = [
+        f"Пользователь {label} достиг лимита {db.REFERRAL_ACCOUNT_LIMIT} приглашённых.",
+        '',
+        'Приглашённые пользователи:'
+    ]
+    status_map = {
+        'pending': 'в ожидании',
+        'rewarded': 'бонус начислен',
+        'pending_admin': 'ожидает проверки',
+        'limit_total': 'лимит достигнут',
+        'limit_month': 'месячный лимит',
+        'limit_day': 'дневной лимит',
+        'disabled': 'отключено',
+        'denied': 'отклонён'
+    }
+    for item in referrals[:50]:
+        invited_label = f"@{item.get('username')}" if item.get('username') else f"id {item.get('user_id')}"
+        invited_name = item.get('name')
+        if invited_name:
+            invited_label = f"{invited_label} ({invited_name})"
+        status = (item.get('status') or '').lower()
+        status_text = status_map.get(status, status or '—')
+        lines.append(f"• {invited_label} — {status_text}")
+    if len(referrals) > 50:
+        lines.append(f"… и ещё {len(referrals) - 50}")
+    lines.append('')
+    lines.append('Сделать ограничение (отключить реферальную ссылку)?')
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton('Да', callback_data=f'ref_limit:{referrer_id}:yes'),
+            InlineKeyboardButton('Нет', callback_data=f'ref_limit:{referrer_id}:no'),
+        ]
+    ])
+    try:
+        await context.bot.send_message(chat_id=ADMIN_ID, text='\n'.join(lines), reply_markup=keyboard)
+    except Exception as exc:
+        logger.warning('Не удалось отправить уведомление админу о лимите рефералов: %s', exc)

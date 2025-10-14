@@ -112,6 +112,7 @@ from handlers.admin_handlers import (
     message_users_bulk_schedule, message_users_bulk_photo_decision, message_users_bulk_photo, message_users_bulk_cancel,
     MSG_USER_WAIT_TARGET, MSG_USER_WAIT_TEXT, MSG_USER_WAIT_DATETIME, MSG_USER_WAIT_PHOTO_DECISION, MSG_USER_WAIT_PHOTO, MSG_USER_CONFIRM,
     BULK_MSG_WAIT_RECIPIENTS, BULK_MSG_WAIT_TEXT, BULK_MSG_WAIT_SCHEDULE, BULK_MSG_WAIT_PHOTO_DECISION, BULK_MSG_WAIT_PHOTO,
+    referral_limit_decision_callback,
     block_user_start, block_user_target, block_user_username, block_user_password, block_user_confirm, block_user_cancel,
     BLOCK_USER_WAIT_TARGET, BLOCK_USER_WAIT_USERNAME, BLOCK_USER_WAIT_PASSWORD, BLOCK_USER_WAIT_CONFIRM,
 )
@@ -1044,6 +1045,7 @@ if __name__ == '__main__':
     app.add_handler(CallbackQueryHandler(challenge_pick_player_callback, pattern=r"^challenge_pick_player_\d+$"))
     app.add_handler(CallbackQueryHandler(challenge_cancel_callback, pattern=r"^challenge_cancel$"))
     app.add_handler(CallbackQueryHandler(challenge_reshuffle_callback, pattern=r"^challenge_reshuffle$"))
+    app.add_handler(CallbackQueryHandler(referral_limit_decision_callback, pattern=r"^ref_limit:"))
     # Обработчик ввода названия команды для челленджа
     # Do not block other handlers (e.g., admin conversations) when catching free-text
     # for challenge team input. This prevents it from swallowing messages intended

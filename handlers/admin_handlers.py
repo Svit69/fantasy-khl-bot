@@ -2336,3 +2336,50 @@ async def addhc2(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # Reply to admin with more details
     target_label = f"@{resolved_username}" if resolved_username else f"id {user[0]}"
     await update.message.reply_text(f'РќР°С‡РёСЃР»РµРЅРѕ {target_label} {amount} HC.')
+
+
+async def referral_limit_decision_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    if not await admin_only(update, context):
+        return
+    data = (query.data or '').split(':')
+    if len(data) != 3:
+        try:
+            await query.edit_message_text('⚠️ Некорректные данные запроса.')
+        except Exception:
+            pass
+        return
+    _, referrer_id_str, decision = data
+    try:
+        referrer_id = int(referrer_id_str)
+    except ValueError:
+        try:
+            await query.edit_message_text('⚠️ Некорректный идентификатор пользователя.')
+        except Exception:
+            pass
+        return
+    user_row = db.get_user_by_id(referrer_id)
+    username = user_row[1] if user_row else ''
+    name = user_row[2] if user_row else ''
+    label = f"@{username}" if username else f"id {referrer_id}"
+    if name:
+        label = f"{label} ({name})"
+    decision = decision.lower()
+    if decision == 'yes':
+        db.set_referral_disabled(referrer_id, True)
+        db.set_referral_limit_state(referrer_id, 3)
+        try:
+            await context.bot.send_message(chat_id=referrer_id, text='⚠️ Ваша реферальная программа временно ограничена. Новые приглашения недоступны.')
+        except Exception:
+            pass
+        response = f'Ограничение для {label} включено. Новые приглашения не принимаются.'
+    elif decision == 'no':
+        db.set_referral_limit_state(referrer_id, 2)
+        response = f'Ограничение для {label} не устанавливается.'
+    else:
+        response = '⚠️ Неизвестное решение.'
+    try:
+        await query.edit_message_text(response)
+    except Exception:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=response)

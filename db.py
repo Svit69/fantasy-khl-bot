@@ -13,6 +13,7 @@ DB_NAME = 'fantasy_khl.db'
 REFERRAL_LIMIT_24H = 5
 REFERRAL_LIMIT_30D = 10
 REFERRAL_LIMIT_TOTAL = 20
+REFERRAL_ACCOUNT_LIMIT = 10
 
 
 # --- Новая таблица для платежей ЮKassa ---
@@ -76,6 +77,8 @@ def init_db():
                 conn.execute("ALTER TABLE users ADD COLUMN blocked_by INTEGER")
             if 'referral_disabled' not in columns:
                 conn.execute("ALTER TABLE users ADD COLUMN referral_disabled INTEGER DEFAULT 0")
+            if 'referral_limit_warning_sent' not in columns:
+                conn.execute("ALTER TABLE users ADD COLUMN referral_limit_warning_sent INTEGER DEFAULT 0")
 
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS user_block_log (
@@ -912,8 +915,17 @@ def add_referral_if_new(user_id: int, referrer_id: int) -> bool:
     now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
     with closing(sqlite3.connect(DB_NAME)) as conn:
         with conn:
-            disabled = conn.execute('SELECT referral_disabled FROM users WHERE telegram_id = ?', (referrer_id,)).fetchone()
-            if disabled and disabled[0]:
+            user_row = conn.execute('SELECT referral_disabled, referral_limit_warning_sent FROM users WHERE telegram_id = ?', (referrer_id,)).fetchone()
+            disabled = False
+            warning_state = 0
+            if user_row:
+                disabled = bool(user_row[0])
+                warning_state = user_row[1] or 0
+            if disabled:
+                return False
+            total_row = conn.execute('SELECT COUNT(*) FROM referrals WHERE referrer_id = ?', (referrer_id,)).fetchone()
+            total_referrals = int(total_row[0]) if total_row and total_row[0] is not None else 0
+            if warning_state != 2 and total_referrals >= REFERRAL_ACCOUNT_LIMIT:
                 return False
             exists = conn.execute('SELECT 1 FROM referrals WHERE user_id = ?', (user_id,)).fetchone()
             if exists:
@@ -926,6 +938,57 @@ def add_referral_if_new(user_id: int, referrer_id: int) -> bool:
 
 
 
+
+
+# --- Referral limit helpers ---
+def get_referrals_for_referrer(referrer_id: int):
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            '''
+            SELECT r.user_id, r.status, r.created_at, r.rewarded_at, r.reward_amount,
+                   u.username, u.name
+            FROM referrals AS r
+            LEFT JOIN users AS u ON u.telegram_id = r.user_id
+            WHERE r.referrer_id = ?
+            ORDER BY r.created_at ASC
+            ''',
+            (referrer_id,)
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def set_referral_limit_state(referrer_id: int, state: int) -> None:
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            conn.execute('UPDATE users SET referral_limit_warning_sent = ? WHERE telegram_id = ?', (int(state), referrer_id))
+
+
+def set_referral_disabled(referrer_id: int, disabled: bool = True) -> None:
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            conn.execute('UPDATE users SET referral_disabled = ? WHERE telegram_id = ?', (1 if disabled else 0, referrer_id))
+
+
+def check_referral_limit_state(referrer_id: int, limit: int = REFERRAL_ACCOUNT_LIMIT) -> dict:
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        conn.row_factory = sqlite3.Row
+        user_row = conn.execute('SELECT referral_disabled, referral_limit_warning_sent FROM users WHERE telegram_id = ?', (referrer_id,)).fetchone()
+        if not user_row:
+            return {'total': 0, 'state': 0, 'disabled': False, 'notify': False, 'referrals': []}
+        disabled = bool(user_row['referral_disabled'])
+        state = user_row['referral_limit_warning_sent'] or 0
+        total_row = conn.execute('SELECT COUNT(*) FROM referrals WHERE referrer_id = ?', (referrer_id,)).fetchone()
+        total = int(total_row[0]) if total_row and total_row[0] is not None else 0
+        notify = False
+        referrals = []
+        if total >= limit and not disabled and state == 0:
+            referrals = get_referrals_for_referrer(referrer_id)
+            with conn:
+                conn.execute('UPDATE users SET referral_limit_warning_sent = 1 WHERE telegram_id = ?', (referrer_id,))
+            state = 1
+            notify = True
+        return {'total': total, 'state': state, 'disabled': disabled, 'notify': notify, 'referrals': referrals}
 def _count_referrals(conn, referrer_id: int, *, statuses=None, since_hours=None, use_rewarded_timestamp=False, now=None):
     if now is None:
         now = datetime.datetime.now(datetime.timezone.utc)
