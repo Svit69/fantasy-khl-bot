@@ -31,6 +31,7 @@ from handlers.user_handlers import start, hc, IMAGES_DIR, \
 from handlers.user_handlers import shop, shop_item_callback
 from handlers.user_handlers import subscribe_stars, precheckout_callback, successful_payment_handler
 from handlers.admin_handlers import addhc2 as addhc, send_results, show_users, list_active_subscribers
+from handlers.admin_handlers import ChangePlayerPriceCommand
 from handlers.admin_handlers import list_challenges, delete_challenge_cmd
 from handlers.admin_handlers import challenge_rosters_cmd
 from handlers.show_hc_users import show_hc_users
@@ -44,6 +45,7 @@ from handlers.admin_handlers import (
     challenge_input_end_date,
     send_challenge_image_photo,
     send_challenge_image_cancel,
+    CHALLENGE_MODE,
     CHALLENGE_START,
     CHALLENGE_DEADLINE,
     CHALLENGE_END,
@@ -96,8 +98,17 @@ from handlers.addhc_fix import addhc2 as _addhc2_fixed
 addhc = _addhc2_fixed
 from handlers.list_tours_fix import list_tours as _list_tours_fixed
 list_tours = _list_tours_fixed
-from handlers.challenge_send_image_fix import (send_challenge_image_start as _scimg_start, challenge_input_start_date as _scimg_start_date, challenge_input_deadline as _scimg_deadline, challenge_input_end_date as _scimg_end_date, send_challenge_image_photo as _scimg_photo, send_challenge_image_cancel as _scimg_cancel)
+from handlers.challenge_send_image_fix import (
+    send_challenge_image_start as _scimg_start,
+    challenge_mode_select as _scimg_mode_select,
+    challenge_input_start_date as _scimg_start_date,
+    challenge_input_deadline as _scimg_deadline,
+    challenge_input_end_date as _scimg_end_date,
+    send_challenge_image_photo as _scimg_photo,
+    send_challenge_image_cancel as _scimg_cancel,
+)
 send_challenge_image_start = _scimg_start
+challenge_mode_select = _scimg_mode_select
 challenge_input_start_date = _scimg_start_date
 challenge_input_deadline = _scimg_deadline
 challenge_input_end_date = _scimg_end_date
@@ -210,6 +221,7 @@ async def on_startup(app):
     ]
     admin_commands.append(BotCommand("message_users", "рассылка по списку пользователей"))
     admin_commands.append(BotCommand("list_active_subscribers", "показать активных подписчиков"))
+    admin_commands.append(BotCommand("change_player_price", "изменить стоимость игроков"))
     admin_commands.append(BotCommand("refresh_commands", "обновить меню команд"))
     try:
         # Очистим команды на всякий случай (default и ru)
@@ -658,6 +670,7 @@ if __name__ == '__main__':
             "• /find_player — поиск игрока\n"
             "• /add_player — добавить игрока\n"
             "• /edit_player — отредактировать игрока\n"
+            "• /change_player_price — изменить стоимость игроков списком\n"
             "• /remove_player — удалить игрока\n\n"
             "<b>Управление челленджами:</b>\n"
             "• /list_challenges — список челленджей\n"
@@ -866,6 +879,10 @@ if __name__ == '__main__':
     send_challenge_image_conv = ConversationHandler(
         entry_points=[CommandHandler('send_challenge_image', send_challenge_image_start)],
         states={
+            CHALLENGE_MODE: [
+                CallbackQueryHandler(challenge_mode_select, pattern=r"^challenge_mode_(?:default|under21)$"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, challenge_mode_select),
+            ],
             CHALLENGE_START: [MessageHandler(filters.TEXT & ~filters.COMMAND, challenge_input_start_date)],
             CHALLENGE_DEADLINE: [MessageHandler(filters.TEXT & ~filters.COMMAND, challenge_input_deadline)],
             CHALLENGE_END: [MessageHandler(filters.TEXT & ~filters.COMMAND, challenge_input_end_date)],
@@ -1076,6 +1093,10 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('find_player', find_player))
     app.add_handler(CommandHandler('remove_player', remove_player))
 
+    change_player_price_command = ChangePlayerPriceCommand()
+    change_player_price_conv = change_player_price_command.build_handler()
+    app.add_handler(change_player_price_conv)
+
     edit_player_conv = ConversationHandler(
         entry_points=[CommandHandler('edit_player', edit_player_start)],
         states={
@@ -1131,6 +1152,7 @@ if __name__ == '__main__':
         BotCommand("send_results", "Разослать результаты тура (админ)"),
         BotCommand("broadcast_subscribers", "Рассылка подписчикам (админ)"),
         BotCommand("message_user", "Сообщение пользователю (админ)"),
+        BotCommand("change_player_price", "Изменить стоимость игроков (админ)"),
     ]
 
     # Установить команды для всех пользователей

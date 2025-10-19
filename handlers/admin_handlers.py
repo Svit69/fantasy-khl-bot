@@ -10,6 +10,8 @@ from telegram import Update, Bot
 from telegram.ext import ContextTypes, CommandHandler, MessageHandler, filters, ConversationHandler
 import asyncio
 import datetime
+import re
+from typing import Dict, Iterable, List, Tuple
 
 def _is_user_blocked_safe(user_id: int) -> bool:
     checker = getattr(db, 'is_user_blocked', None)
@@ -79,6 +81,127 @@ async def add_image_shop_photo(update, context):
     except Exception as e:
         await update.message.reply_text(f"РћС€РёР±РєР° СЃРѕС…СЂР°РЅРµРЅРёСЏ С„РѕС‚Рѕ: {e}")
     return ConversationHandler.END
+
+# --- /change_player_price ---
+class ChangePlayerPriceCommand:
+    WAITING_INPUT: int = 40010
+    _LINE_PATTERN = re.compile(r'^\s*(\d+)\s*:\s*(\d+)\s*$')
+    _CHUNK_LIMIT = 3500
+
+    def __init__(self, db_gateway=db):
+        self._db = db_gateway
+
+    def build_handler(self) -> ConversationHandler:
+        return ConversationHandler(
+            entry_points=[CommandHandler('change_player_price', self.start)],
+            states={
+                self.WAITING_INPUT: [
+                    MessageHandler(filters.TEXT & (~filters.COMMAND), self.process_input)
+                ],
+            },
+            fallbacks=[CommandHandler('cancel', self.cancel)],
+            allow_reentry=True,
+            name="change_player_price_conv",
+            persistent=False,
+        )
+
+    async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        if not await admin_only(update, context):
+            return ConversationHandler.END
+        prompt = (
+            "Введи список игроков и новых цен в формате <code>id: цена</code> одной строкой на игрока.\n"
+            "Например:\n"
+            "<code>323: 50</code>\n"
+            "<code>40: 30</code>\n"
+            "<code>24: 30</code>\n\n"
+            "Отправь /cancel для отмены."
+        )
+        await update.message.reply_text(prompt, parse_mode='HTML')
+        return self.WAITING_INPUT
+
+    async def process_input(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        if not await admin_only(update, context):
+            return ConversationHandler.END
+        raw_text = (update.message.text or '').strip()
+        if not raw_text:
+            await update.message.reply_text("Не нашел данных. Введи строки вида id: цена.")
+            return self.WAITING_INPUT
+        try:
+            updates = self._parse_price_updates(raw_text)
+        except ValueError as err:
+            await update.message.reply_text(str(err))
+            return self.WAITING_INPUT
+        if not updates:
+            await update.message.reply_text("Не нашел строк с парами id и цен. Попробуй снова.")
+            return self.WAITING_INPUT
+        try:
+            updated_players, missing_ids = self._apply_updates(updates.items())
+        except Exception as err:
+            await update.message.reply_text(f"Ошибка при обновлении: {err}")
+            return ConversationHandler.END
+        if missing_ids:
+            missing_str = ", ".join(str(pid) for pid in missing_ids)
+            await update.message.reply_text(f"Не нашел игроков с id: {missing_str}.")
+        if updated_players:
+            await self._send_player_summaries(update, updated_players)
+        else:
+            await update.message.reply_text("Не удалось обновить ни одного игрока.")
+        return ConversationHandler.END
+
+    async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        await update.message.reply_text("Изменение стоимости игроков отменено.")
+        return ConversationHandler.END
+
+    def _parse_price_updates(self, raw_text: str) -> Dict[int, int]:
+        updates: Dict[int, int] = {}
+        for line_number, raw_line in enumerate(raw_text.splitlines(), start=1):
+            line = raw_line.strip()
+            if not line:
+                continue
+            match = self._LINE_PATTERN.match(line)
+            if not match:
+                raise ValueError(f"Строка {line_number} имеет неверный формат. Используй формат id: цена.")
+            player_id = int(match.group(1))
+            price = int(match.group(2))
+            if price < 0:
+                raise ValueError(f"Строка {line_number}: цена должна быть неотрицательной.")
+            updates[player_id] = price
+        return updates
+
+    def _apply_updates(self, updates: Iterable[Tuple[int, int]]) -> Tuple[List[Tuple], List[int]]:
+        updated_players: List[Tuple] = []
+        missing_ids: List[int] = []
+        for player_id, price in updates:
+            try:
+                updated = self._db.update_player_price(player_id, price)
+            except Exception as err:
+                raise RuntimeError(f"игрок {player_id}: {err}") from err
+            if not updated:
+                missing_ids.append(player_id)
+                continue
+            player = self._db.get_player_by_id(player_id)
+            if player:
+                updated_players.append(player)
+            else:
+                missing_ids.append(player_id)
+        return updated_players, missing_ids
+
+    async def _send_player_summaries(self, update: Update, players: List[Tuple]) -> None:
+        header = "Обновленные игроки:\n"
+        lines = [self._format_player(player) for player in players]
+        message = header + "\n".join(lines)
+        for chunk in self._chunk_text(message):
+            await update.message.reply_text(chunk)
+
+    def _format_player(self, player: Tuple) -> str:
+        player_id, name, position, club, nation, age, price = player
+        return f"{player_id}. {name} | {position} | {club} | {nation} | {age} лет | {price} HC"
+
+    def _chunk_text(self, text: str) -> List[str]:
+        if len(text) <= self._CHUNK_LIMIT:
+            return [text]
+        return [text[i:i + self._CHUNK_LIMIT] for i in range(0, len(text), self._CHUNK_LIMIT)]
+
 
 async def add_image_shop_cancel(update, context):
     await update.message.reply_text("РћР±РЅРѕРІР»РµРЅРёРµ РјР°РіР°Р·РёРЅР° РѕС‚РјРµРЅРµРЅРѕ.")
@@ -1041,6 +1164,7 @@ async def addhc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(f'РџРѕР»СЊР·РѕРІР°С‚РµР»СЋ @{username} РЅР°С‡РёСЃР»РµРЅРѕ {amount} HC.')
 
 # --- Р РµРіРёСЃС‚СЂР°С†РёСЏ С‡РµР»Р»РµРЅРґР¶Р° (+ Р·Р°РіСЂСѓР·РєР° РєР°СЂС‚РёРЅРєРё) ---
+CHALLENGE_MODE = 30
 CHALLENGE_START = 31
 CHALLENGE_DEADLINE = 32
 CHALLENGE_END = 33
@@ -1056,6 +1180,7 @@ def _parse_iso(dt_str: str):
 async def send_challenge_image_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await admin_only(update, context):
         return ConversationHandler.END
+    context.user_data.pop('challenge_mode', None)
     context.user_data.pop('challenge_start', None)
     context.user_data.pop('challenge_deadline', None)
     context.user_data.pop('challenge_end', None)
@@ -1120,7 +1245,8 @@ async def send_challenge_image_photo(update: Update, context: ContextTypes.DEFAU
         deadline = context.user_data.get('challenge_deadline')
         end_date = context.user_data.get('challenge_end')
         image_file_id = getattr(photo, 'file_id', '') or ''
-        ch_id = db.create_challenge(start_date, deadline, end_date, filename, image_file_id)
+        age_mode = context.user_data.get('challenge_mode', 'default')
+        ch_id = db.create_challenge(start_date, deadline, end_date, filename, image_file_id, age_mode)
 
         await update.message.reply_text(
             f'вњ… Р§РµР»Р»РµРЅРґР¶ Р·Р°СЂРµРіРёСЃС‚СЂРёСЂРѕРІР°РЅ (id={ch_id}). РљР°СЂС‚РёРЅРєР° СЃРѕС…СЂР°РЅРµРЅР° РєР°Рє `{filename}`.'
@@ -1131,7 +1257,7 @@ async def send_challenge_image_photo(update: Update, context: ContextTypes.DEFAU
         await update.message.reply_text(f'РћС€РёР±РєР° РїСЂРё СЂРµРіРёСЃС‚СЂР°С†РёРё С‡РµР»Р»РµРЅРґР¶Р°: {e}')
     finally:
         # РћС‡РёСЃС‚РёРј РІСЂРµРјРµРЅРЅС‹Рµ РґР°РЅРЅС‹Рµ
-        for k in ('challenge_start','challenge_deadline','challenge_end'):
+        for k in ('challenge_mode','challenge_start','challenge_deadline','challenge_end'):
             context.user_data.pop(k, None)
     return ConversationHandler.END
 
@@ -1180,7 +1306,7 @@ async def send_challenge_image_cancel(update: Update, context: ContextTypes.DEFA
         await update.message.reply_text('РћС‚РјРµРЅРµРЅРѕ.')
     except Exception:
         pass
-    for k in ('challenge_start','challenge_deadline','challenge_end'):
+    for k in ('challenge_mode','challenge_start','challenge_deadline','challenge_end'):
         context.user_data.pop(k, None)
     return ConversationHandler.END
 
@@ -1210,27 +1336,35 @@ async def list_challenges(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     try:
         rows = db.get_all_challenges()
         if not rows:
-            await update.message.reply_text('Р’ Р±Р°Р·Рµ РЅРµС‚ С‡РµР»Р»РµРЅРґР¶РµР№.')
+            await update.message.reply_text('Challenge list is empty.')
             return
         lines = []
         for r in rows:
-            # РѕР¶РёРґР°РµРјС‹Рµ РїРѕР»СЏ: id, start_date, deadline, end_date, image_filename, status[, image_file_id]
             ch_id = r[0]
             start_date = r[1]
             deadline = r[2]
             end_date = r[3]
             image_filename = r[4] if len(r) > 4 else ''
             status = r[5] if len(r) > 5 else ''
+            image_file_id = r[6] if len(r) > 6 else ''
+            age_mode = (r[7] if len(r) > 7 else 'default') or 'default'
+            mode_label = 'U21 only' if age_mode == 'under21' else 'regular'
             lines.append(
-                f"id={ch_id} | {status}\nstart: {start_date}\ndeadline: {deadline}\nend: {end_date}\nimage: {image_filename}\nвЂ”"
+                "id={id} | {status}\nmode: {mode}\nstart: {start}\ndeadline: {deadline}\nend: {end}\nimage: {image}\n-".format(
+                    id=ch_id,
+                    status=status,
+                    mode=mode_label,
+                    start=start_date,
+                    deadline=deadline,
+                    end=end_date,
+                    image=image_filename or image_file_id,
+                )
             )
         msg = "\n".join(lines)
-        # Telegram РѕРіСЂР°РЅРёС‡РµРЅРёРµ РЅР° РґР»РёРЅСѓ СЃРѕРѕР±С‰РµРЅРёСЏ ~4096
         for i in range(0, len(msg), 3500):
             await update.message.reply_text(msg[i:i+3500])
     except Exception as e:
-        await update.message.reply_text(f"РћС€РёР±РєР° РїРѕР»СѓС‡РµРЅРёСЏ СЃРїРёСЃРєР° С‡РµР»Р»РµРЅРґР¶РµР№: {e}")
-
+        await update.message.reply_text(f'Failed to load challenges: {e}')
 async def delete_challenge_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await admin_only(update, context):
         return

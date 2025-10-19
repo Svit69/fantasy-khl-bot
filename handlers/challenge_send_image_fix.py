@@ -1,13 +1,13 @@
 import os
 import datetime
 from typing import Optional
-from telegram import Update, InputFile
+from telegram import Update, InputFile, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 
 import db
 from utils import IMAGES_DIR, CHALLENGE_IMAGE_PATH_FILE
 from handlers.admin_handlers import (
-    CHALLENGE_START, CHALLENGE_DEADLINE, CHALLENGE_END, CHALLENGE_WAIT_IMAGE,
+    CHALLENGE_MODE, CHALLENGE_START, CHALLENGE_DEADLINE, CHALLENGE_END, CHALLENGE_WAIT_IMAGE,
 )
 
 try:
@@ -68,11 +68,51 @@ async def send_challenge_image_start(update: Update, context: ContextTypes.DEFAU
     from handlers.admin_handlers import admin_only
     if not await admin_only(update, context):
         return ConversationHandler.END
-    for key in ('challenge_start', 'challenge_deadline', 'challenge_end'):
+    for key in ('challenge_mode', 'challenge_start', 'challenge_deadline', 'challenge_end'):
         context.user_data.pop(key, None)
-    await update.message.reply_text(
-        f'Создание челленджа. Введите дату СТАРТА в формате {_INPUT_EXAMPLE} (МСК)'
+    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton('1) Regular mode', callback_data='challenge_mode_default'), InlineKeyboardButton('2) U21 mode', callback_data='challenge_mode_under21')]])
+    prompt_text = (
+        "Select challenge mode:\n"
+        "1 - regular (all players)\n"
+        "2 - U21 (only players aged 21 or younger)."
     )
+    await update.message.reply_text(prompt_text, reply_markup=keyboard)
+    return CHALLENGE_MODE
+
+async def challenge_mode_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = getattr(update, 'callback_query', None)
+    mode = None
+    if query is not None:
+        data = (query.data or '').strip()
+        if data == 'challenge_mode_default':
+            mode = 'default'
+        elif data == 'challenge_mode_under21':
+            mode = 'under21'
+        await query.answer()
+    else:
+        text_value = (update.message.text or '').strip().lower()
+        if text_value in {'1', 'regular', 'default', 'standard'}:
+            mode = 'default'
+        elif text_value in {'2', 'u21', 'under21', '21'}:
+            mode = 'under21'
+    if mode is None:
+        prompt = 'Please select mode using buttons or send 1/2.'
+        if query is not None:
+            await query.message.reply_text(prompt)
+        else:
+            await update.message.reply_text(prompt)
+        return CHALLENGE_MODE
+    context.user_data['challenge_mode'] = mode
+    summary = 'Mode: U21 only' if mode == 'under21' else 'Mode: regular'
+    next_prompt = 'Provide challenge start date/time in format like {example} (MSK).'.format(example=_INPUT_EXAMPLE)
+    if query is not None:
+        try:
+            await query.edit_message_text(summary)
+        except Exception:
+            await query.message.reply_text(summary)
+        await query.message.reply_text(next_prompt)
+    else:
+        await update.message.reply_text("{}\n{}".format(summary, next_prompt))
     return CHALLENGE_START
 
 
@@ -142,7 +182,15 @@ async def send_challenge_image_photo(update: Update, context: ContextTypes.DEFAU
         start_date = context.user_data.get('challenge_start')
         deadline = context.user_data.get('challenge_deadline')
         end_date = context.user_data.get('challenge_end')
-        ch_id = db.create_challenge(start_date, deadline, end_date, filename, getattr(photo, 'file_id', '') or '')
+        age_mode = context.user_data.get('challenge_mode', 'default')
+        ch_id = db.create_challenge(
+            start_date,
+            deadline,
+            end_date,
+            filename,
+            getattr(photo, 'file_id', '') or '',
+            age_mode,
+        )
 
         await update.message.reply_text(
             f'Готово: челлендж создан (id={ch_id}). Изображение сохранено как `{filename}`.'
@@ -150,13 +198,13 @@ async def send_challenge_image_photo(update: Update, context: ContextTypes.DEFAU
     except Exception as exc:
         await update.message.reply_text(f'Не удалось обработать изображение: {exc}')
     finally:
-        for key in ('challenge_start', 'challenge_deadline', 'challenge_end'):
+        for key in ('challenge_mode', 'challenge_start', 'challenge_deadline', 'challenge_end'):
             context.user_data.pop(key, None)
     return ConversationHandler.END
 
 
 async def send_challenge_image_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text('Создание челленджа отменено.')
-    for key in ('challenge_start', 'challenge_deadline', 'challenge_end'):
+    for key in ('challenge_mode', 'challenge_start', 'challenge_deadline', 'challenge_end'):
         context.user_data.pop(key, None)
     return ConversationHandler.END

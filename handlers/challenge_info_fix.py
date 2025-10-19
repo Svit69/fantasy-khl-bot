@@ -51,18 +51,22 @@ async def challenge_info_callback(update: Update, context: ContextTypes.DEFAULT_
         await query.edit_message_text("Челлендж не найден.")
         return
 
-    # ch: (id, start_date, deadline, end_date, image_filename, status, image_file_id)
+    # ch: (id, start_date, deadline, end_date, image_filename, status, image_file_id, age_mode)
     start_dt = _iso_to_msk(ch[1])
     deadline_dt = _iso_to_msk(ch[2])
     end_dt = _iso_to_msk(ch[3])
+    age_mode = (ch[7] if len(ch) > 7 else 'default') or 'default'
+    mode_label = 'U21' if age_mode == 'under21' else 'regular'
 
     txt = (
-        f"Челлендж №{ch[0]}\n"
-        f"Статус: {ch[5]}\n\n"
-        f"Старт: {_fmt_date_msk(start_dt)}\n"
-        f"Дедлайн: {_fmt_date_msk(deadline_dt)}\n"
-        f"Окончание: {_fmt_date_msk(end_dt)}\n"
+        f"�������� №{ch[0]}\n"
+        f"������: {ch[5]}\n\n"
+        f"�����: {mode_label}\n"
+        f"�����: {_fmt_date_msk(start_dt)}\n"
+        f"�������: {_fmt_date_msk(deadline_dt)}\n"
+        f"���������: {_fmt_date_msk(end_dt)}\n"
     )
+
     try:
         await query.edit_message_text(txt)
     except Exception:

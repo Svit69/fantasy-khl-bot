@@ -49,12 +49,22 @@ def _challenge_deadline_passed(challenge_id: int) -> bool:
     try:
         import db as _db
         ch = _db.get_challenge_by_id(challenge_id)
-        # ch: (id, start_date, deadline, end_date, image_filename, status, image_file_id)
+        # ch: (id, start_date, deadline, end_date, image_filename, status, image_file_id, age_mode)
         dl = datetime.datetime.fromisoformat(str(ch[2]))
         # deadlines stored in UTC
         return datetime.datetime.utcnow() >= dl
     except Exception:
         return False
+
+
+def _challenge_player_allowed(player_row, age_mode: str) -> bool:
+    if age_mode != 'under21':
+        return True
+    try:
+        age_value = int(player_row[5])
+    except Exception:
+        return False
+    return age_value <= 21
 
 def escape_md(text):
     # Все спецсимволы MarkdownV2
@@ -779,7 +789,8 @@ async def challenge_open_callback(update: Update, context: ContextTypes.DEFAULT_
 
     # Попробуем отправить картинку челленджа как фото
     image_sent = False
-    image_file_id = ch[6] if len(ch) >= 7 else ''
+    image_file_id = ch[6] if len(ch) > 6 else ''
+    age_mode = (ch[7] if len(ch) > 7 else 'default') or 'default'
     if image_file_id:
         try:
             await context.bot.send_photo(chat_id=update.effective_chat.id, photo=image_file_id)
@@ -826,6 +837,7 @@ async def challenge_open_callback(update: Update, context: ContextTypes.DEFAULT_
         # entry: (id, stake, forward_id, defender_id, goalie_id, status)
         # Сохраним id челленджа в контекст для последующих действий (Отменить/Пересобрать)
         context.user_data['challenge_id'] = ch[0]
+        context.user_data['challenge_age_mode'] = age_mode
         fwd_id = entry[2]
         d_id = entry[3]
         g_id = entry[4]
@@ -887,6 +899,7 @@ async def challenge_open_callback(update: Update, context: ContextTypes.DEFAULT_
     # Меню действий по челленджу (если записи нет)
     # Сохраним id челленджа в контекст для возможного начала сборки
     context.user_data['challenge_id'] = ch[0]
+    context.user_data['challenge_age_mode'] = age_mode
     text = (
         f"Челлендж #{ch[0]}\n"
         f"Статус: {status}\n"
@@ -1151,6 +1164,8 @@ async def challenge_build_callback(update: Update, context: ContextTypes.DEFAULT
         "Выберите уровень вызова для челленджа:\n\n"
         "⚡️ 50 HC\n⚡️ 100 HC\n⚡️ 500 HC"
     )
+    if age_mode == 'under21':
+        text += "\n\nU21 mode: only players aged 21 or younger are available."
     keyboard = [
         [
             InlineKeyboardButton('⚡️ 50 HC', callback_data='challenge_level_50'),
@@ -1261,19 +1276,32 @@ async def challenge_team_input(update: Update, context: ContextTypes.DEFAULT_TYP
     from db import get_all_players
     all_players = get_all_players()
     team_lower = team_text.lower()
-    filtered = [p for p in all_players if (p[2] or '').lower() == pos and team_lower in str(p[3] or '').lower()]
+    age_mode = context.user_data.get('challenge_age_mode', 'default')
+    filtered = [
+        p
+        for p in all_players
+        if (p[2] or '').lower() == pos
+        and team_lower in str(p[3] or '').lower()
+        and _challenge_player_allowed(p, age_mode)
+    ]
     if not filtered:
-        await update.message.reply_text("Игроки не найдены по указанным фильтрам. Повторите выбор позиции.")
-        # Вернём меню позиций (оставшиеся)
-        remaining = context.user_data.get('challenge_remaining_positions', ['нападающий', 'защитник', 'вратарь'])
+        await update.message.reply_text("������ �� ������� �� ��������� ��������. ��������� ����� �������.")
+        if age_mode == 'under21':
+            await update.message.reply_text('U21 mode only allows players aged 21 or younger.')
+        remaining = context.user_data.get('challenge_remaining_positions', ['����������', '��������', '�������'])
         btns = [[InlineKeyboardButton(x, callback_data=f"challenge_pick_pos_{x}")] for x in remaining]
-        await update.message.reply_text("Выберите позицию:", reply_markup=InlineKeyboardMarkup(btns))
+        await update.message.reply_text("�������� �������:", reply_markup=InlineKeyboardMarkup(btns))
         return
-    # Построить клавиатуру игроков
     kb = []
     for p in filtered:
-        kb.append([InlineKeyboardButton(f"{p[1]} ({p[3]})", callback_data=f"challenge_pick_player_{p[0]}")])
-    await update.message.reply_text("Выберите игрока:", reply_markup=InlineKeyboardMarkup(kb))
+        label = f"{p[1]} ({p[3]})"
+        if age_mode == 'under21':
+            try:
+                label += f" - {int(p[5])}y"
+            except Exception:
+                label += ' - age?'
+        kb.append([InlineKeyboardButton(label, callback_data=f"challenge_pick_player_{p[0]}")])
+    await update.message.reply_text("�������� ������:", reply_markup=InlineKeyboardMarkup(kb))
 
 
 async def challenge_pick_player_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1298,10 +1326,14 @@ async def challenge_pick_player_callback(update: Update, context: ContextTypes.D
         await query.edit_message_text("Контекст выбора утерян. Начните заново: /challenge")
         return
     # Сохраняем пик
+    age_mode = context.user_data.get('challenge_age_mode', 'default')
+    player_row = db.get_player_by_id(pid)
+    if not player_row or not _challenge_player_allowed(player_row, age_mode):
+        await query.edit_message_text('Этот игрок недоступен в выбранном режиме челленджа.')
+        return
     try:
         db.challenge_set_pick(cid, update.effective_user.id, pos, pid)
-        p = db.get_player_by_id(pid)
-        picked_name = f"{p[1]} ({p[3]})" if p else f"id={pid}"
+        picked_name = f"{player_row[1]} ({player_row[3]})"
         await query.edit_message_text(f"Вы выбрали: {picked_name}")
     except Exception as e:
         await query.edit_message_text(f"Не удалось сохранить выбор: {e}")

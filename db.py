@@ -199,12 +199,17 @@ def init_db():
                     end_date TEXT NOT NULL,
                     image_filename TEXT NOT NULL,
                     status TEXT NOT NULL,
-                    image_file_id TEXT DEFAULT ''
+                    image_file_id TEXT DEFAULT '',
+                    age_mode TEXT NOT NULL DEFAULT 'default'
                 )
             ''')
             # Миграция: добавить колонку image_file_id при отсутствии
             try:
                 conn.execute('ALTER TABLE challenges ADD COLUMN image_file_id TEXT DEFAULT ""')
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE challenges ADD COLUMN age_mode TEXT NOT NULL DEFAULT 'default'")
             except Exception:
                 pass
             # Таблица заявок пользователей на челлендж
@@ -444,7 +449,7 @@ def _now_moscow():
 def get_moscow_now():
     return _now_moscow()
 
-def create_challenge(start_date: str, deadline: str, end_date: str, image_filename: str, image_file_id: str = '') -> int:
+def create_challenge(start_date: str, deadline: str, end_date: str, image_filename: str, image_file_id: str = '', age_mode: str = 'default') -> int:
     """Создаёт запись челленджа и возвращает его id. Статус вычисляется относительно текущего времени."""
     now = _now_moscow()
     sd = _parse_challenge_datetime(start_date)
@@ -461,11 +466,14 @@ def create_challenge(start_date: str, deadline: str, end_date: str, image_filena
     start_value = sd.isoformat() if sd else (start_date or '')
     deadline_value = dl.isoformat() if dl else (deadline or '')
     end_value = ed.isoformat() if ed else (end_date or '')
+    normalized_mode = (age_mode or 'default').strip().lower()
+    if normalized_mode not in ('default', 'under21'):
+        normalized_mode = 'default'
     with closing(sqlite3.connect(DB_NAME)) as conn:
         with conn:
             cur = conn.execute(
-                'INSERT INTO challenges (start_date, deadline, end_date, image_filename, status, image_file_id) VALUES (?, ?, ?, ?, ?, ?)',
-                (start_value, deadline_value, end_value, image_filename, status, image_file_id or '')
+                'INSERT INTO challenges (start_date, deadline, end_date, image_filename, status, image_file_id, age_mode) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                (start_value, deadline_value, end_value, image_filename, status, image_file_id or '', normalized_mode)
             )
             return cur.lastrowid
 
@@ -514,10 +522,10 @@ def _compute_challenge_status(start_date: str, deadline: str, end_date: str) -> 
 
 def get_latest_challenge():
     with closing(sqlite3.connect(DB_NAME)) as conn:
-        row = conn.execute('SELECT id, start_date, deadline, end_date, image_filename, status, image_file_id FROM challenges ORDER BY id DESC LIMIT 1').fetchone()
+        row = conn.execute('SELECT id, start_date, deadline, end_date, image_filename, status, image_file_id, age_mode FROM challenges ORDER BY id DESC LIMIT 1').fetchone()
         if not row:
             return row
-        ch_id, start_date, deadline, end_date, image_filename, status, image_file_id = row
+        ch_id, start_date, deadline, end_date, image_filename, status, image_file_id, age_mode = row
         cur_status = _compute_challenge_status(start_date, deadline, end_date)
         try:
             if cur_status != status:
@@ -526,14 +534,14 @@ def get_latest_challenge():
                 status = cur_status
         except Exception:
             pass
-        return (ch_id, start_date, deadline, end_date, image_filename, status, image_file_id)
+        return (ch_id, start_date, deadline, end_date, image_filename, status, image_file_id, age_mode)
 
 def get_all_challenges():
     with closing(sqlite3.connect(DB_NAME)) as conn:
-        rows = conn.execute('SELECT id, start_date, deadline, end_date, image_filename, status FROM challenges ORDER BY id DESC').fetchall()
+        rows = conn.execute('SELECT id, start_date, deadline, end_date, image_filename, status, image_file_id, age_mode FROM challenges ORDER BY id DESC').fetchall()
         updated = []
         for r in rows:
-            ch_id, start_date, deadline, end_date, image_filename, status = r
+            ch_id, start_date, deadline, end_date, image_filename, status, image_file_id, age_mode = r
             cur_status = _compute_challenge_status(start_date, deadline, end_date)
             if cur_status != status:
                 try:
@@ -542,7 +550,7 @@ def get_all_challenges():
                     status = cur_status
                 except Exception:
                     status = cur_status
-            updated.append((ch_id, start_date, deadline, end_date, image_filename, status))
+            updated.append((ch_id, start_date, deadline, end_date, image_filename, status, image_file_id, age_mode))
         return updated
 
 def delete_challenge(ch_id: int) -> int:
@@ -611,10 +619,10 @@ def remove_player(player_id):
 # --- Challenge entries helpers ---
 def get_challenge_by_id(ch_id: int):
     with closing(sqlite3.connect(DB_NAME)) as conn:
-        row = conn.execute('SELECT id, start_date, deadline, end_date, image_filename, status, image_file_id FROM challenges WHERE id = ?', (ch_id,)).fetchone()
+        row = conn.execute('SELECT id, start_date, deadline, end_date, image_filename, status, image_file_id, age_mode FROM challenges WHERE id = ?', (ch_id,)).fetchone()
         if not row:
             return row
-        cid, start_date, deadline, end_date, image_filename, status, image_file_id = row
+        cid, start_date, deadline, end_date, image_filename, status, image_file_id, age_mode = row
         cur_status = _compute_challenge_status(start_date, deadline, end_date)
         try:
             if cur_status != status:
@@ -623,7 +631,7 @@ def get_challenge_by_id(ch_id: int):
                 status = cur_status
         except Exception:
             pass
-        return (cid, start_date, deadline, end_date, image_filename, status, image_file_id)
+        return (cid, start_date, deadline, end_date, image_filename, status, image_file_id, age_mode)
 
 def challenge_get_entry(challenge_id: int, user_id: int):
     with closing(sqlite3.connect(DB_NAME)) as conn:
@@ -779,6 +787,15 @@ def update_player(player_id, name, position, club, nation, age, price):
             cursor = conn.execute(
                 'UPDATE players SET name = ?, position = ?, club = ?, nation = ?, age = ?, price = ? WHERE id = ?',
                 (name, position, club, nation, age, price, player_id)
+            )
+            return cursor.rowcount > 0
+
+def update_player_price(player_id: int, price: int) -> bool:
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            cursor = conn.execute(
+                'UPDATE players SET price = ? WHERE id = ?',
+                (price, player_id)
             )
             return cursor.rowcount > 0
 
