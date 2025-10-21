@@ -203,6 +203,131 @@ class ChangePlayerPriceCommand:
         return [text[i:i + self._CHUNK_LIMIT] for i in range(0, len(text), self._CHUNK_LIMIT)]
 
 
+class CheckChannelCommand:
+    WAITING_LIST: int = 40100
+    _CHUNK_LIMIT = 3500
+    _USERNAME_RE = re.compile(r'^[a-zA-Z0-9_]{5,32}$')
+
+    def __init__(self, db_gateway=db, channel_username: str = '@goalevaya'):
+        self._db = db_gateway
+        self._channel_username = channel_username
+
+    def build_handler(self) -> ConversationHandler:
+        return ConversationHandler(
+            entry_points=[CommandHandler('check_channel', self.start)],
+            states={
+                self.WAITING_LIST: [
+                    MessageHandler(filters.TEXT & (~filters.COMMAND), self.process_list)
+                ],
+            },
+            fallbacks=[CommandHandler('cancel', self.cancel)],
+            allow_reentry=True,
+            name="check_channel_conv",
+            persistent=False,
+        )
+
+    async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        if not await admin_only(update, context):
+            return ConversationHandler.END
+        prompt = (
+            "Введи список никнеймов, каждый с новой строки. Пример:\n"
+            "@nickname1\n"
+            "@nickname2\n"
+            "@nickname3\n\n"
+            "После получения списка я проверю, подписан ли каждый из них на канал t.me/goalevaya.\n"
+            "Отправь /cancel для отмены."
+        )
+        await update.message.reply_text(prompt)
+        context.user_data.pop('check_channel_usernames', None)
+        return self.WAITING_LIST
+
+    async def process_list(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        if not await admin_only(update, context):
+            return ConversationHandler.END
+        raw_text = (update.message.text or '').strip()
+        usernames = self._extract_usernames(raw_text)
+        if not usernames:
+            await update.message.reply_text(
+                "Не удалось распознать никнеймы. Убедись, что каждый ник на отдельной строке и начинается с @."
+            )
+            return self.WAITING_LIST
+
+        await update.message.reply_text("Проверяю подписку, подожди…")
+
+        rows = []
+        for username in usernames:
+            row = self._db.get_user_by_username(username)
+            if not row:
+                lowered = username.lower()
+                if lowered != username:
+                    row = self._db.get_user_by_username(lowered)
+            if not row:
+                rows.append(f"@{username} — пользователь не найден в базе бота.")
+                continue
+            telegram_id = row[0]
+            try:
+                member = await context.bot.get_chat_member(self._channel_username, telegram_id)
+                subscribed = self._is_active_member(member)
+                if subscribed:
+                    rows.append(f"@{username} — подписан ✅")
+                else:
+                    rows.append(f"@{username} — не подписан ❌")
+            except Exception as error:
+                if self._is_user_missing_error(error):
+                    rows.append(f"@{username} — не подписан ❌")
+                else:
+                    message = getattr(error, 'message', None) or getattr(error, 'description', None) or str(error)
+                    rows.append(f"@{username} — ошибка проверки: {message}")
+
+        response = ["Результаты проверки подписки на канал t.me/goalevaya:", ""]
+        response.extend(rows)
+        text = "\n".join(response)
+        for chunk in self._chunk_text(text):
+            await update.message.reply_text(chunk)
+        return ConversationHandler.END
+
+    async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        await update.message.reply_text("Проверка подписки отменена.")
+        return ConversationHandler.END
+
+    def _extract_usernames(self, text: str) -> List[str]:
+        usernames = []
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            if line.startswith('@'):
+                line = line[1:]
+            line = re.sub(r'^https?://t\.me/', '', line, flags=re.IGNORECASE)
+            if self._USERNAME_RE.match(line):
+                usernames.append(line)
+        return usernames
+
+    def _chunk_text(self, text: str) -> List[str]:
+        if len(text) <= self._CHUNK_LIMIT:
+            return [text]
+        return [text[i:i + self._CHUNK_LIMIT] for i in range(0, len(text), self._CHUNK_LIMIT)]
+
+    # eslint-disable-next-line class-methods-use-this
+    def _is_active_member(self, member) -> bool:
+        if member is None:
+            return False
+
+        status = getattr(member, 'status', None)
+        if status == 'restricted':
+            return bool(getattr(member, 'is_member', False))
+
+        return status in {'creator', 'administrator', 'member'}
+
+    # eslint-disable-next-line class-methods-use-this
+    def _is_user_missing_error(self, error: Exception) -> bool:
+        description = getattr(error, 'description', None) or getattr(error, 'message', None) or str(error)
+        if not isinstance(description, str):
+            return False
+        lowered = description.lower()
+        return 'user not found' in lowered or 'user_not_participant' in lowered or 'not a member' in lowered
+
+
 async def add_image_shop_cancel(update, context):
     await update.message.reply_text("РћР±РЅРѕРІР»РµРЅРёРµ РјР°РіР°Р·РёРЅР° РѕС‚РјРµРЅРµРЅРѕ.")
     return ConversationHandler.END

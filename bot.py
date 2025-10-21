@@ -31,7 +31,7 @@ from handlers.user_handlers import start, hc, IMAGES_DIR, \
 from handlers.user_handlers import shop, shop_item_callback
 from handlers.user_handlers import subscribe_stars, precheckout_callback, successful_payment_handler
 from handlers.admin_handlers import addhc2 as addhc, send_results, show_users, list_active_subscribers
-from handlers.admin_handlers import ChangePlayerPriceCommand
+from handlers.admin_handlers import ChangePlayerPriceCommand, CheckChannelCommand
 from handlers.admin_handlers import list_challenges, delete_challenge_cmd
 from handlers.admin_handlers import challenge_rosters_cmd
 from handlers.show_hc_users import show_hc_users
@@ -222,6 +222,7 @@ async def on_startup(app):
     admin_commands.append(BotCommand("message_users", "рассылка по списку пользователей"))
     admin_commands.append(BotCommand("list_active_subscribers", "показать активных подписчиков"))
     admin_commands.append(BotCommand("change_player_price", "изменить стоимость игроков"))
+    admin_commands.append(BotCommand("check_channel", "проверить подписку на t.me/goalevaya"))
     admin_commands.append(BotCommand("refresh_commands", "обновить меню команд"))
     try:
         # Очистим команды на всякий случай (default и ru)
@@ -645,15 +646,16 @@ if __name__ == '__main__':
             return
         text = (
             "<b>Админские команды</b>\n\n"
-            "<b>Управление пользователями:</b>\n" 
+            "<b>Управление пользователями:</b>\n"
             "• /show_users — список пользователей и подписок\n"
             "• /show_hc_users — пользователи с балансом HC > 0\n"
-            "• /list_active_subscribers — активные подписчики, баланс и окончание подписки\n"
-            "• /addhc — начислить HC пользователю \n"
+            "• /list_active_subscribers — активные подписчики и окончание подписки\n"
+            "• /addhc — начислить HC пользователю\n"
             "• /broadcast_subscribers — рассылка всем активным подписчикам к указанным дате и времени (админ)\n\n"
             "• /message_user — отправить сообщение одному пользователю по @username или ID (с подтверждением и временем МСК)\n"
             "• /message_users — рассылка по списку пользователей (текст, расписание и картинка)\n"
-            "• /block_user — заблокировать пользователя (ID + @username + пароль + подтверждение)\n\n"
+            "• /block_user — заблокировать пользователя (ID + @username + пароль + подтверждение)\n"
+            "• /check_channel — проверить подписку пользователей на канал t.me/goalevaya\n\n"
             "<b>Управление турами:</b>\n"
             "• /send_results — разослать результаты тура\n"
             "• /set_budget — установить бюджет тура\n"
@@ -1096,6 +1098,10 @@ if __name__ == '__main__':
     change_player_price_command = ChangePlayerPriceCommand()
     change_player_price_conv = change_player_price_command.build_handler()
     app.add_handler(change_player_price_conv)
+
+    check_channel_command = CheckChannelCommand()
+    check_channel_conv = check_channel_command.build_handler()
+    app.add_handler(check_channel_conv)
 
     edit_player_conv = ConversationHandler(
         entry_points=[CommandHandler('edit_player', edit_player_start)],
