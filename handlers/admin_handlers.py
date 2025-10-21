@@ -1,16 +1,13 @@
-﻿from telegram import Update, InputFile
-from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, MessageHandler, filters
-from config import ADMIN_ID
+﻿from telegram import Update, InputFile, InlineKeyboardButton, InlineKeyboardMarkup, Bot\nfrom telegram.ext import ContextTypes, ConversationHandler, CommandHandler, MessageHandler, filters\nfrom config import ADMIN_ID
 import db
 import os
 import json
 import logging
 from utils import is_admin, send_message_to_users, IMAGES_DIR, TOUR_IMAGE_PATH_FILE, CHALLENGE_IMAGE_PATH_FILE, logger
-from telegram import Update, Bot
-from telegram.ext import ContextTypes, CommandHandler, MessageHandler, filters, ConversationHandler
 import asyncio
 import datetime
 import re
+import uuid
 from typing import Dict, Iterable, List, Tuple
 
 def _is_user_blocked_safe(user_id: int) -> bool:
@@ -83,6 +80,290 @@ async def add_image_shop_photo(update, context):
     return ConversationHandler.END
 
 # --- /change_player_price ---
+
+
+class ChannelBonusCommand:
+    WAITING_LIST: int = 40200
+    WAITING_AMOUNT: int = 40201
+
+    def __init__(self, db_gateway=db, channel_username: str = '@goalevaya', admin_id: int = ADMIN_ID):
+        self._db = db_gateway
+        self._channel_username = channel_username
+        self._admin_id = admin_id
+
+    def build_handler(self) -> ConversationHandler:
+        return ConversationHandler(
+            entry_points=[CommandHandler('channel_bonus', self.start)],
+            states={
+                self.WAITING_LIST: [MessageHandler(filters.TEXT & (~filters.COMMAND), self.collect_usernames)],
+                self.WAITING_AMOUNT: [MessageHandler(filters.TEXT & (~filters.COMMAND), self.collect_amount)],
+            },
+            fallbacks=[CommandHandler('cancel', self.cancel)],
+            allow_reentry=True,
+            name='channel_bonus_conv',
+            persistent=False,
+        )
+
+    def build_callback_handler(self) -> CallbackQueryHandler:
+        return CallbackQueryHandler(self.handle_callback, pattern=r'^channel_bonus:')
+
+    async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        if not await admin_only(update, context):
+            return ConversationHandler.END
+        context.user_data['channel_bonus'] = {}
+        await update.message.reply_text(
+            'Пришли список никнеймов, каждый с новой строки. Пример:
+'
+            '@nickname1
+@nickname2
+@nickname3
+
+'
+            'После получения списка затем укажи размер бонуса, и я отправлю сообщения только этим пользователям.
+'
+            'Отправь /cancel для отмены.'
+        )
+        return self.WAITING_LIST
+
+    async def collect_usernames(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        if not await admin_only(update, context):
+            return ConversationHandler.END
+        raw_text = (update.message.text or '').strip()
+        usernames = self._extract_usernames(raw_text)
+        if not usernames:
+            await update.message.reply_text('Не удалось распознать никнеймы. Убедись, что каждый ник на отдельной строке и начинается с символа @.')
+            return self.WAITING_LIST
+
+        entries: List[Dict[str, str]] = []
+        missing: List[str] = []
+        duplicates: List[str] = []
+        already_rewarded: List[str] = []
+        seen: set[str] = set()
+
+        for original in usernames:
+            normalized = original.lower()
+            if normalized in seen:
+                duplicates.append(original)
+                continue
+            seen.add(normalized)
+            row = self._db.get_user_by_username_insensitive(original)
+            if not row:
+                missing.append(original)
+                continue
+            user_id = row[0]
+            username = row[1] or original
+            eligible = not self._db.has_channel_bonus_reward(user_id)
+            if not eligible:
+                already_rewarded.append(original)
+            entries.append({
+                'input': original,
+                'username': username,
+                'user_id': user_id,
+                'eligible': eligible,
+            })
+
+        if not entries:
+            await update.message.reply_text('Не нашлось пользователей среди указанных никнеймов. Команда завершена.')
+            context.user_data.pop('channel_bonus', None)
+            return ConversationHandler.END
+
+        eligible_count = sum(1 for item in entries if item['eligible'])
+        summary_lines = [
+            f'Всего никнеймов: {len(usernames)}',
+            f'Найдено в базе: {len(entries)}',
+            f'Доступно для начисления: {eligible_count}',
+        ]
+        if missing:
+            summary_lines.append('Не найдены в базе: ' + ', '.join(f'@{name}' for name in missing))
+        if duplicates:
+            summary_lines.append('Продублированы: ' + ', '.join(f'@{name}' for name in duplicates))
+        if already_rewarded:
+            summary_lines.append('Уже получали бонус: ' + ', '.join(f'@{name}' for name in already_rewarded))
+
+        await update.message.reply_text('
+'.join(summary_lines) + '
+
+Укажи размер бонуса (целое число HC).')
+
+        context.user_data['channel_bonus'] = {
+            'entries': entries,
+            'missing': missing,
+            'duplicates': duplicates,
+            'already_rewarded': already_rewarded,
+        }
+        return self.WAITING_AMOUNT
+
+    async def collect_amount(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        if not await admin_only(update, context):
+            return ConversationHandler.END
+        data = context.user_data.get('channel_bonus') or {}
+        entries = data.get('entries') or []
+        if not entries:
+            await update.message.reply_text('Контекст потерян. Начни заново: /channel_bonus.')
+            return ConversationHandler.END
+
+        amount_text = (update.message.text or '').strip()
+        if not amount_text.isdigit():
+            await update.message.reply_text('Размер бонуса должен быть положительным целым числом. Попробуй ещё раз.')
+            return self.WAITING_AMOUNT
+        amount = int(amount_text)
+        if amount <= 0:
+            await update.message.reply_text('Размер бонуса должен быть больше нуля. Попробуй ещё раз.')
+            return self.WAITING_AMOUNT
+
+        eligible_entries = [item for item in entries if item['eligible']]
+        if not eligible_entries:
+            await update.message.reply_text('Все перечисленные пользователи уже получали такой бонус ранее. Начислять нечего.')
+            context.user_data.pop('channel_bonus', None)
+            return ConversationHandler.END
+
+        delivered: List[str] = []
+        failed: List[str] = []
+
+        for entry in eligible_entries:
+            user_id = entry['user_id']
+            input_username = entry['input']
+            try:
+                self._db.clear_channel_bonus_requests(user_id)
+                token = uuid.uuid4().hex
+                allowed_by = update.effective_user.id if update.effective_user else None
+                self._db.create_channel_bonus_request(token, user_id, amount, allowed_by)
+                text = self._build_bonus_message(amount)
+                keyboard = InlineKeyboardMarkup([[InlineKeyboardButton('Проверить подписку', callback_data=f'channel_bonus:{token}')]])
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text=text,
+                    parse_mode='HTML',
+                    disable_web_page_preview=True,
+                    reply_markup=keyboard
+                )
+                delivered.append(f'@{input_username}')
+            except Exception as error:
+                logger.error('Failed to send channel bonus message.', exc_info=True)
+                failed.append(f'@{input_username}: {error}')
+
+        summary = ['Рассылка завершена.']
+        if delivered:
+            summary.append('Сообщения доставлены: ' + ', '.join(delivered))
+        if data.get('already_rewarded'):
+            summary.append('Уже получали бонус: ' + ', '.join(f'@{name}' for name in data['"already_rewarded"']))
+        if data.get('missing'):
+            summary.append('Не найдены в базе: ' + ', '.join(f'@{name}' for name in data['"missing"']))
+        if failed:
+            summary.append('Не удалось отправить: ' + ', '.join(failed))
+
+        await update.message.reply_text('
+'.join(summary))
+        context.user_data.pop('channel_bonus', None)
+        return ConversationHandler.END
+
+    async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        await update.message.reply_text('Рассылка бонуса отменена.')
+        context.user_data.pop('channel_bonus', None)
+        return ConversationHandler.END
+
+    async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        query = update.callback_query
+        await query.answer()
+        token = (query.data or '').split(':', 1)[-1]
+        request = self._db.get_channel_bonus_request(token)
+        if not request:
+            await self._safe_edit(query, 'Эта ссылка больше недействительна.')
+            return
+
+        user_id = request['user_id']
+        amount = request['amount']
+        status = request['status']
+
+        if query.from_user.id != user_id:
+            await query.answer('Эта кнопка предназначена не для вас.', show_alert=True)
+            return
+
+        if status == 'rewarded':
+            await self._safe_edit(query, 'Бонус уже начислен. Спасибо!')
+            return
+        if status != 'pending':
+            await self._safe_edit(query, 'Эта ссылка больше недоступна.')
+            return
+
+        try:
+            member = await context.bot.get_chat_member(self._channel_username, user_id)
+            subscribed = self._is_active_member(member)
+        except Exception as error:
+            if self._is_user_missing_error(error):
+                subscribed = False
+            else:
+                logger.error('Failed to verify subscription for channel bonus.', exc_info=True)
+                await query.answer('Не удалось проверить подписку. Попробуйте позже.', show_alert=True)
+                return
+
+        if not subscribed:
+            keyboard = InlineKeyboardMarkup([[InlineKeyboardButton('Проверить подписку', callback_data=f'channel_bonus:{token}')]])
+            await self._safe_edit(query, 'Кажется, вы ещё не подписались на канал. Подпишитесь и нажмите кнопку ещё раз.', keyboard)
+            return
+
+        result = self._db.mark_channel_bonus_rewarded(token)
+        if not result or result.get('status') != 'rewarded':
+            await self._safe_edit(query, 'Эта ссылка больше недоступна.')
+            return
+
+        self._db.update_hc_balance(user_id, amount)
+        success_text = f'Бонус +{amount} HC начислен! Благодарим за подписку 💛'
+        await self._safe_edit(query, success_text)
+
+        username = query.from_user.username or ''
+        label = f'@{username}' if username else f'id {user_id}'
+        admin_message = f'Пользователь {label} получил +{amount} HC за подписку на канал.'
+        try:
+            await context.bot.send_message(chat_id=self._admin_id, text=admin_message)
+        except Exception:
+            logger.error('Failed to notify admins about channel bonus reward.', exc_info=True)
+
+    def _extract_usernames(self, raw_text: str) -> List[str]:
+        usernames: List[str] = []
+        for line in raw_text.splitlines():
+            value = line.strip()
+            if not value:
+                continue
+            if value.startswith('@'):
+                value = value[1:]
+            value = re.sub(r'^https?://t\.me/', '', value, flags=re.IGNORECASE)
+            if self._USERNAME_RE.match(value):
+                usernames.append(value)
+        return usernames
+
+    def _build_bonus_message(self, amount: int) -> str:
+        return (
+            'Дорогой менеджер, кажется, вы ещё не с нами в нашем <a href="https://t.me/goalevaya">телеграм-канале Голевая</a> 💛
+
+'
+            'Там мы делимся анонсами, полезными советами и новостями о драфте — всё, чтобы играть было ещё интереснее. '
+            f'Будем рады видеть вас в команде! В знак благодарности за подписку на канал даём +{amount} HC на ваш счёт 🎁'
+        )
+
+    # eslint-disable-next-line class-methods-use-this
+    def _is_active_member(self, member) -> bool:
+        if member is None:
+            return False
+        status = getattr(member, 'status', None)
+        if status == 'restricted':
+            return bool(getattr(member, 'is_member', False))
+        return status in {'creator', 'administrator', 'member'}
+
+    # eslint-disable-next-line class-methods-use-this
+    def _is_user_missing_error(self, error: Exception) -> bool:
+        description = getattr(error, 'description', None) or getattr(error, 'message', None) or str(error)
+        if not isinstance(description, str):
+            return False
+        lowered = description.lower()
+        return 'user not found' in lowered or 'user_not_participant' in lowered or 'chat member not found' in lowered
+
+    async def _safe_edit(self, query, text: str, keyboard: InlineKeyboardMarkup | None = None) -> None:
+        try:
+            await query.edit_message_text(text, parse_mode='HTML', reply_markup=keyboard)
+        except Exception:
+            await query.message.reply_text(text, parse_mode='HTML', reply_markup=keyboard)
+
 class ChangePlayerPriceCommand:
     WAITING_INPUT: int = 40010
     _LINE_PATTERN = re.compile(r'^\s*(\d+)\s*:\s*(\d+)\s*$')
@@ -256,11 +537,11 @@ class CheckChannelCommand:
 
         rows = []
         for username in usernames:
-            row = self._db.get_user_by_username(username)
+            row = self._db.get_user_by_username_insensitive(username)
             if not row:
                 lowered = username.lower()
                 if lowered != username:
-                    row = self._db.get_user_by_username(lowered)
+                    row = self._db.get_user_by_username_insensitive(lowered)
             if not row:
                 rows.append(f"@{username} — пользователь не найден в базе бота.")
                 continue
@@ -2642,3 +2923,4 @@ async def referral_limit_decision_callback(update: Update, context: ContextTypes
         await query.edit_message_text(response)
     except Exception:
         await context.bot.send_message(chat_id=update.effective_chat.id, text=response)
+

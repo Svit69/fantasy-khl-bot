@@ -102,6 +102,27 @@ def init_db():
                     price INTEGER NOT NULL
                 )
             ''')
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS channel_bonus_requests (
+                    token TEXT PRIMARY KEY,
+                    user_id INTEGER NOT NULL,
+                    amount INTEGER NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    created_at TEXT NOT NULL,
+                    rewarded_at TEXT,
+                    allowed_by INTEGER,
+                    FOREIGN KEY(user_id) REFERENCES users(telegram_id)
+                )
+            ''')
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS channel_bonus_rewards (
+                    user_id INTEGER PRIMARY KEY,
+                    rewarded_at TEXT NOT NULL,
+                    amount INTEGER NOT NULL,
+                    token TEXT,
+                    FOREIGN KEY(user_id) REFERENCES users(telegram_id)
+                )
+            ''')
             # Таблица состава на тур
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS tour_roster (
@@ -254,6 +275,12 @@ def get_user_by_username(username):
     with closing(sqlite3.connect(DB_NAME)) as conn:
         return conn.execute('SELECT * FROM users WHERE username = ?', (username,)).fetchone()
 
+def get_user_by_username_insensitive(username):
+    if not username:
+        return None
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        return conn.execute('SELECT * FROM users WHERE LOWER(username) = LOWER(?)', (username,)).fetchone()
+
 def get_user_by_id(telegram_id):
     with closing(sqlite3.connect(DB_NAME)) as conn:
         return conn.execute('SELECT * FROM users WHERE telegram_id = ?', (telegram_id,)).fetchone()
@@ -294,6 +321,85 @@ def update_hc_balance(telegram_id, amount):
     with closing(sqlite3.connect(DB_NAME)) as conn:
         with conn:
             conn.execute('UPDATE users SET hc_balance = hc_balance + ? WHERE telegram_id = ?', (amount, telegram_id))
+
+def has_channel_bonus_reward(user_id: int) -> bool:
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        row = conn.execute('SELECT 1 FROM channel_bonus_rewards WHERE user_id = ?', (user_id,)).fetchone()
+        return bool(row)
+
+
+def clear_channel_bonus_requests(user_id: int) -> None:
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            conn.execute('DELETE FROM channel_bonus_requests WHERE user_id = ? AND status = ?', (user_id, 'pending'))
+
+
+def create_channel_bonus_request(token: str, user_id: int, amount: int, allowed_by: int | None) -> None:
+    now = datetime.datetime.utcnow().isoformat()
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            conn.execute(
+                """
+                INSERT INTO channel_bonus_requests (token, user_id, amount, status, created_at, allowed_by)
+                VALUES (?, ?, ?, 'pending', ?, ?)
+                """,
+                (token, user_id, amount, now, allowed_by)
+            )
+
+
+def get_channel_bonus_request(token: str):
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            """
+            SELECT token, user_id, amount, status, created_at, rewarded_at, allowed_by
+            FROM channel_bonus_requests
+            WHERE token = ?
+            """,
+            (token,)
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def mark_channel_bonus_rewarded(token: str):
+    now = datetime.datetime.utcnow().isoformat()
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        conn.row_factory = sqlite3.Row
+        with conn:
+            row = conn.execute(
+                'SELECT user_id, amount, status FROM channel_bonus_requests WHERE token = ?',
+                (token,)
+            ).fetchone()
+            if not row:
+                return None
+            user_id = row['user_id']
+            amount = row['amount']
+            status = row['status']
+            if status != 'pending':
+                return {'user_id': user_id, 'amount': amount, 'status': status}
+            already_rewarded = conn.execute(
+                'SELECT 1 FROM channel_bonus_rewards WHERE user_id = ?',
+                (user_id,)
+            ).fetchone()
+            if already_rewarded:
+                conn.execute(
+                    'UPDATE channel_bonus_requests SET status = ?, rewarded_at = ? WHERE token = ?',
+                    ('duplicate', now, token)
+                )
+                return {'user_id': user_id, 'amount': amount, 'status': 'duplicate'}
+            conn.execute(
+                'UPDATE channel_bonus_requests SET status = ?, rewarded_at = ? WHERE token = ?',
+                ('rewarded', now, token)
+            )
+            conn.execute(
+                """
+                INSERT INTO channel_bonus_rewards (user_id, rewarded_at, amount, token)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(user_id) DO NOTHING
+                """,
+                (user_id, now, amount, token)
+            )
+            return {'user_id': user_id, 'amount': amount, 'status': 'rewarded'}
 
 def block_user(telegram_id: int, blocked_by: int = None, reason: str = None) -> None:
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
