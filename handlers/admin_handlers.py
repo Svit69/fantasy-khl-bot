@@ -1,4 +1,6 @@
-﻿from telegram import Update, InputFile, InlineKeyboardButton, InlineKeyboardMarkup, Bot\nfrom telegram.ext import ContextTypes, ConversationHandler, CommandHandler, MessageHandler, filters\nfrom config import ADMIN_ID
+from telegram import Update, InputFile, InlineKeyboardButton, InlineKeyboardMarkup, Bot
+from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, MessageHandler, filters
+from config import ADMIN_ID
 import db
 import os
 import json
