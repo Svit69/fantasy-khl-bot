@@ -113,18 +113,15 @@ class ChannelBonusCommand:
         if not await admin_only(update, context):
             return ConversationHandler.END
         context.user_data['channel_bonus'] = {}
-        await update.message.reply_text(
-            'Пришли список никнеймов, каждый с новой строки. Пример:
-'
-            '@nickname1
-@nickname2
-@nickname3
-
-'
-            'После получения списка затем укажи размер бонуса, и я отправлю сообщения только этим пользователям.
-'
+        prompt = (
+            'Пришли список никнеймов, каждый с новой строки. Пример:\n'
+            '@nickname1\n'
+            '@nickname2\n'
+            '@nickname3\n\n'
+            'После получения списка затем укажи размер бонуса, и я отправлю сообщения только этим пользователям.\n'
             'Отправь /cancel для отмены.'
         )
+        await update.message.reply_text(prompt)
         return self.WAITING_LIST
 
     async def collect_usernames(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -182,10 +179,9 @@ class ChannelBonusCommand:
         if already_rewarded:
             summary_lines.append('Уже получали бонус: ' + ', '.join(f'@{name}' for name in already_rewarded))
 
-        await update.message.reply_text('
-'.join(summary_lines) + '
-
-Укажи размер бонуса (целое число HC).')
+        await update.message.reply_text(
+            '\n'.join(summary_lines) + '\n\nУкажи размер бонуса (целое число HC).'
+        )
 
         context.user_data['channel_bonus'] = {
             'entries': entries,
@@ -254,8 +250,9 @@ class ChannelBonusCommand:
         if failed:
             summary.append('Не удалось отправить: ' + ', '.join(failed))
 
-        await update.message.reply_text('
-'.join(summary))
+        await update.message.reply_text(
+            '\n'.join(summary)
+        )
         context.user_data.pop('channel_bonus', None)
         return ConversationHandler.END
 
@@ -336,13 +333,10 @@ class ChannelBonusCommand:
 
     def _build_bonus_message(self, amount: int) -> str:
         return (
-            'Дорогой менеджер, кажется, вы ещё не с нами в нашем <a href="https://t.me/goalevaya">телеграм-канале Голевая</a> 💛
-
-'
-            'Там мы делимся анонсами, полезными советами и новостями о драфте — всё, чтобы играть было ещё интереснее. '
+            'Дорогой менеджер, кажется, вы ещё не с нами в нашем <a href=\"https://t.me/goalevaya\">телеграм-канале Голевая</a> 💛\n\n'
+            'Там мы делимся анонсами, полезными советами и новостями о драфте — всё, чтобы играть было ещё интереснее. ' 
             f'Будем рады видеть вас в команде! В знак благодарности за подписку на канал даём +{amount} HC на ваш счёт 🎁'
         )
-
     # eslint-disable-next-line class-methods-use-this
     def _is_active_member(self, member) -> bool:
         if member is None:
