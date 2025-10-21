@@ -87,6 +87,7 @@ async def add_image_shop_photo(update, context):
 class ChannelBonusCommand:
     WAITING_LIST: int = 40200
     WAITING_AMOUNT: int = 40201
+    _USERNAME_RE = re.compile(r'^[a-zA-Z0-9_]{5,32}$')
 
     def __init__(self, db_gateway=db, channel_username: str = '@goalevaya', admin_id: int = ADMIN_ID):
         self._db = db_gateway
