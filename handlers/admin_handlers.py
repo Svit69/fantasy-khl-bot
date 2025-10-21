@@ -481,6 +481,130 @@ class ChangePlayerPriceCommand:
         return [text[i:i + self._CHUNK_LIMIT] for i in range(0, len(text), self._CHUNK_LIMIT)]
 
 
+class ChangePlayerAgeCommand:
+    WAITING_INPUT: int = 40011
+    _LINE_PATTERN = re.compile(r'^\s*(\d+)\s*:\s*(\d+)\s*$')
+    _CHUNK_LIMIT = 3500
+    _MIN_AGE = 10
+    _MAX_AGE = 60
+
+    def __init__(self, db_gateway=db):
+        self._db = db_gateway
+
+    def build_handler(self) -> ConversationHandler:
+        return ConversationHandler(
+            entry_points=[CommandHandler('change_player_age', self.start)],
+            states={
+                self.WAITING_INPUT: [
+                    MessageHandler(filters.TEXT & (~filters.COMMAND), self.process_input)
+                ],
+            },
+            fallbacks=[CommandHandler('cancel', self.cancel)],
+            allow_reentry=True,
+            name="change_player_age_conv",
+            persistent=False,
+        )
+
+    async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        if not await admin_only(update, context):
+            return ConversationHandler.END
+        prompt = (
+            "Введи список игроков и новых возрастов в формате <code>id: возраст</code>, по одному на строку.\n"
+            "Например:\n"
+            "<code>323: 29</code>\n"
+            "<code>40: 31</code>\n"
+            "<code>24: 26</code>\n\n"
+            "Отправь /cancel для отмены."
+        )
+        await update.message.reply_text(prompt, parse_mode='HTML')
+        return self.WAITING_INPUT
+
+    async def process_input(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        if not await admin_only(update, context):
+            return ConversationHandler.END
+        raw_text = (update.message.text or '').strip()
+        if not raw_text:
+            await update.message.reply_text("Не удалось прочитать список. Укажи пары id: возраст.")
+            return self.WAITING_INPUT
+        try:
+            updates = self._parse_age_updates(raw_text)
+        except ValueError as err:
+            await update.message.reply_text(str(err))
+            return self.WAITING_INPUT
+        if not updates:
+            await update.message.reply_text("Не нашлось валидных строк с id и возрастом. Попробуй ещё раз.")
+            return self.WAITING_INPUT
+        try:
+            updated_players, missing_ids = self._apply_updates(updates.items())
+        except Exception as err:
+            await update.message.reply_text(f"Ошибка при обновлении возрастов: {err}")
+            return ConversationHandler.END
+        if missing_ids:
+            missing_str = ", ".join(str(pid) for pid in missing_ids)
+            await update.message.reply_text(f"Не найдены игроки с id: {missing_str}.")
+        if updated_players:
+            await self._send_player_summaries(update, updated_players)
+        else:
+            await update.message.reply_text("Ни одного возраста обновить не удалось.")
+        return ConversationHandler.END
+
+    async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        await update.message.reply_text("Обновление возрастов отменено.")
+        return ConversationHandler.END
+
+    def _parse_age_updates(self, raw_text: str) -> Dict[int, int]:
+        updates: Dict[int, int] = {}
+        for line_number, raw_line in enumerate(raw_text.splitlines(), start=1):
+            line = raw_line.strip()
+            if not line:
+                continue
+            match = self._LINE_PATTERN.match(line)
+            if not match:
+                raise ValueError(f"Строка {line_number} не распознана. Используй формат id: возраст.")
+            player_id = int(match.group(1))
+            age = int(match.group(2))
+            if age < self._MIN_AGE or age > self._MAX_AGE:
+                raise ValueError(
+                    f"Строка {line_number}: возраст должен быть в диапазоне {self._MIN_AGE}-{self._MAX_AGE} лет."
+                )
+            updates[player_id] = age
+        return updates
+
+    def _apply_updates(self, updates: Iterable[Tuple[int, int]]) -> Tuple[List[Tuple], List[int]]:
+        updated_players: List[Tuple] = []
+        missing_ids: List[int] = []
+        for player_id, age in updates:
+            try:
+                updated = self._db.update_player_age(player_id, age)
+            except Exception as err:
+                raise RuntimeError(f"игрок {player_id}: {err}") from err
+            if not updated:
+                missing_ids.append(player_id)
+                continue
+            player = self._db.get_player_by_id(player_id)
+            if player:
+                updated_players.append(player)
+            else:
+                missing_ids.append(player_id)
+        return updated_players, missing_ids
+
+    async def _send_player_summaries(self, update: Update, players: List[Tuple]) -> None:
+        header = "Обновлённые игроки:\n"
+        lines = [self._format_player(player) for player in players]
+        message = header + "\n".join(lines)
+        for chunk in self._chunk_text(message):
+            await update.message.reply_text(chunk)
+
+    def _format_player(self, player: Tuple) -> str:
+        player_id, name, position, club, nation, age, price = player
+        return f"{player_id}. {name} | {position} | {club} | {nation} | {age} лет | {price} HC"
+
+    def _chunk_text(self, text: str) -> List[str]:
+        if len(text) <= self._CHUNK_LIMIT:
+            return [text]
+        return [text[i:i + self._CHUNK_LIMIT] for i in range(0, len(text), self._CHUNK_LIMIT)]
+
+
 class CheckChannelCommand:
     WAITING_LIST: int = 40100
     _CHUNK_LIMIT = 3500

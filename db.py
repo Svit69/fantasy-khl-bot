@@ -905,6 +905,15 @@ def update_player_price(player_id: int, price: int) -> bool:
             )
             return cursor.rowcount > 0
 
+def update_player_age(player_id: int, age: int) -> bool:
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            cursor = conn.execute(
+                'UPDATE players SET age = ? WHERE id = ?',
+                (age, player_id)
+            )
+            return cursor.rowcount > 0
+
 # --- Турнирные туры ---
 def create_tour(name, start_date, deadline, end_date, status="создан"):
     with closing(sqlite3.connect(DB_NAME)) as conn:

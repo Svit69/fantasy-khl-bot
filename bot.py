@@ -31,7 +31,7 @@ from handlers.user_handlers import start, hc, IMAGES_DIR, \
 from handlers.user_handlers import shop, shop_item_callback
 from handlers.user_handlers import subscribe_stars, precheckout_callback, successful_payment_handler
 from handlers.admin_handlers import addhc2 as addhc, send_results, show_users, list_active_subscribers
-from handlers.admin_handlers import ChannelBonusCommand, ChangePlayerPriceCommand, CheckChannelCommand
+from handlers.admin_handlers import ChannelBonusCommand, ChangePlayerAgeCommand, ChangePlayerPriceCommand, CheckChannelCommand
 from handlers.admin_handlers import list_challenges, delete_challenge_cmd
 from handlers.admin_handlers import challenge_rosters_cmd
 from handlers.show_hc_users import show_hc_users
@@ -222,6 +222,7 @@ async def on_startup(app):
     admin_commands.append(BotCommand("message_users", "рассылка по списку пользователей"))
     admin_commands.append(BotCommand("list_active_subscribers", "показать активных подписчиков"))
     admin_commands.append(BotCommand("change_player_price", "изменить стоимость игроков"))
+    admin_commands.append(BotCommand("change_player_age", "изменить возраст игроков"))
     admin_commands.append(BotCommand("channel_bonus", "рассылка бонуса за подписку на канал"))
     admin_commands.append(BotCommand("check_channel", "проверить подписку на t.me/goalevaya"))
     admin_commands.append(BotCommand("refresh_commands", "обновить меню команд"))
@@ -675,6 +676,7 @@ if __name__ == '__main__':
             "• /add_player — добавить игрока\n"
             "• /edit_player — отредактировать игрока\n"
             "• /change_player_price — изменить стоимость игроков списком\n"
+            "• /change_player_age — изменить возраст игроков\n"
             "• /remove_player — удалить игрока\n\n"
             "<b>Управление челленджами:</b>\n"
             "• /list_challenges — список челленджей\n"
@@ -1101,6 +1103,10 @@ if __name__ == '__main__':
     change_player_price_conv = change_player_price_command.build_handler()
     app.add_handler(change_player_price_conv)
 
+    change_player_age_command = ChangePlayerAgeCommand()
+    change_player_age_conv = change_player_age_command.build_handler()
+    app.add_handler(change_player_age_conv)
+
     channel_bonus_command = ChannelBonusCommand()
     channel_bonus_conv = channel_bonus_command.build_handler()
     app.add_handler(channel_bonus_conv)
@@ -1166,6 +1172,7 @@ if __name__ == '__main__':
         BotCommand("broadcast_subscribers", "Рассылка подписчикам (админ)"),
         BotCommand("message_user", "Сообщение пользователю (админ)"),
         BotCommand("change_player_price", "Изменить стоимость игроков (админ)"),
+        BotCommand("change_player_age", "Изменить возраст игроков (админ)"),
         BotCommand("channel_bonus", "Рассылка бонуса за подписку на канал (админ)"),
     ]
 
