@@ -1134,6 +1134,7 @@ async def shop_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def challenge_build_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    age_mode = context.user_data.get('challenge_age_mode', 'default')
     try:
         cid = int(query.data.replace("challenge_build_", ""))
     except Exception:
