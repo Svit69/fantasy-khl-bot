@@ -886,7 +886,7 @@ if __name__ == '__main__':
         entry_points=[CommandHandler('send_challenge_image', send_challenge_image_start)],
         states={
             CHALLENGE_MODE: [
-                CallbackQueryHandler(challenge_mode_select, pattern=r"^challenge_mode_(?:default|under21)$"),
+                CallbackQueryHandler(challenge_mode_select, pattern=r"^challenge_mode_(?:default|under23)$"),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, challenge_mode_select),
             ],
             CHALLENGE_START: [MessageHandler(filters.TEXT & ~filters.COMMAND, challenge_input_start_date)],

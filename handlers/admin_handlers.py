@@ -1875,7 +1875,7 @@ async def list_challenges(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             status = r[5] if len(r) > 5 else ''
             image_file_id = r[6] if len(r) > 6 else ''
             age_mode = (r[7] if len(r) > 7 else 'default') or 'default'
-            mode_label = 'U21 only' if age_mode == 'under21' else 'regular'
+            mode_label = 'U23 only' if age_mode == 'under23' else 'regular'
             lines.append(
                 "id={id} | {status}\nmode: {mode}\nstart: {start}\ndeadline: {deadline}\nend: {end}\nimage: {image}\n-".format(
                     id=ch_id,

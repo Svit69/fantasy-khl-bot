@@ -1,13 +1,24 @@
 import os
 import datetime
 from typing import Optional
-from telegram import Update, InputFile, InlineKeyboardButton, InlineKeyboardMarkup
+
+from telegram import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
+    Update,
+)
 from telegram.ext import ContextTypes, ConversationHandler
 
 import db
 from utils import IMAGES_DIR, CHALLENGE_IMAGE_PATH_FILE
 from handlers.admin_handlers import (
-    CHALLENGE_MODE, CHALLENGE_START, CHALLENGE_DEADLINE, CHALLENGE_END, CHALLENGE_WAIT_IMAGE,
+    CHALLENGE_MODE,
+    CHALLENGE_START,
+    CHALLENGE_DEADLINE,
+    CHALLENGE_END,
+    CHALLENGE_WAIT_IMAGE,
 )
 
 try:
@@ -15,18 +26,23 @@ try:
 except Exception:
     ZoneInfo = None
 
+
 _MSK_FALLBACK = datetime.timezone(datetime.timedelta(hours=3))
+
 
 def _get_msk_timezone():
     if ZoneInfo is not None:
         try:
-            return ZoneInfo('Europe/Moscow')
+            return ZoneInfo("Europe/Moscow")
         except Exception:
             pass
     return _MSK_FALLBACK
 
+
 _MSK_TZ = _get_msk_timezone()
-_INPUT_EXAMPLE = '10.09.2025 12:00'
+_INPUT_EXAMPLE = "10.09.2025 12:00"
+_CANCEL_KEYBOARD = ReplyKeyboardMarkup([["/cancel"]], resize_keyboard=True)
+_CANCEL_REMOVE = ReplyKeyboardRemove()
 
 
 def _ensure_msk(dt: Optional[datetime.datetime]) -> Optional[datetime.datetime]:
@@ -41,15 +57,15 @@ def _ensure_msk(dt: Optional[datetime.datetime]) -> Optional[datetime.datetime]:
 
 
 def _parse_admin_datetime(value: str) -> Optional[datetime.datetime]:
-    text = (value or '').strip()
+    text = (value or "").strip()
     if not text:
         return None
     formats = (
-        '%d.%m.%Y %H:%M',
-        '%Y-%m-%d %H:%M',
-        '%Y-%m-%d %H:%M:%S',
-        '%Y-%m-%dT%H:%M',
-        '%Y-%m-%dT%H:%M:%S',
+        "%d.%m.%Y %H:%M",
+        "%Y-%m-%d %H:%M",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%dT%H:%M",
+        "%Y-%m-%dT%H:%M:%S",
     )
     for fmt in formats:
         try:
@@ -64,66 +80,87 @@ def _parse_admin_datetime(value: str) -> Optional[datetime.datetime]:
     return _ensure_msk(dt)
 
 
+def _reset_state(context: ContextTypes.DEFAULT_TYPE) -> None:
+    for key in ("challenge_mode", "challenge_start", "challenge_deadline", "challenge_end"):
+        context.user_data.pop(key, None)
+
+
 async def send_challenge_image_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     from handlers.admin_handlers import admin_only
+
     if not await admin_only(update, context):
         return ConversationHandler.END
-    for key in ('challenge_mode', 'challenge_start', 'challenge_deadline', 'challenge_end'):
-        context.user_data.pop(key, None)
-    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton('1) Regular mode', callback_data='challenge_mode_default'), InlineKeyboardButton('2) U21 mode', callback_data='challenge_mode_under21')]])
-    prompt_text = (
-        "Select challenge mode:\n"
-        "1 - regular (all players)\n"
-        "2 - U21 (only players aged 21 or younger)."
+    _reset_state(context)
+    keyboard = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("1) Обычный режим", callback_data="challenge_mode_default"),
+                InlineKeyboardButton("2) U23 режим", callback_data="challenge_mode_under23"),
+            ]
+        ]
     )
-    await update.message.reply_text(prompt_text, reply_markup=keyboard)
+    prompt_text = (
+        "Выберите режим челленджа:\n"
+        "1 — обычный (все игроки)\n"
+        "2 — U23 (только игроки не старше 23 лет)."
+    )
+    if update.message:
+        await update.message.reply_text(prompt_text, reply_markup=keyboard)
     return CHALLENGE_MODE
 
+
 async def challenge_mode_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = getattr(update, 'callback_query', None)
+    query = getattr(update, "callback_query", None)
     mode = None
     if query is not None:
-        data = (query.data or '').strip()
-        if data == 'challenge_mode_default':
-            mode = 'default'
-        elif data == 'challenge_mode_under21':
-            mode = 'under21'
+        data = (query.data or "").strip()
+        if data == "challenge_mode_default":
+            mode = "default"
+        elif data == "challenge_mode_under23":
+            mode = "under23"
         await query.answer()
     else:
-        text_value = (update.message.text or '').strip().lower()
-        if text_value in {'1', 'regular', 'default', 'standard'}:
-            mode = 'default'
-        elif text_value in {'2', 'u21', 'under21', '21'}:
-            mode = 'under21'
+        text_value = (update.message.text or "").strip().lower()
+        if text_value in {"1", "обычный", "regular", "default", "standard"}:
+            mode = "default"
+        elif text_value in {"2", "u23", "under23", "23"}:
+            mode = "under23"
     if mode is None:
-        prompt = 'Please select mode using buttons or send 1/2.'
+        prompt = "Пожалуйста, выберите режим с помощью кнопок или отправьте 1/2."
         if query is not None:
-            await query.message.reply_text(prompt)
-        else:
+            await query.answer(prompt, show_alert=True)
+        elif update.message:
             await update.message.reply_text(prompt)
         return CHALLENGE_MODE
-    context.user_data['challenge_mode'] = mode
-    summary = 'Mode: U21 only' if mode == 'under21' else 'Mode: regular'
-    next_prompt = 'Provide challenge start date/time in format like {example} (MSK).'.format(example=_INPUT_EXAMPLE)
+
+    context.user_data["challenge_mode"] = mode
+    summary = "Режим: только U23" if mode == "under23" else "Режим: обычный"
+    next_prompt = f"Укажите дату и время старта в формате {_INPUT_EXAMPLE} (МСК)."
+
     if query is not None:
         try:
             await query.edit_message_text(summary)
         except Exception:
             await query.message.reply_text(summary)
-        await query.message.reply_text(next_prompt)
+        await query.message.reply_text(next_prompt, reply_markup=_CANCEL_KEYBOARD)
     else:
-        await update.message.reply_text("{}\n{}".format(summary, next_prompt))
+        await update.message.reply_text(f"{summary}\n{next_prompt}", reply_markup=_CANCEL_KEYBOARD)
     return CHALLENGE_START
 
 
 async def challenge_input_start_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
     dt = _parse_admin_datetime(update.message.text)
     if not dt:
-        await update.message.reply_text(f'Неверная дата. Введите старт в формате {_INPUT_EXAMPLE} (МСК).')
+        await update.message.reply_text(
+            f"Не удалось распознать дату. Введите значение в формате {_INPUT_EXAMPLE} (МСК).",
+            reply_markup=_CANCEL_KEYBOARD,
+        )
         return CHALLENGE_START
-    context.user_data['challenge_start'] = dt.isoformat()
+
+    context.user_data["challenge_start"] = dt.isoformat()
     await update.message.reply_text(
-        f'Введите дату ДЕДЛАЙНА (позже старта) в формате {_INPUT_EXAMPLE} (МСК).'
+        f"Старт сохранён. Теперь отправьте дедлайн в формате {_INPUT_EXAMPLE} (МСК).",
+        reply_markup=_CANCEL_KEYBOARD,
     )
     return CHALLENGE_DEADLINE
 
@@ -131,15 +168,24 @@ async def challenge_input_start_date(update: Update, context: ContextTypes.DEFAU
 async def challenge_input_deadline(update: Update, context: ContextTypes.DEFAULT_TYPE):
     dl = _parse_admin_datetime(update.message.text)
     if not dl:
-        await update.message.reply_text(f'Неверная дата. Введите дедлайн в формате {_INPUT_EXAMPLE} (МСК).')
+        await update.message.reply_text(
+            f"Не удалось распознать дедлайн. Введите значение в формате {_INPUT_EXAMPLE} (МСК).",
+            reply_markup=_CANCEL_KEYBOARD,
+        )
         return CHALLENGE_DEADLINE
-    sd = _parse_admin_datetime(context.user_data.get('challenge_start', ''))
+
+    sd = _parse_admin_datetime(context.user_data.get("challenge_start", ""))
     if not sd or not (sd < dl):
-        await update.message.reply_text('Дедлайн должен быть позже старта. Введите корректную дату.')
+        await update.message.reply_text(
+            "Дедлайн должен быть позже старта. Повторите ввод.",
+            reply_markup=_CANCEL_KEYBOARD,
+        )
         return CHALLENGE_DEADLINE
-    context.user_data['challenge_deadline'] = dl.isoformat()
+
+    context.user_data["challenge_deadline"] = dl.isoformat()
     await update.message.reply_text(
-        f'Введите дату ОКОНЧАНИЯ (после дедлайна) в формате {_INPUT_EXAMPLE} (МСК).'
+        f"Дедлайн сохранён. Теперь укажите дату завершения в формате {_INPUT_EXAMPLE} (МСК).",
+        reply_markup=_CANCEL_KEYBOARD,
     )
     return CHALLENGE_END
 
@@ -147,24 +193,38 @@ async def challenge_input_deadline(update: Update, context: ContextTypes.DEFAULT
 async def challenge_input_end_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ed = _parse_admin_datetime(update.message.text)
     if not ed:
-        await update.message.reply_text(f'Неверная дата. Введите окончание в формате {_INPUT_EXAMPLE} (МСК).')
+        await update.message.reply_text(
+            f"Не удалось распознать дату завершения. Введите значение в формате {_INPUT_EXAMPLE} (МСК).",
+            reply_markup=_CANCEL_KEYBOARD,
+        )
         return CHALLENGE_END
-    sd = _parse_admin_datetime(context.user_data.get('challenge_start', ''))
-    dl = _parse_admin_datetime(context.user_data.get('challenge_deadline', ''))
+
+    sd = _parse_admin_datetime(context.user_data.get("challenge_start", ""))
+    dl = _parse_admin_datetime(context.user_data.get("challenge_deadline", ""))
     if not sd or not dl or not (dl < ed):
-        await update.message.reply_text('Окончание должно быть позже дедлайна. Введите корректную дату.')
+        await update.message.reply_text(
+            "Завершение должно быть позже дедлайна. Повторите ввод.",
+            reply_markup=_CANCEL_KEYBOARD,
+        )
         return CHALLENGE_END
-    context.user_data['challenge_end'] = ed.isoformat()
-    await update.message.reply_text('Отлично! Теперь отправьте изображение (постер) челленджа одним фото в ответ на это сообщение.')
+
+    context.user_data["challenge_end"] = ed.isoformat()
+    await update.message.reply_text(
+        "Отлично! Теперь отправьте изображение челленджа (как фото).",
+        reply_markup=_CANCEL_KEYBOARD,
+    )
     return CHALLENGE_WAIT_IMAGE
 
 
 async def send_challenge_image_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message or not update.message.photo:
-        await update.message.reply_text('Пожалуйста, отправьте фото.')
+    message = update.message
+    if not message or not message.photo:
+        if message:
+            await message.reply_text("Пожалуйста, отправьте изображение челленджа.", reply_markup=_CANCEL_KEYBOARD)
         return CHALLENGE_WAIT_IMAGE
+
     try:
-        photo = update.message.photo[-1]
+        photo = message.photo[-1]
         tg_file = await photo.get_file()
         os.makedirs(IMAGES_DIR, exist_ok=True)
         filename = f"challenge_{photo.file_unique_id}.jpg"
@@ -174,37 +234,42 @@ async def send_challenge_image_photo(update: Update, context: ContextTypes.DEFAU
         except Exception:
             await tg_file.download(custom_path=path)
         try:
-            with open(CHALLENGE_IMAGE_PATH_FILE, 'w', encoding='utf-8') as handle:
+            with open(CHALLENGE_IMAGE_PATH_FILE, "w", encoding="utf-8") as handle:
                 handle.write(filename)
         except Exception:
             pass
 
-        start_date = context.user_data.get('challenge_start')
-        deadline = context.user_data.get('challenge_deadline')
-        end_date = context.user_data.get('challenge_end')
-        age_mode = context.user_data.get('challenge_mode', 'default')
+        start_date = context.user_data.get("challenge_start")
+        deadline = context.user_data.get("challenge_deadline")
+        end_date = context.user_data.get("challenge_end")
+        age_mode = context.user_data.get("challenge_mode", "default")
         ch_id = db.create_challenge(
             start_date,
             deadline,
             end_date,
             filename,
-            getattr(photo, 'file_id', '') or '',
+            getattr(photo, "file_id", "") or "",
             age_mode,
         )
 
-        await update.message.reply_text(
-            f'Готово: челлендж создан (id={ch_id}). Изображение сохранено как `{filename}`.'
+        await message.reply_text(
+            f"Готово: челлендж зарегистрирован (id={ch_id}). Файл изображения: `{filename}`.",
+            parse_mode="Markdown",
+            reply_markup=_CANCEL_REMOVE,
         )
     except Exception as exc:
-        await update.message.reply_text(f'Не удалось обработать изображение: {exc}')
+        await message.reply_text(
+            f"Не удалось сохранить челлендж: {exc}",
+            reply_markup=_CANCEL_KEYBOARD,
+        )
     finally:
-        for key in ('challenge_mode', 'challenge_start', 'challenge_deadline', 'challenge_end'):
-            context.user_data.pop(key, None)
+        _reset_state(context)
     return ConversationHandler.END
 
 
 async def send_challenge_image_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text('Создание челленджа отменено.')
-    for key in ('challenge_mode', 'challenge_start', 'challenge_deadline', 'challenge_end'):
-        context.user_data.pop(key, None)
+    message = update.effective_message
+    if message:
+        await message.reply_text("Создание челленджа отменено.", reply_markup=_CANCEL_REMOVE)
+    _reset_state(context)
     return ConversationHandler.END

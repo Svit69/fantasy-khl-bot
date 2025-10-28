@@ -573,7 +573,7 @@ def create_challenge(start_date: str, deadline: str, end_date: str, image_filena
     deadline_value = dl.isoformat() if dl else (deadline or '')
     end_value = ed.isoformat() if ed else (end_date or '')
     normalized_mode = (age_mode or 'default').strip().lower()
-    if normalized_mode not in ('default', 'under21'):
+    if normalized_mode not in ('default', 'under23'):
         normalized_mode = 'default'
     with closing(sqlite3.connect(DB_NAME)) as conn:
         with conn:
