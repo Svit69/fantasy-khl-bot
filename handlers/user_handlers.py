@@ -1286,12 +1286,12 @@ async def challenge_team_input(update: Update, context: ContextTypes.DEFAULT_TYP
         and _challenge_player_allowed(p, age_mode)
     ]
     if not filtered:
-        await update.message.reply_text("������ �� ������� �� ��������� ��������. ��������� ����� �������.")
+        await update.message.reply_text("Игроки не найдены по текущим условиям. Уточните название команды.")
         if age_mode == 'under21':
             await update.message.reply_text('U21 mode only allows players aged 21 or younger.')
-        remaining = context.user_data.get('challenge_remaining_positions', ['����������', '��������', '�������'])
+        remaining = context.user_data.get('challenge_remaining_positions', ['нападающий', 'защитник', 'вратарь'])
         btns = [[InlineKeyboardButton(x, callback_data=f"challenge_pick_pos_{x}")] for x in remaining]
-        await update.message.reply_text("�������� �������:", reply_markup=InlineKeyboardMarkup(btns))
+        await update.message.reply_text("Выберите позицию:", reply_markup=InlineKeyboardMarkup(btns))
         return
     kb = []
     for p in filtered:
@@ -1302,7 +1302,7 @@ async def challenge_team_input(update: Update, context: ContextTypes.DEFAULT_TYP
             except Exception:
                 label += ' - age?'
         kb.append([InlineKeyboardButton(label, callback_data=f"challenge_pick_player_{p[0]}")])
-    await update.message.reply_text("�������� ������:", reply_markup=InlineKeyboardMarkup(kb))
+    await update.message.reply_text("Выберите игрока:", reply_markup=InlineKeyboardMarkup(kb))
 
 
 async def challenge_pick_player_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
