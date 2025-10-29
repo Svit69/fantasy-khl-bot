@@ -7,6 +7,101 @@ import db
 import os
 from utils import is_admin, IMAGES_DIR, logger, CHALLENGE_IMAGE_PATH_FILE
 import datetime
+import re
+
+try:
+    from zoneinfo import ZoneInfo
+except Exception:
+    ZoneInfo = None
+
+_MSK_TZ = ZoneInfo('Europe/Moscow') if ZoneInfo else datetime.timezone(datetime.timedelta(hours=3))
+
+_TEAM_ALIAS_VARIANTS = {
+    'РґСЂСЌРіРѕРЅСЃ': (
+        'РґСЂСЌРіРѕРЅСЃ',
+        'РґСЂР°РіРѕРЅСЃ',
+        'С€Р°РЅС…Р°Р№',
+        'С€Р°РЅС…Р°Р№СЃРєРёРµ РґСЂР°РєРѕРЅС‹',
+        'РґСЂР°РєРѕРЅС‹',
+        'РєСѓРЅСЊР»СѓРЅСЊ',
+        'РєСѓРЅСЊР»СѓРЅСЊ СЂРµРґ СЃС‚Р°СЂ',
+        'kunlun',
+        'kunlun red star',
+    ),
+}
+
+_TEAM_CANONICAL_LOOKUP = {}
+_TEAM_ALIAS_PATTERNS = []
+
+def _normalize_team_fragment(text: str) -> str:
+    text = (text or '').lower().replace('С‘', 'Рµ')
+    text = re.sub(r'[^0-9a-zР°-СЏ]+', ' ', text)
+    return re.sub(r'\s+', ' ', text).strip()
+
+for _canon_name, _variants in _TEAM_ALIAS_VARIANTS.items():
+    _canon_norm = _normalize_team_fragment(_canon_name)
+    if _canon_norm:
+        _TEAM_CANONICAL_LOOKUP[_canon_norm] = _canon_norm
+        _TEAM_ALIAS_PATTERNS.append((_canon_norm, _canon_norm))
+    for _variant in set(_variants):
+        _var_norm = _normalize_team_fragment(_variant)
+        if not _var_norm:
+            continue
+        _TEAM_CANONICAL_LOOKUP[_var_norm] = _canon_norm
+        _TEAM_CANONICAL_LOOKUP[_var_norm.replace(' ', '')] = _canon_norm
+        _TEAM_ALIAS_PATTERNS.append((_var_norm, _canon_norm))
+
+def _canonical_team_name(value: str) -> str:
+    norm = _normalize_team_fragment(value)
+    if not norm:
+        return ''
+    packed = norm.replace(' ', '')
+    if norm in _TEAM_CANONICAL_LOOKUP:
+        return _TEAM_CANONICAL_LOOKUP[norm]
+    if packed in _TEAM_CANONICAL_LOOKUP:
+        return _TEAM_CANONICAL_LOOKUP[packed]
+    for alias_norm, canonical_norm in _TEAM_ALIAS_PATTERNS:
+        if alias_norm and alias_norm in norm:
+            return canonical_norm
+        alias_compact = alias_norm.replace(' ', '')
+        if alias_compact and alias_compact in packed:
+            return canonical_norm
+    return norm
+
+def _team_matches(team_name: str, query: str) -> bool:
+    query_canon = _canonical_team_name(query)
+    if not query_canon:
+        return True
+    team_canon = _canonical_team_name(team_name)
+    if team_canon == query_canon:
+        return True
+    team_tokens = _normalize_team_fragment(team_name).split()
+    if query_canon in team_tokens:
+        return True
+    return query_canon in team_canon.split()
+
+_MONTH_NAMES = [
+    "СЏРЅРІР°СЂСЏ", "С„РµРІСЂР°Р»СЏ", "РјР°СЂС‚Р°", "Р°РїСЂРµР»СЏ", "РјР°СЏ", "РёСЋРЅСЏ",
+    "РёСЋР»СЏ", "Р°РІРіСѓСЃС‚Р°", "СЃРµРЅС‚СЏР±СЂСЏ", "РѕРєС‚СЏР±СЂСЏ", "РЅРѕСЏР±СЂСЏ", "РґРµРєР°Р±СЂСЏ",
+]
+
+def _parse_to_msk(dt_str: str):
+    if not dt_str:
+        return None
+    try:
+        dt = datetime.datetime.fromisoformat(str(dt_str))
+    except Exception:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=_MSK_TZ)
+    return dt.astimezone(_MSK_TZ)
+
+def _format_msk_datetime(dt_str: str) -> str:
+    dt = _parse_to_msk(dt_str)
+    if not dt:
+        return "вЂ”"
+    return f"{dt.day} {_MONTH_NAMES[dt.month - 1]} ({dt.strftime('%H:%M')} РјСЃРє)"
+
 
 def _is_user_blocked_safe(user_id: int) -> bool:
     checker = getattr(db, 'is_user_blocked', None)
@@ -67,7 +162,7 @@ def _challenge_player_allowed(player_row, age_mode: str) -> bool:
     return age_value <= 23
 
 def escape_md(text):
-    # Все спецсимволы MarkdownV2
+    # Р’СЃРµ СЃРїРµС†СЃРёРјРІРѕР»С‹ MarkdownV2
     for ch in r'\_*[]()~`>#+-=|{}.!':
         text = text.replace(ch, '\\' + ch)
     return text
@@ -77,11 +172,11 @@ async def send_player_selected_message(query, player, budget, context):
     player_name = escape_md(str(player[2]))
     cost = escape_md(str(player[7]))
     left_str = escape_md(str(left))
-    msg = f'Вы выбрали {player_name} \\({cost}\\)\n\n*Оставшийся бюджет: {left_str}*'
+    msg = f'Р’С‹ РІС‹Р±СЂР°Р»Рё {player_name} \\({cost}\\)\n\n*РћСЃС‚Р°РІС€РёР№СЃСЏ Р±СЋРґР¶РµС‚: {left_str}*'
     await query.edit_message_text(msg, parse_mode="MarkdownV2")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # Универсально получаем message для reply_text
+    # РЈРЅРёРІРµСЂСЃР°Р»СЊРЅРѕ РїРѕР»СѓС‡Р°РµРј message РґР»СЏ reply_text
     message = getattr(update, "effective_message", None)
     if message is None and hasattr(update, "message"):
         message = update.message
@@ -92,14 +187,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         logger.warning('Bot account attempted to interact: %s', user.id)
         try:
             if message is not None:
-                await message.reply_text('Боты не могут участвовать в игре. Регистрация отменена.')
+                await message.reply_text('Р‘РѕС‚С‹ РЅРµ РјРѕРіСѓС‚ СѓС‡Р°СЃС‚РІРѕРІР°С‚СЊ РІ РёРіСЂРµ. Р РµРіРёСЃС‚СЂР°С†РёСЏ РѕС‚РјРµРЅРµРЅР°.')
         except Exception:
             pass
         try:
-            username = user.username or '—'
+            username = user.username or 'вЂ”'
             await context.bot.send_message(
                 chat_id=ADMIN_ID,
-                text=f'⚠️ Попытка взаимодействия бота: ID {user.id} (@{username})'
+                text=f'вљ пёЏ РџРѕРїС‹С‚РєР° РІР·Р°РёРјРѕРґРµР№СЃС‚РІРёСЏ Р±РѕС‚Р°: ID {user.id} (@{username})'
             )
         except Exception:
             pass
@@ -108,15 +203,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         try:
             if message is not None:
                 await message.reply_text(
-                    'Ваш аккаунт заблокирован. Пожалуйста, свяжитесь с администрацией для уточнения деталей.'
+                    'Р’Р°С€ Р°РєРєР°СѓРЅС‚ Р·Р°Р±Р»РѕРєРёСЂРѕРІР°РЅ. РџРѕР¶Р°Р»СѓР№СЃС‚Р°, СЃРІСЏР¶РёС‚РµСЃСЊ СЃ Р°РґРјРёРЅРёСЃС‚СЂР°С†РёРµР№ РґР»СЏ СѓС‚РѕС‡РЅРµРЅРёСЏ РґРµС‚Р°Р»РµР№.'
                 )
         except Exception:
             pass
         return
     registered = db.register_user(user.id, user.username, user.full_name)
 
-    # --- Реферал: если пользователь пришёл по ссылке ref_<id>,
-    # и это его ПЕРВАЯ регистрация (registered == True), начисляем рефереру +50 HC
+    # --- Р РµС„РµСЂР°Р»: РµСЃР»Рё РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ РїСЂРёС€С‘Р» РїРѕ СЃСЃС‹Р»РєРµ ref_<id>,
+    # Рё СЌС‚Рѕ РµРіРѕ РџР•Р Р’РђРЇ СЂРµРіРёСЃС‚СЂР°С†РёСЏ (registered == True), РЅР°С‡РёСЃР»СЏРµРј СЂРµС„РµСЂРµСЂСѓ +50 HC
     try:
         if registered and getattr(context, 'args', None):
             arg0 = context.args[0] if len(context.args) > 0 else ''
@@ -125,10 +220,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 if ref_str.isdigit():
                     referrer_id = int(ref_str)
                     if referrer_id != user.id:
-                        # Вставим запись реферала, если для этого user_id её ещё не было
+                        # Р’СЃС‚Р°РІРёРј Р·Р°РїРёСЃСЊ СЂРµС„РµСЂР°Р»Р°, РµСЃР»Рё РґР»СЏ СЌС‚РѕРіРѕ user_id РµС‘ РµС‰С‘ РЅРµ Р±С‹Р»Рѕ
                         added_referral = db.add_referral_if_new(user.id, referrer_id)
                         if added_referral:
-                            # Бонус зависит от активности подписки у реферера
+                            # Р‘РѕРЅСѓСЃ Р·Р°РІРёСЃРёС‚ РѕС‚ Р°РєС‚РёРІРЅРѕСЃС‚Рё РїРѕРґРїРёСЃРєРё Сѓ СЂРµС„РµСЂРµСЂР°
                             try:
                                 from db import is_subscription_active
                                 bonus = 100 if is_subscription_active(referrer_id) else 50
@@ -159,37 +254,37 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
                             message_text = None
                             if status == 'rewarded':
-                                balance_display = ref_balance if ref_balance is not None else '—'
+                                balance_display = ref_balance if ref_balance is not None else 'вЂ”'
                                 await _notify_referrer(
-                                    '🎉 Новый реферал засчитан!\n'
-                                    f'+{bonus} HC начислены. Текущий баланс: {balance_display} HC.'
+                                    'рџЋ‰ РќРѕРІС‹Р№ СЂРµС„РµСЂР°Р» Р·Р°СЃС‡РёС‚Р°РЅ!\n'
+                                    f'+{bonus} HC РЅР°С‡РёСЃР»РµРЅС‹. РўРµРєСѓС‰РёР№ Р±Р°Р»Р°РЅСЃ: {balance_display} HC.'
                                 )
-                                message_text = 'Реферальная ссылка учтена. Спасибо за приглашение!'
+                                message_text = 'Р РµС„РµСЂР°Р»СЊРЅР°СЏ СЃСЃС‹Р»РєР° СѓС‡С‚РµРЅР°. РЎРїР°СЃРёР±Рѕ Р·Р° РїСЂРёРіР»Р°С€РµРЅРёРµ!'
                             elif status == 'pending_admin':
                                 counts = referral_result.get('counts', {}) or {}
                                 pending_amount = referral_result.get('amount') or bonus
                                 new_pending = referral_result.get('new_pending', False)
                                 if new_pending:
                                     await _notify_referrer(
-                                        '⚠️ Достигнут лимит 5 подтверждённых рефералов за сутки. Бонус отправлен на проверку администратора.'
+                                        'вљ пёЏ Р”РѕСЃС‚РёРіРЅСѓС‚ Р»РёРјРёС‚ 5 РїРѕРґС‚РІРµСЂР¶РґС‘РЅРЅС‹С… СЂРµС„РµСЂР°Р»РѕРІ Р·Р° СЃСѓС‚РєРё. Р‘РѕРЅСѓСЃ РѕС‚РїСЂР°РІР»РµРЅ РЅР° РїСЂРѕРІРµСЂРєСѓ Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂР°.'
                                     )
                                     await _notify_admin_referral_review(context, referrer_id, user, pending_amount, counts)
-                                message_text = 'Реферальная ссылка учтена, бонус начислится после проверки администратора.'
+                                message_text = 'Р РµС„РµСЂР°Р»СЊРЅР°СЏ СЃСЃС‹Р»РєР° СѓС‡С‚РµРЅР°, Р±РѕРЅСѓСЃ РЅР°С‡РёСЃР»РёС‚СЃСЏ РїРѕСЃР»Рµ РїСЂРѕРІРµСЂРєРё Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂР°.'
                             elif status == 'limit_month':
-                                await _notify_referrer('⚠️ Достигнут лимит 10 подтверждённых рефералов за 30 дней. Бонусы временно не начисляются.')
-                                message_text = 'За последние 30 дней достигнут лимит 10 подтверждённых рефералов. Бонус не начислен.'
+                                await _notify_referrer('вљ пёЏ Р”РѕСЃС‚РёРіРЅСѓС‚ Р»РёРјРёС‚ 10 РїРѕРґС‚РІРµСЂР¶РґС‘РЅРЅС‹С… СЂРµС„РµСЂР°Р»РѕРІ Р·Р° 30 РґРЅРµР№. Р‘РѕРЅСѓСЃС‹ РІСЂРµРјРµРЅРЅРѕ РЅРµ РЅР°С‡РёСЃР»СЏСЋС‚СЃСЏ.')
+                                message_text = 'Р—Р° РїРѕСЃР»РµРґРЅРёРµ 30 РґРЅРµР№ РґРѕСЃС‚РёРіРЅСѓС‚ Р»РёРјРёС‚ 10 РїРѕРґС‚РІРµСЂР¶РґС‘РЅРЅС‹С… СЂРµС„РµСЂР°Р»РѕРІ. Р‘РѕРЅСѓСЃ РЅРµ РЅР°С‡РёСЃР»РµРЅ.'
                             elif status == 'limit_total':
-                                await _notify_referrer('⚠️ Достигнут общий лимит 20 подтверждённых рефералов. Новые бонусы не начисляются.')
-                                message_text = 'Достигнут общий лимит 20 рефералов. Бонусы больше не начисляются.'
+                                await _notify_referrer('вљ пёЏ Р”РѕСЃС‚РёРіРЅСѓС‚ РѕР±С‰РёР№ Р»РёРјРёС‚ 20 РїРѕРґС‚РІРµСЂР¶РґС‘РЅРЅС‹С… СЂРµС„РµСЂР°Р»РѕРІ. РќРѕРІС‹Рµ Р±РѕРЅСѓСЃС‹ РЅРµ РЅР°С‡РёСЃР»СЏСЋС‚СЃСЏ.')
+                                message_text = 'Р”РѕСЃС‚РёРіРЅСѓС‚ РѕР±С‰РёР№ Р»РёРјРёС‚ 20 СЂРµС„РµСЂР°Р»РѕРІ. Р‘РѕРЅСѓСЃС‹ Р±РѕР»СЊС€Рµ РЅРµ РЅР°С‡РёСЃР»СЏСЋС‚СЃСЏ.'
                             elif status == 'disabled':
-                                await _notify_referrer('⚠️ Ваша реферальная ссылка отключена администратором.')
-                                message_text = 'Реферальная ссылка не активна.'
+                                await _notify_referrer('вљ пёЏ Р’Р°С€Р° СЂРµС„РµСЂР°Р»СЊРЅР°СЏ СЃСЃС‹Р»РєР° РѕС‚РєР»СЋС‡РµРЅР° Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂРѕРј.')
+                                message_text = 'Р РµС„РµСЂР°Р»СЊРЅР°СЏ СЃСЃС‹Р»РєР° РЅРµ Р°РєС‚РёРІРЅР°.'
                             elif status == 'error':
-                                message_text = 'Реферальный бонус не удалось обработать. Попробуйте позже.'
+                                message_text = 'Р РµС„РµСЂР°Р»СЊРЅС‹Р№ Р±РѕРЅСѓСЃ РЅРµ СѓРґР°Р»РѕСЃСЊ РѕР±СЂР°Р±РѕС‚Р°С‚СЊ. РџРѕРїСЂРѕР±СѓР№С‚Рµ РїРѕР·Р¶Рµ.'
                             elif status in ('missing', 'legacy'):
-                                message_text = 'Эта реферальная ссылка уже использовалась ранее.'
+                                message_text = 'Р­С‚Р° СЂРµС„РµСЂР°Р»СЊРЅР°СЏ СЃСЃС‹Р»РєР° СѓР¶Рµ РёСЃРїРѕР»СЊР·РѕРІР°Р»Р°СЃСЊ СЂР°РЅРµРµ.'
                             else:
-                                message_text = 'Реферальная ссылка обработана.'
+                                message_text = 'Р РµС„РµСЂР°Р»СЊРЅР°СЏ СЃСЃС‹Р»РєР° РѕР±СЂР°Р±РѕС‚Р°РЅР°.'
 
                             if message_text:
                                 try:
@@ -201,43 +296,43 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                         else:
                             if db.is_referrer_disabled(referrer_id):
                                 try:
-                                    await message.reply_text('Реферальная ссылка не активна.')
+                                    await message.reply_text('Р РµС„РµСЂР°Р»СЊРЅР°СЏ СЃСЃС‹Р»РєР° РЅРµ Р°РєС‚РёРІРЅР°.')
                                 except Exception:
                                     pass
 
     except Exception as e:
-        # Не прерываем старт при ошибке реферальной обработки
+        # РќРµ РїСЂРµСЂС‹РІР°РµРј СЃС‚Р°СЂС‚ РїСЂРё РѕС€РёР±РєРµ СЂРµС„РµСЂР°Р»СЊРЅРѕР№ РѕР±СЂР°Р±РѕС‚РєРё
         try:
-            await message.reply_text(f"[WARN] Ошибка обработки реферала: {e}")
+            await message.reply_text(f"[WARN] РћС€РёР±РєР° РѕР±СЂР°Р±РѕС‚РєРё СЂРµС„РµСЂР°Р»Р°: {e}")
         except Exception:
             pass
-    msg_id = f"Ваш Telegram ID: {user.id}\n"
+    msg_id = f"Р’Р°С€ Telegram ID: {user.id}\n"
     if is_admin(user.id):
         keyboard = [["/tour", "/hc"], ["/send_tour_image", "/addhc", "/send_results", "/add_player", "/list_players"]]
         msg = (
-            f'Привет, {user.full_name}! Ты зарегистрирован как администратор Fantasy KHL.\n\n'
-            'Доступные команды:\n/tour — показать состав на тур\n/hc — баланс HC\n/send_tour_image — загрузить и разослать изображение тура\n/addhc — начислить HC пользователю\n/send_results — разослать результат тура\n/add_player — добавить игрока\n/list_players — список игроков'
+            f'РџСЂРёРІРµС‚, {user.full_name}! РўС‹ Р·Р°СЂРµРіРёСЃС‚СЂРёСЂРѕРІР°РЅ РєР°Рє Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂ Fantasy KHL.\n\n'
+            'Р”РѕСЃС‚СѓРїРЅС‹Рµ РєРѕРјР°РЅРґС‹:\n/tour вЂ” РїРѕРєР°Р·Р°С‚СЊ СЃРѕСЃС‚Р°РІ РЅР° С‚СѓСЂ\n/hc вЂ” Р±Р°Р»Р°РЅСЃ HC\n/send_tour_image вЂ” Р·Р°РіСЂСѓР·РёС‚СЊ Рё СЂР°Р·РѕСЃР»Р°С‚СЊ РёР·РѕР±СЂР°Р¶РµРЅРёРµ С‚СѓСЂР°\n/addhc вЂ” РЅР°С‡РёСЃР»РёС‚СЊ HC РїРѕР»СЊР·РѕРІР°С‚РµР»СЋ\n/send_results вЂ” СЂР°Р·РѕСЃР»Р°С‚СЊ СЂРµР·СѓР»СЊС‚Р°С‚ С‚СѓСЂР°\n/add_player вЂ” РґРѕР±Р°РІРёС‚СЊ РёРіСЂРѕРєР°\n/list_players вЂ” СЃРїРёСЃРѕРє РёРіСЂРѕРєРѕРІ'
         )
     else:
         keyboard = [["/tour", "/hc", "/rules", "/shop"]]
         msg = (
-            f'Привет, {user.full_name}! Добро пожаловать в Фентези Драфт КХЛ\n\n'
-            '🔸 Собирай свою команду на каждый тур\n'
-            '🔸 Следи за результатами туров\n'
-            '🔸 Зарабатывай и копи Hockey Coin (HC)\n'
-            '🔸 Меняй Hockey Coin (HC) на призы\n\n'
-            'Доступные команды:\n'
-            '/tour — тур и управление командой\n'
-            '/hc — твой баланс Hockey Coin\n'
-            '/rules — правила сборки составов\n'
-            '/shop — магазин призов'
+            f'РџСЂРёРІРµС‚, {user.full_name}! Р”РѕР±СЂРѕ РїРѕР¶Р°Р»РѕРІР°С‚СЊ РІ Р¤РµРЅС‚РµР·Рё Р”СЂР°С„С‚ РљРҐР›\n\n'
+            'рџ”ё РЎРѕР±РёСЂР°Р№ СЃРІРѕСЋ РєРѕРјР°РЅРґСѓ РЅР° РєР°Р¶РґС‹Р№ С‚СѓСЂ\n'
+            'рџ”ё РЎР»РµРґРё Р·Р° СЂРµР·СѓР»СЊС‚Р°С‚Р°РјРё С‚СѓСЂРѕРІ\n'
+            'рџ”ё Р—Р°СЂР°Р±Р°С‚С‹РІР°Р№ Рё РєРѕРїРё Hockey Coin (HC)\n'
+            'рџ”ё РњРµРЅСЏР№ Hockey Coin (HC) РЅР° РїСЂРёР·С‹\n\n'
+            'Р”РѕСЃС‚СѓРїРЅС‹Рµ РєРѕРјР°РЅРґС‹:\n'
+            '/tour вЂ” С‚СѓСЂ Рё СѓРїСЂР°РІР»РµРЅРёРµ РєРѕРјР°РЅРґРѕР№\n'
+            '/hc вЂ” С‚РІРѕР№ Р±Р°Р»Р°РЅСЃ Hockey Coin\n'
+            '/rules вЂ” РїСЂР°РІРёР»Р° СЃР±РѕСЂРєРё СЃРѕСЃС‚Р°РІРѕРІ\n'
+            '/shop вЂ” РјР°РіР°Р·РёРЅ РїСЂРёР·РѕРІ'
         )
     markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     if registered:
         await message.reply_text(msg_id + msg, reply_markup=markup)
     else:
         await message.reply_text(
-            escape_md("⚠️ Ты уже в списке генеральных менеджеров Фентези Драфта КХЛ.\n\nФормируй состав и следи за результатами туров - /tour"),
+            escape_md("вљ пёЏ РўС‹ СѓР¶Рµ РІ СЃРїРёСЃРєРµ РіРµРЅРµСЂР°Р»СЊРЅС‹С… РјРµРЅРµРґР¶РµСЂРѕРІ Р¤РµРЅС‚РµР·Рё Р”СЂР°С„С‚Р° РљРҐР›.\n\nР¤РѕСЂРјРёСЂСѓР№ СЃРѕСЃС‚Р°РІ Рё СЃР»РµРґРё Р·Р° СЂРµР·СѓР»СЊС‚Р°С‚Р°РјРё С‚СѓСЂРѕРІ - /tour"),
             reply_markup=markup,
             parse_mode="MarkdownV2"
         )
@@ -248,21 +343,21 @@ async def referral(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     bot_username = (await context.bot.get_me()).username
     link = f"https://t.me/{bot_username}?start=ref_{user.id}"
-    # Определим текущий бонус: 100 HC при активной подписке, иначе 50 HC
+    # РћРїСЂРµРґРµР»РёРј С‚РµРєСѓС‰РёР№ Р±РѕРЅСѓСЃ: 100 HC РїСЂРё Р°РєС‚РёРІРЅРѕР№ РїРѕРґРїРёСЃРєРµ, РёРЅР°С‡Рµ 50 HC
     try:
         from db import is_subscription_active
         bonus = 100 if is_subscription_active(user.id) else 50
     except Exception:
         bonus = 50
     text = (
-        f"🔗 Ваша реферальная ссылка:\n"
+        f"рџ”— Р’Р°С€Р° СЂРµС„РµСЂР°Р»СЊРЅР°СЏ СЃСЃС‹Р»РєР°:\n"
         f"{link}\n\n"
-        f"Приглашайте друзей! За каждого нового участника вы получите +{bonus} HC после его регистрации."
+        f"РџСЂРёРіР»Р°С€Р°Р№С‚Рµ РґСЂСѓР·РµР№! Р—Р° РєР°Р¶РґРѕРіРѕ РЅРѕРІРѕРіРѕ СѓС‡Р°СЃС‚РЅРёРєР° РІС‹ РїРѕР»СѓС‡РёС‚Рµ +{bonus} HC РїРѕСЃР»Рµ РµРіРѕ СЂРµРіРёСЃС‚СЂР°С†РёРё."
     )
-    text += ("\n⚠️ Бонусы начисляются после проверки. Лимиты: до 5 подтверждённых приглашений в сутки и 20 за неделю.")
+    text += ("\nвљ пёЏ Р‘РѕРЅСѓСЃС‹ РЅР°С‡РёСЃР»СЏСЋС‚СЃСЏ РїРѕСЃР»Рµ РїСЂРѕРІРµСЂРєРё. Р›РёРјРёС‚С‹: РґРѕ 5 РїРѕРґС‚РІРµСЂР¶РґС‘РЅРЅС‹С… РїСЂРёРіР»Р°С€РµРЅРёР№ РІ СЃСѓС‚РєРё Рё 20 Р·Р° РЅРµРґРµР»СЋ.")
 
 
-    keyboard = [[InlineKeyboardButton('Скопировать ссылку', url=link)]]
+    keyboard = [[InlineKeyboardButton('РЎРєРѕРїРёСЂРѕРІР°С‚СЊ СЃСЃС‹Р»РєСѓ', url=link)]]
     await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
 
 
@@ -270,9 +365,9 @@ async def subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     from utils import create_yookassa_payment
     user = update.effective_user
     payment_url, payment_id = create_yookassa_payment(user.id)
-    # Сохраняем payment_id в БД (можно добавить функцию)
+    # РЎРѕС…СЂР°РЅСЏРµРј payment_id РІ Р‘Р” (РјРѕР¶РЅРѕ РґРѕР±Р°РІРёС‚СЊ С„СѓРЅРєС†РёСЋ)
     # db.save_payment_id(user.id, payment_id)
-    # Проверим статус подписки и дату окончания
+    # РџСЂРѕРІРµСЂРёРј СЃС‚Р°С‚СѓСЃ РїРѕРґРїРёСЃРєРё Рё РґР°С‚Сѓ РѕРєРѕРЅС‡Р°РЅРёСЏ
     end_line = ""
     try:
         from db import is_subscription_active, get_subscription
@@ -286,39 +381,39 @@ async def subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             except Exception:
                 dt = None
             if dt:
-                # Преобразуем к локальному времени для удобства
+                # РџСЂРµРѕР±СЂР°Р·СѓРµРј Рє Р»РѕРєР°Р»СЊРЅРѕРјСѓ РІСЂРµРјРµРЅРё РґР»СЏ СѓРґРѕР±СЃС‚РІР°
                 local_dt = dt.astimezone() if dt.tzinfo else dt
-                end_line = f"\n<b>Подписка активна</b> до: <b>{local_dt.strftime('%d.%m.%Y %H:%M')}</b>"
+                end_line = f"\n<b>РџРѕРґРїРёСЃРєР° Р°РєС‚РёРІРЅР°</b> РґРѕ: <b>{local_dt.strftime('%d.%m.%Y %H:%M')}</b>"
     except Exception:
         pass
 
     benefits = (
-        "\n\n<b>Преимущества подписки:</b>\n"
-        "• Дополнительный игрок в пул на тур\n"
-        "• Повышенные реферальные бонусы\n"
-        "• Приоритетная поддержка\n"
-        "• Новые фичи раньше всех"
+        "\n\n<b>РџСЂРµРёРјСѓС‰РµСЃС‚РІР° РїРѕРґРїРёСЃРєРё:</b>\n"
+        "вЂў Р”РѕРїРѕР»РЅРёС‚РµР»СЊРЅС‹Р№ РёРіСЂРѕРє РІ РїСѓР» РЅР° С‚СѓСЂ\n"
+        "вЂў РџРѕРІС‹С€РµРЅРЅС‹Рµ СЂРµС„РµСЂР°Р»СЊРЅС‹Рµ Р±РѕРЅСѓСЃС‹\n"
+        "вЂў РџСЂРёРѕСЂРёС‚РµС‚РЅР°СЏ РїРѕРґРґРµСЂР¶РєР°\n"
+        "вЂў РќРѕРІС‹Рµ С„РёС‡Рё СЂР°РЅСЊС€Рµ РІСЃРµС…"
     )
 
     text = (
-        f"💳 <b>Подписка на Fantasy KHL</b>\n\n"
-        f"Стоимость: <b>299 руб/месяц</b>"
+        f"рџ’і <b>РџРѕРґРїРёСЃРєР° РЅР° Fantasy KHL</b>\n\n"
+        f"РЎС‚РѕРёРјРѕСЃС‚СЊ: <b>299 СЂСѓР±/РјРµСЃСЏС†</b>"
         f"{end_line}\n\n"
-        f"Нажмите кнопку ниже для оплаты через ЮKassa. После успешной оплаты подписка активируется автоматически."
+        f"РќР°Р¶РјРёС‚Рµ РєРЅРѕРїРєСѓ РЅРёР¶Рµ РґР»СЏ РѕРїР»Р°С‚С‹ С‡РµСЂРµР· Р®Kassa. РџРѕСЃР»Рµ СѓСЃРїРµС€РЅРѕР№ РѕРїР»Р°С‚С‹ РїРѕРґРїРёСЃРєР° Р°РєС‚РёРІРёСЂСѓРµС‚СЃСЏ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё."
         f"{benefits}"
     )
-    keyboard = [[InlineKeyboardButton('Оплатить 299₽ через ЮKassa', url=payment_url)]]
+    keyboard = [[InlineKeyboardButton('РћРїР»Р°С‚РёС‚СЊ 299в‚Ѕ С‡РµСЂРµР· Р®Kassa', url=payment_url)]]
     await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
 
 # --- Telegram Stars payments ---
 
 async def subscribe_stars(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Оформление подписки через Telegram Stars (invoice)."""
+    """РћС„РѕСЂРјР»РµРЅРёРµ РїРѕРґРїРёСЃРєРё С‡РµСЂРµР· Telegram Stars (invoice)."""
     user = update.effective_user
     chat_id = update.effective_chat.id
 
-    # Информация о текущей подписке, если активна
+    # РРЅС„РѕСЂРјР°С†РёСЏ Рѕ С‚РµРєСѓС‰РµР№ РїРѕРґРїРёСЃРєРµ, РµСЃР»Рё Р°РєС‚РёРІРЅР°
     end_line = ""
     try:
         from db import is_subscription_active, get_subscription
@@ -333,20 +428,20 @@ async def subscribe_stars(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 dt = None
             if dt:
                 local_dt = dt.astimezone() if dt.tzinfo else dt
-                end_line = f"\n<b>Текущая подписка активна</b> до: <b>{local_dt.strftime('%d.%m.%Y %H:%M')}</b>"
+                end_line = f"\n<b>РўРµРєСѓС‰Р°СЏ РїРѕРґРїРёСЃРєР° Р°РєС‚РёРІРЅР°</b> РґРѕ: <b>{local_dt.strftime('%d.%m.%Y %H:%M')}</b>"
     except Exception:
         pass
 
-    # Формируем invoice для Telegram Stars
+    # Р¤РѕСЂРјРёСЂСѓРµРј invoice РґР»СЏ Telegram Stars
     from utils import SUBSCRIPTION_STARS
-    title = "Подписка Fantasy KHL — 1 месяц"
+    title = "РџРѕРґРїРёСЃРєР° Fantasy KHL вЂ” 1 РјРµСЃСЏС†"
     description = (
-        "Доступ к премиум-функциям и бонусам в боте." + end_line
+        "Р”РѕСЃС‚СѓРї Рє РїСЂРµРјРёСѓРј-С„СѓРЅРєС†РёСЏРј Рё Р±РѕРЅСѓСЃР°Рј РІ Р±РѕС‚Рµ." + end_line
     )
     payload = f"sub_{user.id}"
-    prices = [LabeledPrice(label="Подписка на 1 месяц", amount=int(SUBSCRIPTION_STARS))]
+    prices = [LabeledPrice(label="РџРѕРґРїРёСЃРєР° РЅР° 1 РјРµСЃСЏС†", amount=int(SUBSCRIPTION_STARS))]
 
-    # Отправляем invoice: currency XTR — оплата Telegram Stars
+    # РћС‚РїСЂР°РІР»СЏРµРј invoice: currency XTR вЂ” РѕРїР»Р°С‚Р° Telegram Stars
     await context.bot.send_invoice(
         chat_id=chat_id,
         title=title,
@@ -358,13 +453,13 @@ async def subscribe_stars(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         start_parameter="subscribe"
     )
 
-    # Поясняющее сообщение
+    # РџРѕСЏСЃРЅСЏСЋС‰РµРµ СЃРѕРѕР±С‰РµРЅРёРµ
     try:
         await context.bot.send_message(
             chat_id=chat_id,
             text=(
-                "Нажмите кнопку Оплатить в счёте выше, чтобы завершить оплату через Telegram Stars.\n"
-                "После успешной оплаты подписка активируется автоматически."
+                "РќР°Р¶РјРёС‚Рµ РєРЅРѕРїРєСѓ РћРїР»Р°С‚РёС‚СЊ РІ СЃС‡С‘С‚Рµ РІС‹С€Рµ, С‡С‚РѕР±С‹ Р·Р°РІРµСЂС€РёС‚СЊ РѕРїР»Р°С‚Сѓ С‡РµСЂРµР· Telegram Stars.\n"
+                "РџРѕСЃР»Рµ СѓСЃРїРµС€РЅРѕР№ РѕРїР»Р°С‚С‹ РїРѕРґРїРёСЃРєР° Р°РєС‚РёРІРёСЂСѓРµС‚СЃСЏ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё."
             )
         )
     except Exception:
@@ -372,7 +467,7 @@ async def subscribe_stars(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 async def precheckout_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Подтверждаем предчек-аут для счёта (в т.ч. для Stars)."""
+    """РџРѕРґС‚РІРµСЂР¶РґР°РµРј РїСЂРµРґС‡РµРє-Р°СѓС‚ РґР»СЏ СЃС‡С‘С‚Р° (РІ С‚.С‡. РґР»СЏ Stars)."""
     try:
         query = update.pre_checkout_query
     except AttributeError:
@@ -380,15 +475,15 @@ async def precheckout_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         await query.answer(ok=True)
     except Exception:
-        # В случае ошибки пробуем отклонить с пояснением
+        # Р’ СЃР»СѓС‡Р°Рµ РѕС€РёР±РєРё РїСЂРѕР±СѓРµРј РѕС‚РєР»РѕРЅРёС‚СЊ СЃ РїРѕСЏСЃРЅРµРЅРёРµРј
         try:
-            await query.answer(ok=False, error_message="Не удалось подтвердить оплату. Попробуйте позже.")
+            await query.answer(ok=False, error_message="РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕРґС‚РІРµСЂРґРёС‚СЊ РѕРїР»Р°С‚Сѓ. РџРѕРїСЂРѕР±СѓР№С‚Рµ РїРѕР·Р¶Рµ.")
         except Exception:
             pass
 
 
 async def successful_payment_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Обработка успешной оплаты: активируем/продлеваем подписку."""
+    """РћР±СЂР°Р±РѕС‚РєР° СѓСЃРїРµС€РЅРѕР№ РѕРїР»Р°С‚С‹: Р°РєС‚РёРІРёСЂСѓРµРј/РїСЂРѕРґР»РµРІР°РµРј РїРѕРґРїРёСЃРєСѓ."""
     try:
         sp = update.message.successful_payment if getattr(update, 'message', None) else None
         if not sp:
@@ -397,7 +492,7 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
         user = update.effective_user
         from db import get_subscription, add_or_update_subscription
 
-        # Продление на 31 день от текущей даты или даты окончания активной подписки
+        # РџСЂРѕРґР»РµРЅРёРµ РЅР° 31 РґРµРЅСЊ РѕС‚ С‚РµРєСѓС‰РµР№ РґР°С‚С‹ РёР»Рё РґР°С‚С‹ РѕРєРѕРЅС‡Р°РЅРёСЏ Р°РєС‚РёРІРЅРѕР№ РїРѕРґРїРёСЃРєРё
         base = datetime.datetime.utcnow()
         try:
             current = None
@@ -413,7 +508,7 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
             pass
         new_paid_until = base + datetime.timedelta(days=31)
 
-        # Сохраняем идентификатор платежа из Telegram
+        # РЎРѕС…СЂР°РЅСЏРµРј РёРґРµРЅС‚РёС„РёРєР°С‚РѕСЂ РїР»Р°С‚РµР¶Р° РёР· Telegram
         last_payment_id = None
         try:
             last_payment_id = getattr(sp, 'telegram_payment_charge_id', None) or getattr(sp, 'provider_payment_charge_id', None)
@@ -425,31 +520,31 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
 
         local_dt = new_paid_until.astimezone() if new_paid_until.tzinfo else new_paid_until
         await update.message.reply_text(
-            f"Спасибо! Оплата получена. Подписка активна до {local_dt.strftime('%d.%m.%Y %H:%M')} (MSK)."
+            f"РЎРїР°СЃРёР±Рѕ! РћРїР»Р°С‚Р° РїРѕР»СѓС‡РµРЅР°. РџРѕРґРїРёСЃРєР° Р°РєС‚РёРІРЅР° РґРѕ {local_dt.strftime('%d.%m.%Y %H:%M')} (MSK)."
         )
     except Exception:
         try:
-            await update.message.reply_text("Оплата успешно прошла, но произошла ошибка при активации. Свяжитесь с админом.")
+            await update.message.reply_text("РћРїР»Р°С‚Р° СѓСЃРїРµС€РЅРѕ РїСЂРѕС€Р»Р°, РЅРѕ РїСЂРѕРёР·РѕС€Р»Р° РѕС€РёР±РєР° РїСЂРё Р°РєС‚РёРІР°С†РёРё. РЎРІСЏР¶РёС‚РµСЃСЊ СЃ Р°РґРјРёРЅРѕРј.")
         except Exception:
             pass
 
 
 # --- TOURS LIST (/tours) ---
 async def tours(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Показать список всех туров с кнопками для открытия подробностей."""
+    """РџРѕРєР°Р·Р°С‚СЊ СЃРїРёСЃРѕРє РІСЃРµС… С‚СѓСЂРѕРІ СЃ РєРЅРѕРїРєР°РјРё РґР»СЏ РѕС‚РєСЂС‹С‚РёСЏ РїРѕРґСЂРѕР±РЅРѕСЃС‚РµР№."""
     try:
         rows = db.get_all_tours() or []
     except Exception as e:
-        await update.message.reply_text(f"Ошибка получения списка туров: {e}")
+        await update.message.reply_text(f"РћС€РёР±РєР° РїРѕР»СѓС‡РµРЅРёСЏ СЃРїРёСЃРєР° С‚СѓСЂРѕРІ: {e}")
         return
-    # Отфильтруем будущие туры (start_date > now)
+    # РћС‚С„РёР»СЊС‚СЂСѓРµРј Р±СѓРґСѓС‰РёРµ С‚СѓСЂС‹ (start_date > now)
     import datetime
     try:
         from zoneinfo import ZoneInfo
         _tz = ZoneInfo("Europe/Moscow")
         now = datetime.datetime.now(_tz)
     except Exception:
-        # Fallback: приблизительно Мск = UTC+3
+        # Fallback: РїСЂРёР±Р»РёР·РёС‚РµР»СЊРЅРѕ РњСЃРє = UTC+3
         now = datetime.datetime.utcnow() + datetime.timedelta(hours=3)
         _tz = None
     filtered = []
@@ -464,32 +559,32 @@ async def tours(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             if start_dt <= now < deadline_dt:
                 filtered.append(r)
         except Exception:
-            # если не удалось распарсить дату — перестрахуемся и не показываем такой тур
+            # РµСЃР»Рё РЅРµ СѓРґР°Р»РѕСЃСЊ СЂР°СЃРїР°СЂСЃРёС‚СЊ РґР°С‚Сѓ вЂ” РїРµСЂРµСЃС‚СЂР°С…СѓРµРјСЃСЏ Рё РЅРµ РїРѕРєР°Р·С‹РІР°РµРј С‚Р°РєРѕР№ С‚СѓСЂ
             continue
     rows = filtered
     if not rows:
-        await update.message.reply_text("Нет активных туров. Загляните позже!")
+        await update.message.reply_text("РќРµС‚ Р°РєС‚РёРІРЅС‹С… С‚СѓСЂРѕРІ. Р—Р°РіР»СЏРЅРёС‚Рµ РїРѕР·Р¶Рµ!")
         return
-    # Формируем список и кнопки
-    lines = ["*Доступные туры:*"]
+    # Р¤РѕСЂРјРёСЂСѓРµРј СЃРїРёСЃРѕРє Рё РєРЅРѕРїРєРё
+    lines = ["*Р”РѕСЃС‚СѓРїРЅС‹Рµ С‚СѓСЂС‹:*"]
     buttons = []
     for r in rows:
         # r: (id, name, start, deadline, end, status, winners)
         tid, name, start, deadline, end, status, winners = r
-        lines.append(f"• #{tid} — {name} [{status}]")
-        buttons.append([InlineKeyboardButton(f"Открыть #{tid}", callback_data=f"tour_open_{tid}")])
+        lines.append(f"вЂў #{tid} вЂ” {name} [{status}]")
+        buttons.append([InlineKeyboardButton(f"РћС‚РєСЂС‹С‚СЊ #{tid}", callback_data=f"tour_open_{tid}")])
     await update.message.reply_text("\n".join(lines), reply_markup=InlineKeyboardMarkup(buttons), parse_mode='Markdown')
 
 
 async def tour_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Открыть информацию по выбранному туру: даты, статус, картинка (если есть)."""
+    """РћС‚РєСЂС‹С‚СЊ РёРЅС„РѕСЂРјР°С†РёСЋ РїРѕ РІС‹Р±СЂР°РЅРЅРѕРјСѓ С‚СѓСЂСѓ: РґР°С‚С‹, СЃС‚Р°С‚СѓСЃ, РєР°СЂС‚РёРЅРєР° (РµСЃР»Рё РµСЃС‚СЊ)."""
     query = update.callback_query
     await query.answer()
     data = query.data  # tour_open_<id>
     try:
         tid = int(data.replace('tour_open_', ''))
     except Exception:
-        await query.edit_message_text("Некорректный запрос тура.")
+        await query.edit_message_text("РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ Р·Р°РїСЂРѕСЃ С‚СѓСЂР°.")
         return
     row = None
     try:
@@ -497,19 +592,19 @@ async def tour_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     except Exception:
         row = None
     if not row:
-        await query.edit_message_text("Тур не найден.")
+        await query.edit_message_text("РўСѓСЂ РЅРµ РЅР°Р№РґРµРЅ.")
         return
-    # Блокируем просмотр будущих туров
+    # Р‘Р»РѕРєРёСЂСѓРµРј РїСЂРѕСЃРјРѕС‚СЂ Р±СѓРґСѓС‰РёС… С‚СѓСЂРѕРІ
     try:
         import datetime
         start_dt = datetime.datetime.strptime(str(row[2]), "%d.%m.%y")
         if datetime.datetime.now() < start_dt:
-            await query.edit_message_text("Тур ещё не начался. Загляните позже!")
+            await query.edit_message_text("РўСѓСЂ РµС‰С‘ РЅРµ РЅР°С‡Р°Р»СЃСЏ. Р—Р°РіР»СЏРЅРёС‚Рµ РїРѕР·Р¶Рµ!")
             return
     except Exception:
         pass
     # row: (id, name, start, deadline, end, status, winners, image_filename, image_file_id)
-    # 1) Всегда пытаемся отправить картинку тура
+    # 1) Р’СЃРµРіРґР° РїС‹С‚Р°РµРјСЃСЏ РѕС‚РїСЂР°РІРёС‚СЊ РєР°СЂС‚РёРЅРєСѓ С‚СѓСЂР°
     image_sent = False
     image_file_id = row[8] if len(row) >= 9 else ''
     if image_file_id:
@@ -530,7 +625,7 @@ async def tour_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         except Exception:
             logger.error("send_photo from local file failed in tour_open_callback", exc_info=True)
 
-    # 2) Проверяем, собран ли уже состав пользователя для этого тура
+    # 2) РџСЂРѕРІРµСЂСЏРµРј, СЃРѕР±СЂР°РЅ Р»Рё СѓР¶Рµ СЃРѕСЃС‚Р°РІ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ РґР»СЏ СЌС‚РѕРіРѕ С‚СѓСЂР°
     user_id = update.effective_user.id if update.effective_user else None
     user_roster = None
     try:
@@ -540,7 +635,7 @@ async def tour_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         user_roster = None
 
     if user_roster and isinstance(user_roster, dict) and user_roster.get('roster'):
-        # Показать состав пользователя в запрошенном формате
+        # РџРѕРєР°Р·Р°С‚СЊ СЃРѕСЃС‚Р°РІ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ РІ Р·Р°РїСЂРѕС€РµРЅРЅРѕРј С„РѕСЂРјР°С‚Рµ
         roster = user_roster['roster']
         captain_id = user_roster.get('captain_id')
         spent = user_roster.get('spent', 0)
@@ -559,7 +654,7 @@ async def tour_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 pass
             return str(pid)
 
-        # Вратарь
+        # Р’СЂР°С‚Р°СЂСЊ
         goalie_line = ""
         try:
             gid = roster.get('goalie')
@@ -568,7 +663,7 @@ async def tour_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         except Exception:
             pass
 
-        # Защитники
+        # Р—Р°С‰РёС‚РЅРёРєРё
         defenders_line = ""
         try:
             dids = roster.get('defenders', []) or []
@@ -576,7 +671,7 @@ async def tour_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         except Exception:
             pass
 
-        # Нападающие
+        # РќР°РїР°РґР°СЋС‰РёРµ
         forwards_line = ""
         try:
             fids = roster.get('forwards', []) or []
@@ -584,7 +679,7 @@ async def tour_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         except Exception:
             pass
 
-        # Капитан
+        # РљР°РїРёС‚Р°РЅ
         captain_line = ""
         try:
             if captain_id:
@@ -597,11 +692,11 @@ async def tour_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
             defenders_line,
             forwards_line,
             "",
-            f"Капитан: {captain_line}" if captain_line else "Капитан: —",
-            f"Потрачено: {spent}/{budget}",
+            f"РљР°РїРёС‚Р°РЅ: {captain_line}" if captain_line else "РљР°РїРёС‚Р°РЅ: вЂ”",
+            f"РџРѕС‚СЂР°С‡РµРЅРѕ: {spent}/{budget}",
         ]
         text = "\n".join([l for l in lines if l is not None])
-        # Если дедлайн ещё не истёк — показать кнопку "Пересобрать состав"
+        # Р•СЃР»Рё РґРµРґР»Р°Р№РЅ РµС‰С‘ РЅРµ РёСЃС‚С‘Рє вЂ” РїРѕРєР°Р·Р°С‚СЊ РєРЅРѕРїРєСѓ "РџРµСЂРµСЃРѕР±СЂР°С‚СЊ СЃРѕСЃС‚Р°РІ"
         reply_markup = None
         try:
             import datetime
@@ -621,7 +716,7 @@ async def tour_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 pass
             if now < deadline_dt:
                 reply_markup = InlineKeyboardMarkup(
-                    [[InlineKeyboardButton('Пересобрать состав', callback_data='restart_tour')]]
+                    [[InlineKeyboardButton('РџРµСЂРµСЃРѕР±СЂР°С‚СЊ СЃРѕСЃС‚Р°РІ', callback_data='restart_tour')]]
                 )
         except Exception:
             reply_markup = None
@@ -631,13 +726,13 @@ async def tour_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await context.bot.send_message(chat_id=update.effective_chat.id, text=text, reply_markup=reply_markup)
         return ConversationHandler.END if 'ConversationHandler' in globals() else None
     else:
-        # Состава нет — показать инфо и предложить начать сборку через entry-point кнопкой
+        # РЎРѕСЃС‚Р°РІР° РЅРµС‚ вЂ” РїРѕРєР°Р·Р°С‚СЊ РёРЅС„Рѕ Рё РїСЂРµРґР»РѕР¶РёС‚СЊ РЅР°С‡Р°С‚СЊ СЃР±РѕСЂРєСѓ С‡РµСЂРµР· entry-point РєРЅРѕРїРєРѕР№
         from telegram import InlineKeyboardMarkup, InlineKeyboardButton
         text = (
-            f"Тур #{row[0]} — {row[1]}\n"
-            f"Статус: {row[5]}\n"
-            f"Старт: {row[2]}\nДедлайн: {row[3]}\nОкончание: {row[4]}\n\n"
-            f"Нажмите кнопку ниже, чтобы начать сборку состава."
+            f"РўСѓСЂ #{row[0]} вЂ” {row[1]}\n"
+            f"РЎС‚Р°С‚СѓСЃ: {row[5]}\n"
+            f"РЎС‚Р°СЂС‚: {row[2]}\nР”РµРґР»Р°Р№РЅ: {row[3]}\nРћРєРѕРЅС‡Р°РЅРёРµ: {row[4]}\n\n"
+            f"РќР°Р¶РјРёС‚Рµ РєРЅРѕРїРєСѓ РЅРёР¶Рµ, С‡С‚РѕР±С‹ РЅР°С‡Р°С‚СЊ СЃР±РѕСЂРєСѓ СЃРѕСЃС‚Р°РІР°."
         )
         # Show button only if before deadline (MSK)
         show_button = False
@@ -658,49 +753,49 @@ async def tour_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         except Exception:
             show_button = False
         if show_button:
-            keyboard = [[InlineKeyboardButton("Собрать состав", callback_data=f"tour_build_{row[0]}")]]
+            keyboard = [[InlineKeyboardButton("РЎРѕР±СЂР°С‚СЊ СЃРѕСЃС‚Р°РІ", callback_data=f"tour_build_{row[0]}")]]
             rm = InlineKeyboardMarkup(keyboard)
         else:
             rm = None
             text = (
-                f"Тур #{row[0]} — {row[1]}\n"
-                f"Статус: {row[5]}\n"
-                f"Старт: {row[2]}\nДедлайн: {row[3]}\nОкончание: {row[4]}\n\n"
-                f"Дедлайн уже прошёл. Сбор состава закрыт."
+                f"РўСѓСЂ #{row[0]} вЂ” {row[1]}\n"
+                f"РЎС‚Р°С‚СѓСЃ: {row[5]}\n"
+                f"РЎС‚Р°СЂС‚: {row[2]}\nР”РµРґР»Р°Р№РЅ: {row[3]}\nРћРєРѕРЅС‡Р°РЅРёРµ: {row[4]}\n\n"
+                f"Р”РµРґР»Р°Р№РЅ СѓР¶Рµ РїСЂРѕС€С‘Р». РЎР±РѕСЂ СЃРѕСЃС‚Р°РІР° Р·Р°РєСЂС‹С‚."
             )
         try:
             await query.edit_message_text(text, reply_markup=rm)
         except Exception:
             await context.bot.send_message(chat_id=update.effective_chat.id, text=text, reply_markup=rm)
-        # Не активируем CH напрямую — вход через кнопку 'tour_build_<id>'
+        # РќРµ Р°РєС‚РёРІРёСЂСѓРµРј CH РЅР°РїСЂСЏРјСѓСЋ вЂ” РІС…РѕРґ С‡РµСЂРµР· РєРЅРѕРїРєСѓ 'tour_build_<id>'
         return
 
 
 async def tour_build_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Старт сборки состава по выбранному туру: делегируем в tour_start как entry-point."""
+    """РЎС‚Р°СЂС‚ СЃР±РѕСЂРєРё СЃРѕСЃС‚Р°РІР° РїРѕ РІС‹Р±СЂР°РЅРЅРѕРјСѓ С‚СѓСЂСѓ: РґРµР»РµРіРёСЂСѓРµРј РІ tour_start РєР°Рє entry-point."""
     query = update.callback_query
     await query.answer()
-    # Можно сохранить выбранный tour_id, если понадобится в будущем
+    # РњРѕР¶РЅРѕ СЃРѕС…СЂР°РЅРёС‚СЊ РІС‹Р±СЂР°РЅРЅС‹Р№ tour_id, РµСЃР»Рё РїРѕРЅР°РґРѕР±РёС‚СЃСЏ РІ Р±СѓРґСѓС‰РµРј
     try:
         tid = int(query.data.replace('tour_build_', ''))
         context.user_data['selected_tour_id'] = tid
     except Exception:
         tid = None
-    # Запускаем сценарий сборки состава
+    # Р—Р°РїСѓСЃРєР°РµРј СЃС†РµРЅР°СЂРёР№ СЃР±РѕСЂРєРё СЃРѕСЃС‚Р°РІР°
     return await tour_start(update, context)
 
 
 # --- CHALLENGE ---
 async def challenge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
-    # Только для подписчиков
+    # РўРѕР»СЊРєРѕ РґР»СЏ РїРѕРґРїРёСЃС‡РёРєРѕРІ
     try:
         from db import is_subscription_active
         if not is_subscription_active(user.id):
-            await update.message.reply_text('Функция доступна только подписчикам. Оформите подписку: /subscribe')
+            await update.message.reply_text('Р¤СѓРЅРєС†РёСЏ РґРѕСЃС‚СѓРїРЅР° С‚РѕР»СЊРєРѕ РїРѕРґРїРёСЃС‡РёРєР°Рј. РћС„РѕСЂРјРёС‚Рµ РїРѕРґРїРёСЃРєСѓ: /subscribe')
             return
     except Exception:
-        await update.message.reply_text('Не удалось проверить подписку. Попробуйте позже или оформите /subscribe.')
+        await update.message.reply_text('РќРµ СѓРґР°Р»РѕСЃСЊ РїСЂРѕРІРµСЂРёС‚СЊ РїРѕРґРїРёСЃРєСѓ. РџРѕРїСЂРѕР±СѓР№С‚Рµ РїРѕР·Р¶Рµ РёР»Рё РѕС„РѕСЂРјРёС‚Рµ /subscribe.')
         return
 
     challenges = []
@@ -712,48 +807,27 @@ async def challenge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     active_challenges = []
     for item in challenges:
         status = item[5] if len(item) > 5 else ''
-        if (status or '').lower() == 'активен':
+        if (status or '').lower() == 'Р°РєС‚РёРІРµРЅ':
             active_challenges.append(item)
 
     if not active_challenges:
-        await update.message.reply_text('Сейчас нет активных челленджей. Загляните позже.')
+        await update.message.reply_text('РЎРµР№С‡Р°СЃ РЅРµС‚ Р°РєС‚РёРІРЅС‹С… С‡РµР»Р»РµРЅРґР¶РµР№. Р—Р°РіР»СЏРЅРёС‚Рµ РїРѕР·Р¶Рµ.')
         return
 
     def iso_to_msk_text(dt_str: str) -> str:
-        import datetime as _dt
-        months = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
-                  'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
-        if not dt_str:
-            return ''
-        try:
-            dt = _dt.datetime.fromisoformat(str(dt_str))
-        except Exception:
-            return str(dt_str)
-        try:
-            from zoneinfo import ZoneInfo
-            msk_tz = ZoneInfo('Europe/Moscow')
-        except Exception:
-            msk_tz = _dt.timezone(_dt.timedelta(hours=3))
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=msk_tz)
-        else:
-            dt = dt.astimezone(msk_tz)
-        day = dt.day
-        month_name = months[dt.month - 1]
-        time_part = dt.strftime('%H:%M')
-        return f'{day} {month_name} {time_part} (мск)'
+        return _format_msk_datetime(dt_str)
 
-    lines = ['*Активные челленджи:*']
+    lines = ['*РђРєС‚РёРІРЅС‹Рµ С‡РµР»Р»РµРЅРґР¶Рё:*']
     buttons = []
     for challenge in active_challenges:
         cid = challenge[0]
         deadline = challenge[2]
         deadline_text = iso_to_msk_text(deadline)
-        line = f'🔸 №{cid} [сбор составов]'
+        line = f'рџ”ё в„–{cid} [СЃР±РѕСЂ СЃРѕСЃС‚Р°РІРѕРІ]'
         if deadline_text:
-            line += f' дедлайн: {deadline_text}'
+            line += f' РґРµРґР»Р°Р№РЅ: {deadline_text}'
         lines.append(line)
-        buttons.append([InlineKeyboardButton(f'Открыть #{cid}', callback_data=f'challenge_open_{cid}')])
+        buttons.append([InlineKeyboardButton(f'РћС‚РєСЂС‹С‚СЊ #{cid}', callback_data=f'challenge_open_{cid}')])
 
     await update.message.reply_text(
         '\n\n'.join(lines),
@@ -770,10 +844,10 @@ async def challenge_open_callback(update: Update, context: ContextTypes.DEFAULT_
     try:
         cid = int(data.replace("challenge_open_", ""))
     except Exception:
-        await query.edit_message_text("Некорректный выбор челленджа.")
+        await query.edit_message_text("РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РІС‹Р±РѕСЂ С‡РµР»Р»РµРЅРґР¶Р°.")
         return
 
-    # Найдем челлендж по id
+    # РќР°Р№РґРµРј С‡РµР»Р»РµРЅРґР¶ РїРѕ id
     ch = None
     try:
         rows = db.get_all_challenges() or []
@@ -784,10 +858,10 @@ async def challenge_open_callback(update: Update, context: ContextTypes.DEFAULT_
     except Exception:
         ch = None
     if not ch:
-        await query.edit_message_text("Челлендж не найден.")
+        await query.edit_message_text("Р§РµР»Р»РµРЅРґР¶ РЅРµ РЅР°Р№РґРµРЅ.")
         return
 
-    # Попробуем отправить картинку челленджа как фото
+    # РџРѕРїСЂРѕР±СѓРµРј РѕС‚РїСЂР°РІРёС‚СЊ РєР°СЂС‚РёРЅРєСѓ С‡РµР»Р»РµРЅРґР¶Р° РєР°Рє С„РѕС‚Рѕ
     image_sent = False
     image_file_id = ch[6] if len(ch) > 6 else ''
     age_mode = (ch[7] if len(ch) > 7 else 'default') or 'default'
@@ -809,7 +883,7 @@ async def challenge_open_callback(update: Update, context: ContextTypes.DEFAULT_
         except Exception:
             logger.error("send_photo from local file failed in open_callback", exc_info=True)
 
-    # Если у пользователя уже есть запись на этот челлендж — показать текущий состав и кнопки Отменить/Пересобрать
+    # Р•СЃР»Рё Сѓ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ СѓР¶Рµ РµСЃС‚СЊ Р·Р°РїРёСЃСЊ РЅР° СЌС‚РѕС‚ С‡РµР»Р»РµРЅРґР¶ вЂ” РїРѕРєР°Р·Р°С‚СЊ С‚РµРєСѓС‰РёР№ СЃРѕСЃС‚Р°РІ Рё РєРЅРѕРїРєРё РћС‚РјРµРЅРёС‚СЊ/РџРµСЂРµСЃРѕР±СЂР°С‚СЊ
     uid = update.effective_user.id if update.effective_user else None
     entry = None
     try:
@@ -819,13 +893,13 @@ async def challenge_open_callback(update: Update, context: ContextTypes.DEFAULT_
         entry = None
 
     status = ch[5] if len(ch) > 5 else ''
-    # Разрешаем сборку состава только когда челлендж активен (между start и deadline).
-    # Статус уже пересчитывается на чтении в db.py, поэтому не пересчитываем время здесь повторно.
-    if (status or '').lower() != 'активен':
-        await query.edit_message_text("Челлендж недоступен: либо ещё не начался, либо дедлайн уже прошёл.")
+    # Р Р°Р·СЂРµС€Р°РµРј СЃР±РѕСЂРєСѓ СЃРѕСЃС‚Р°РІР° С‚РѕР»СЊРєРѕ РєРѕРіРґР° С‡РµР»Р»РµРЅРґР¶ Р°РєС‚РёРІРµРЅ (РјРµР¶РґСѓ start Рё deadline).
+    # РЎС‚Р°С‚СѓСЃ СѓР¶Рµ РїРµСЂРµСЃС‡РёС‚С‹РІР°РµС‚СЃСЏ РЅР° С‡С‚РµРЅРёРё РІ db.py, РїРѕСЌС‚РѕРјСѓ РЅРµ РїРµСЂРµСЃС‡РёС‚С‹РІР°РµРј РІСЂРµРјСЏ Р·РґРµСЃСЊ РїРѕРІС‚РѕСЂРЅРѕ.
+    if (status or '').lower() != 'Р°РєС‚РёРІРµРЅ':
+        await query.edit_message_text("Р§РµР»Р»РµРЅРґР¶ РЅРµРґРѕСЃС‚СѓРїРµРЅ: Р»РёР±Рѕ РµС‰С‘ РЅРµ РЅР°С‡Р°Р»СЃСЏ, Р»РёР±Рѕ РґРµРґР»Р°Р№РЅ СѓР¶Рµ РїСЂРѕС€С‘Р».")
         return
     if entry:
-        # Если запись отменена/возвращена — считаем, что записи нет
+        # Р•СЃР»Рё Р·Р°РїРёСЃСЊ РѕС‚РјРµРЅРµРЅР°/РІРѕР·РІСЂР°С‰РµРЅР° вЂ” СЃС‡РёС‚Р°РµРј, С‡С‚Рѕ Р·Р°РїРёСЃРё РЅРµС‚
         try:
             st = (entry[5] or '').lower()
             if st in ('canceled', 'refunded'):
@@ -835,7 +909,7 @@ async def challenge_open_callback(update: Update, context: ContextTypes.DEFAULT_
 
     if entry:
         # entry: (id, stake, forward_id, defender_id, goalie_id, status)
-        # Сохраним id челленджа в контекст для последующих действий (Отменить/Пересобрать)
+        # РЎРѕС…СЂР°РЅРёРј id С‡РµР»Р»РµРЅРґР¶Р° РІ РєРѕРЅС‚РµРєСЃС‚ РґР»СЏ РїРѕСЃР»РµРґСѓСЋС‰РёС… РґРµР№СЃС‚РІРёР№ (РћС‚РјРµРЅРёС‚СЊ/РџРµСЂРµСЃРѕР±СЂР°С‚СЊ)
         context.user_data['challenge_id'] = ch[0]
         context.user_data['challenge_age_mode'] = age_mode
         fwd_id = entry[2]
@@ -846,68 +920,45 @@ async def challenge_open_callback(update: Update, context: ContextTypes.DEFAULT_
             d = db.get_player_by_id(d_id) if d_id else None
             g = db.get_player_by_id(g_id) if g_id else None
             def fmt(p):
-                return f"{p[1]} ({p[3]})" if p else "—"
+                return f"{p[1]} ({p[3]})" if p else "вЂ”"
             picked_line = f"{fmt(fwd)} - {fmt(d)} - {fmt(g)}"
         except Exception:
-            picked_line = "—"
+            picked_line = "вЂ”"
         stake = entry[1]
-        # Локальный форматтер МСК
+        # Р›РѕРєР°Р»СЊРЅС‹Р№ С„РѕСЂРјР°С‚С‚РµСЂ РњРЎРљ
         def iso_to_msk_text(dt_str: str) -> str:
-            import datetime as _dt
-            months = [
-                "января", "февраля", "марта", "апреля", "мая", "июня",
-                "июля", "августа", "сентября", "октября", "ноября", "декабря"
-            ]
-            if not dt_str:
-                return "—"
-            try:
-                dt = _dt.datetime.fromisoformat(str(dt_str))
-            except Exception:
-                return str(dt_str)
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=_dt.timezone.utc)
-            else:
-                dt = dt.astimezone(_dt.timezone.utc)
-            try:
-                from zoneinfo import ZoneInfo
-                msk = dt.astimezone(ZoneInfo("Europe/Moscow"))
-            except Exception:
-                msk = dt.astimezone(_dt.timezone(_dt.timedelta(hours=3)))
-            day = msk.day
-            month_name = months[msk.month - 1]
-            time_part = msk.strftime("%H:%M")
-            return f"{day} {month_name} в {time_part} (мск)"
+            return _format_msk_datetime(dt_str)
 
         deadline_text = iso_to_msk_text(ch[2])
         end_text = iso_to_msk_text(ch[3])
-        status_display = 'регистрация составов' if (status == 'активен') else status
+        status_display = 'СЂРµРіРёСЃС‚СЂР°С†РёСЏ СЃРѕСЃС‚Р°РІРѕРІ' if (status == 'Р°РєС‚РёРІРµРЅ') else status
         txt = (
-            f"Челлендж №{ch[0]}\n"
-            f"Статус: {status_display}\n\n"
-            f"Дедлайн: {deadline_text}\n"
-            f"Подведение итогов: {end_text}\n\n"
-            f"Ваш состав: {picked_line}\n"
-            f"Уровень вызова: {stake} HC"
+            f"Р§РµР»Р»РµРЅРґР¶ в„–{ch[0]}\n"
+            f"РЎС‚Р°С‚СѓСЃ: {status_display}\n\n"
+            f"Р”РµРґР»Р°Р№РЅ: {deadline_text}\n"
+            f"РџРѕРґРІРµРґРµРЅРёРµ РёС‚РѕРіРѕРІ: {end_text}\n\n"
+            f"Р’Р°С€ СЃРѕСЃС‚Р°РІ: {picked_line}\n"
+            f"РЈСЂРѕРІРµРЅСЊ РІС‹Р·РѕРІР°: {stake} HC"
         )
         buttons = [
-            [InlineKeyboardButton('Отменить', callback_data='challenge_cancel')],
-            [InlineKeyboardButton('Пересобрать', callback_data='challenge_reshuffle')],
+            [InlineKeyboardButton('РћС‚РјРµРЅРёС‚СЊ', callback_data='challenge_cancel')],
+            [InlineKeyboardButton('РџРµСЂРµСЃРѕР±СЂР°С‚СЊ', callback_data='challenge_reshuffle')],
         ]
         await context.bot.send_message(chat_id=update.effective_chat.id, text=txt, reply_markup=InlineKeyboardMarkup(buttons))
         return
 
-    # Меню действий по челленджу (если записи нет)
-    # Сохраним id челленджа в контекст для возможного начала сборки
+    # РњРµРЅСЋ РґРµР№СЃС‚РІРёР№ РїРѕ С‡РµР»Р»РµРЅРґР¶Сѓ (РµСЃР»Рё Р·Р°РїРёСЃРё РЅРµС‚)
+    # РЎРѕС…СЂР°РЅРёРј id С‡РµР»Р»РµРЅРґР¶Р° РІ РєРѕРЅС‚РµРєСЃС‚ РґР»СЏ РІРѕР·РјРѕР¶РЅРѕРіРѕ РЅР°С‡Р°Р»Р° СЃР±РѕСЂРєРё
     context.user_data['challenge_id'] = ch[0]
     context.user_data['challenge_age_mode'] = age_mode
     text = (
-        f"Челлендж #{ch[0]}\n"
-        f"Статус: {status}\n"
-        f"Старт: {ch[1]}\nДедлайн: {ch[2]}\nОкончание: {ch[3]}"
+        f"Р§РµР»Р»РµРЅРґР¶ #{ch[0]}\n"
+        f"РЎС‚Р°С‚СѓСЃ: {status}\n"
+        f"РЎС‚Р°СЂС‚: {ch[1]}\nР”РµРґР»Р°Р№РЅ: {ch[2]}\nРћРєРѕРЅС‡Р°РЅРёРµ: {ch[3]}"
     )
-    buttons = [[InlineKeyboardButton("Инфо", callback_data=f"challenge_info_{ch[0]}")]]
-    if status == "активен":
-        buttons.append([InlineKeyboardButton("Собрать состав", callback_data=f"challenge_build_{ch[0]}")])
+    buttons = [[InlineKeyboardButton("РРЅС„Рѕ", callback_data=f"challenge_info_{ch[0]}")]]
+    if status == "Р°РєС‚РёРІРµРЅ":
+        buttons.append([InlineKeyboardButton("РЎРѕР±СЂР°С‚СЊ СЃРѕСЃС‚Р°РІ", callback_data=f"challenge_build_{ch[0]}")])
     # Reformat card to requested Russian layout with MSK times before sending
     try:
         def _to_msk(dt_str):
@@ -926,21 +977,21 @@ async def challenge_open_callback(update: Update, context: ContextTypes.DEFAULT_
                 return dt.astimezone(datetime.timezone(datetime.timedelta(hours=3)))
         def _fmt(dt):
             months = [
-                "января", "февраля", "марта", "апреля", "мая", "июня",
-                "июля", "августа", "сентября", "октября", "ноября", "декабря",
+                "СЏРЅРІР°СЂСЏ", "С„РµРІСЂР°Р»СЏ", "РјР°СЂС‚Р°", "Р°РїСЂРµР»СЏ", "РјР°СЏ", "РёСЋРЅСЏ",
+                "РёСЋР»СЏ", "Р°РІРіСѓСЃС‚Р°", "СЃРµРЅС‚СЏР±СЂСЏ", "РѕРєС‚СЏР±СЂСЏ", "РЅРѕСЏР±СЂСЏ", "РґРµРєР°Р±СЂСЏ",
             ]
             if not dt:
-                return "—"
-            return f"{dt.day} {months[dt.month - 1]} ({dt.strftime('%H:%M')} мск)"
+                return "вЂ”"
+            return f"{dt.day} {months[dt.month - 1]} ({dt.strftime('%H:%M')} РјСЃРє)"
         start_dt = _to_msk(ch[1])
         deadline_dt = _to_msk(ch[2])
         end_dt = _to_msk(ch[3])
         text = (
-            f"Челлендж №{ch[0]}\n"
-            f"Статус: {status}\n\n\n"
-            f"Старт: {_fmt(start_dt)}\n"
-            f"Дедлайн: {_fmt(deadline_dt)}\n"
-            f"Окончание: {_fmt(end_dt)}"
+            f"Р§РµР»Р»РµРЅРґР¶ в„–{ch[0]}\n"
+            f"РЎС‚Р°С‚СѓСЃ: {status}\n\n\n"
+            f"РЎС‚Р°СЂС‚: {_fmt(start_dt)}\n"
+            f"Р”РµРґР»Р°Р№РЅ: {_fmt(deadline_dt)}\n"
+            f"РћРєРѕРЅС‡Р°РЅРёРµ: {_fmt(end_dt)}"
         )
     except Exception:
         pass
@@ -953,9 +1004,9 @@ async def challenge_info_callback(update: Update, context: ContextTypes.DEFAULT_
     try:
         cid = int(query.data.replace("challenge_info_", ""))
     except Exception:
-        await query.edit_message_text("Некорректный запрос.")
+        await query.edit_message_text("РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ Р·Р°РїСЂРѕСЃ.")
         return
-    # Найдем челлендж
+    # РќР°Р№РґРµРј С‡РµР»Р»РµРЅРґР¶
     ch = None
     try:
         rows = db.get_all_challenges() or []
@@ -966,14 +1017,14 @@ async def challenge_info_callback(update: Update, context: ContextTypes.DEFAULT_
     except Exception:
         ch = None
     if not ch:
-        await query.edit_message_text("Челлендж не найден.")
+        await query.edit_message_text("Р§РµР»Р»РµРЅРґР¶ РЅРµ РЅР°Р№РґРµРЅ.")
         return
     status = ch[5] if len(ch) > 5 else ''
     txt = (
-        f"Информация по челленджу #{ch[0]}\n"
-        f"Статус: {status}\n"
-        f"Старт: {ch[1]}\nДедлайн: {ch[2]}\nОкончание: {ch[3]}\n\n"
-        f"Если статус 'активен' — можете собрать состав."
+        f"РРЅС„РѕСЂРјР°С†РёСЏ РїРѕ С‡РµР»Р»РµРЅРґР¶Сѓ #{ch[0]}\n"
+        f"РЎС‚Р°С‚СѓСЃ: {status}\n"
+        f"РЎС‚Р°СЂС‚: {ch[1]}\nР”РµРґР»Р°Р№РЅ: {ch[2]}\nРћРєРѕРЅС‡Р°РЅРёРµ: {ch[3]}\n\n"
+        f"Р•СЃР»Рё СЃС‚Р°С‚СѓСЃ 'Р°РєС‚РёРІРµРЅ' вЂ” РјРѕР¶РµС‚Рµ СЃРѕР±СЂР°С‚СЊ СЃРѕСЃС‚Р°РІ."
     )
     await query.edit_message_text(txt)
 
@@ -983,14 +1034,14 @@ def _parse_shop_items(text: str):
         return items
     lines = [l.strip() for l in text.splitlines() if l.strip()]
     for line in lines:
-        if not (line.startswith('🔸') or line.startswith('•') or line.startswith('-')):
+        if not (line.startswith('рџ”ё') or line.startswith('вЂў') or line.startswith('-')):
             continue
-        # Убираем маркер
-        raw = line.lstrip('🔸').lstrip('•').lstrip('-').strip()
-        # Разделитель — может быть длинное тире или дефис
-        sep = '—' if '—' in raw else (' - ' if ' - ' in raw else '-')
+        # РЈР±РёСЂР°РµРј РјР°СЂРєРµСЂ
+        raw = line.lstrip('рџ”ё').lstrip('вЂў').lstrip('-').strip()
+        # Р Р°Р·РґРµР»РёС‚РµР»СЊ вЂ” РјРѕР¶РµС‚ Р±С‹С‚СЊ РґР»РёРЅРЅРѕРµ С‚РёСЂРµ РёР»Рё РґРµС„РёСЃ
+        sep = 'вЂ”' if 'вЂ”' in raw else (' - ' if ' - ' in raw else '-')
         if sep not in raw:
-            # Пропускаем некорректные строки
+            # РџСЂРѕРїСѓСЃРєР°РµРј РЅРµРєРѕСЂСЂРµРєС‚РЅС‹Рµ СЃС‚СЂРѕРєРё
             continue
         name, price = raw.split(sep, 1)
         name = name.strip()
@@ -1000,31 +1051,31 @@ def _parse_shop_items(text: str):
     return items
 
 async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Показать содержимое магазина: текст + картинка + инлайн-кнопки товаров."""
+    """РџРѕРєР°Р·Р°С‚СЊ СЃРѕРґРµСЂР¶РёРјРѕРµ РјР°РіР°Р·РёРЅР°: С‚РµРєСЃС‚ + РєР°СЂС‚РёРЅРєР° + РёРЅР»Р°Р№РЅ-РєРЅРѕРїРєРё С‚РѕРІР°СЂРѕРІ."""
     try:
         text, image_filename, image_file_id = db.get_shop_content()
     except Exception as e:
-        await update.message.reply_text(f"Ошибка получения данных магазина: {e}")
+        await update.message.reply_text(f"РћС€РёР±РєР° РїРѕР»СѓС‡РµРЅРёСЏ РґР°РЅРЅС‹С… РјР°РіР°Р·РёРЅР°: {e}")
         return
     if not text and not image_filename and not image_file_id:
-        await update.message.reply_text("Магазин пока пуст. Загляните позже.")
+        await update.message.reply_text("РњР°РіР°Р·РёРЅ РїРѕРєР° РїСѓСЃС‚. Р—Р°РіР»СЏРЅРёС‚Рµ РїРѕР·Р¶Рµ.")
         return
-    # Построим инлайн-кнопки из текста
+    # РџРѕСЃС‚СЂРѕРёРј РёРЅР»Р°Р№РЅ-РєРЅРѕРїРєРё РёР· С‚РµРєСЃС‚Р°
     items = _parse_shop_items(text or '')
     buttons = []
     for idx, (name, price) in enumerate(items, start=1):
-        label = f"{name} — {price}"
+        label = f"{name} вЂ” {price}"
         buttons.append([InlineKeyboardButton(label, callback_data=f"shop_item_{idx}")])
     reply_markup = InlineKeyboardMarkup(buttons) if buttons else None
     caption = text if text else None
-    # Попытаемся отправить фото по file_id
+    # РџРѕРїС‹С‚Р°РµРјСЃСЏ РѕС‚РїСЂР°РІРёС‚СЊ С„РѕС‚Рѕ РїРѕ file_id
     if image_file_id:
         try:
             await context.bot.send_photo(chat_id=update.effective_chat.id, photo=image_file_id, caption=caption, reply_markup=reply_markup)
             return
         except Exception:
             logger.warning("send_photo by file_id failed in /shop", exc_info=True)
-    # Попробуем отправить локальный файл
+    # РџРѕРїСЂРѕР±СѓРµРј РѕС‚РїСЂР°РІРёС‚СЊ Р»РѕРєР°Р»СЊРЅС‹Р№ С„Р°Р№Р»
     if image_filename:
         fpath = os.path.join(IMAGES_DIR, image_filename)
         if os.path.exists(fpath):
@@ -1034,11 +1085,11 @@ async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                     return
             except Exception:
                 logger.error("send_photo from local file failed in /shop", exc_info=True)
-    # Если фото не получилось — отправим просто текст
+    # Р•СЃР»Рё С„РѕС‚Рѕ РЅРµ РїРѕР»СѓС‡РёР»РѕСЃСЊ вЂ” РѕС‚РїСЂР°РІРёРј РїСЂРѕСЃС‚Рѕ С‚РµРєСЃС‚
     if caption:
         await update.message.reply_text(caption, reply_markup=reply_markup)
     else:
-        await update.message.reply_text("Магазин недоступен.")
+        await update.message.reply_text("РњР°РіР°Р·РёРЅ РЅРµРґРѕСЃС‚СѓРїРµРЅ.")
 
 async def shop_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -1047,31 +1098,31 @@ async def shop_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     try:
         await query.edit_message_reply_markup(reply_markup=query.message.reply_markup)
     except BadRequest as e:
-        # Игнорируем 'Message is not modified'
+        # РРіРЅРѕСЂРёСЂСѓРµРј 'Message is not modified'
         if 'Message is not modified' not in str(e):
             raise
     try:
         idx = int(data.replace('shop_item_', ''))
     except Exception:
         idx = None
-    # Получим список товаров заново из БД
+    # РџРѕР»СѓС‡РёРј СЃРїРёСЃРѕРє С‚РѕРІР°СЂРѕРІ Р·Р°РЅРѕРІРѕ РёР· Р‘Р”
     try:
         text, _, _ = db.get_shop_content()
     except Exception as e:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Ошибка чтения магазина: {e}")
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"РћС€РёР±РєР° С‡С‚РµРЅРёСЏ РјР°РіР°Р·РёРЅР°: {e}")
         return
     items = _parse_shop_items(text or '')
     if not idx or idx < 1 or idx > len(items):
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Некорректный выбор товара.")
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РІС‹Р±РѕСЂ С‚РѕРІР°СЂР°.")
         return
     name, price_str = items[idx - 1]
-    # Извлечём число из строки цены (например, '35 000 HC' -> 35000)
+    # РР·РІР»РµС‡С‘Рј С‡РёСЃР»Рѕ РёР· СЃС‚СЂРѕРєРё С†РµРЅС‹ (РЅР°РїСЂРёРјРµСЂ, '35 000 HC' -> 35000)
     digits = ''.join(ch for ch in price_str if ch.isdigit())
     try:
         price = int(digits) if digits else 0
     except Exception:
         price = 0
-    # Баланс пользователя
+    # Р‘Р°Р»Р°РЅСЃ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ
     user = update.effective_user
     balance = 0
     try:
@@ -1079,7 +1130,7 @@ async def shop_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if row and len(row) > 3 and isinstance(row[3], (int, float)):
             balance = int(row[3])
         elif row and len(row) > 3:
-            # На случай, если хранится строкой
+            # РќР° СЃР»СѓС‡Р°Р№, РµСЃР»Рё С…СЂР°РЅРёС‚СЃСЏ СЃС‚СЂРѕРєРѕР№
             try:
                 balance = int(str(row[3]))
             except Exception:
@@ -1087,44 +1138,44 @@ async def shop_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     except Exception:
         balance = 0
     if price <= 0:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Товар: {name}\nЦена: {price_str}\n\nНе удалось распознать цену. Свяжитесь с администратором.")
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"РўРѕРІР°СЂ: {name}\nР¦РµРЅР°: {price_str}\n\nРќРµ СѓРґР°Р»РѕСЃСЊ СЂР°СЃРїРѕР·РЅР°С‚СЊ С†РµРЅСѓ. РЎРІСЏР¶РёС‚РµСЃСЊ СЃ Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂРѕРј.")
         return
     if balance < price:
         need = price - balance
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
             text=(
-                f"Товар: {name}\nЦена: {price_str}\n\n"
-                f"Недостаточно средств: не хватает {need} HC.\n"
-                f"Вы можете подключить подписку /subscribe за 299 руб/месяц, чтобы быстрее накапливать HC."
+                f"РўРѕРІР°СЂ: {name}\nР¦РµРЅР°: {price_str}\n\n"
+                f"РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ СЃСЂРµРґСЃС‚РІ: РЅРµ С…РІР°С‚Р°РµС‚ {need} HC.\n"
+                f"Р’С‹ РјРѕР¶РµС‚Рµ РїРѕРґРєР»СЋС‡РёС‚СЊ РїРѕРґРїРёСЃРєСѓ /subscribe Р·Р° 299 СЂСѓР±/РјРµСЃСЏС†, С‡С‚РѕР±С‹ Р±С‹СЃС‚СЂРµРµ РЅР°РєР°РїР»РёРІР°С‚СЊ HC."
             )
         )
         return
-    # Баланса достаточно — пробуем списать HC
+    # Р‘Р°Р»Р°РЅСЃР° РґРѕСЃС‚Р°С‚РѕС‡РЅРѕ вЂ” РїСЂРѕР±СѓРµРј СЃРїРёСЃР°С‚СЊ HC
     try:
         db.update_hc_balance(user.id, -price)
         new_balance = max(0, balance - price)
     except Exception as e:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Не удалось списать HC: {e}")
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"РќРµ СѓРґР°Р»РѕСЃСЊ СЃРїРёСЃР°С‚СЊ HC: {e}")
         return
-    # Сообщение пользователю
+    # РЎРѕРѕР±С‰РµРЅРёРµ РїРѕР»СЊР·РѕРІР°С‚РµР»СЋ
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
         text=(
-            f"Товар: {name}\nЦена: {price_str}\n\n"
-            f"Покупка принята! С вашего баланса списано {price} HC.\n"
-            f"Текущий баланс: {new_balance} HC."
+            f"РўРѕРІР°СЂ: {name}\nР¦РµРЅР°: {price_str}\n\n"
+            f"РџРѕРєСѓРїРєР° РїСЂРёРЅСЏС‚Р°! РЎ РІР°С€РµРіРѕ Р±Р°Р»Р°РЅСЃР° СЃРїРёСЃР°РЅРѕ {price} HC.\n"
+            f"РўРµРєСѓС‰РёР№ Р±Р°Р»Р°РЅСЃ: {new_balance} HC."
         )
     )
-    # Уведомление админа(ов)
+    # РЈРІРµРґРѕРјР»РµРЅРёРµ Р°РґРјРёРЅР°(РѕРІ)
     try:
         admin_text = (
-            "🛒 Запрос на покупку\n\n"
-            f"Пользователь: {user.full_name} (@{user.username or '-'}, id={user.id})\n"
-            f"Товар: {name}\n"
-            f"Цена: {price_str}\n"
-            f"Списано: {price} HC\n"
-            f"Новый баланс: {new_balance} HC\n"
+            "рџ›’ Р—Р°РїСЂРѕСЃ РЅР° РїРѕРєСѓРїРєСѓ\n\n"
+            f"РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ: {user.full_name} (@{user.username or '-'}, id={user.id})\n"
+            f"РўРѕРІР°СЂ: {name}\n"
+            f"Р¦РµРЅР°: {price_str}\n"
+            f"РЎРїРёСЃР°РЅРѕ: {price} HC\n"
+            f"РќРѕРІС‹Р№ Р±Р°Р»Р°РЅСЃ: {new_balance} HC\n"
         )
         await context.bot.send_message(chat_id=ADMIN_ID, text=admin_text)
     except Exception:
@@ -1138,9 +1189,9 @@ async def challenge_build_callback(update: Update, context: ContextTypes.DEFAULT
     try:
         cid = int(query.data.replace("challenge_build_", ""))
     except Exception:
-        await query.edit_message_text("Некорректный запрос.")
+        await query.edit_message_text("РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ Р·Р°РїСЂРѕСЃ.")
         return
-    # Проверим, что выбранный челлендж активен
+    # РџСЂРѕРІРµСЂРёРј, С‡С‚Рѕ РІС‹Р±СЂР°РЅРЅС‹Р№ С‡РµР»Р»РµРЅРґР¶ Р°РєС‚РёРІРµРЅ
     ch = None
     try:
         rows = db.get_all_challenges() or []
@@ -1151,27 +1202,27 @@ async def challenge_build_callback(update: Update, context: ContextTypes.DEFAULT
     except Exception:
         ch = None
     if not ch:
-        await query.edit_message_text("Челлендж не найден.")
+        await query.edit_message_text("Р§РµР»Р»РµРЅРґР¶ РЅРµ РЅР°Р№РґРµРЅ.")
         return
     status = ch[5] if len(ch) > 5 else ''
-    if status != "активен":
-        await query.edit_message_text("Сбор состава недоступен: челлендж не активен.")
+    if status != "Р°РєС‚РёРІРµРЅ":
+        await query.edit_message_text("РЎР±РѕСЂ СЃРѕСЃС‚Р°РІР° РЅРµРґРѕСЃС‚СѓРїРµРЅ: С‡РµР»Р»РµРЅРґР¶ РЅРµ Р°РєС‚РёРІРµРЅ.")
         return
 
-    # Сохраним id челленджа в user_data для дальнейших шагов
+    # РЎРѕС…СЂР°РЅРёРј id С‡РµР»Р»РµРЅРґР¶Р° РІ user_data РґР»СЏ РґР°Р»СЊРЅРµР№С€РёС… С€Р°РіРѕРІ
     context.user_data['challenge_id'] = cid
-    # Переиспользуем текущую механику: выбор уровня вызова
+    # РџРµСЂРµРёСЃРїРѕР»СЊР·СѓРµРј С‚РµРєСѓС‰СѓСЋ РјРµС…Р°РЅРёРєСѓ: РІС‹Р±РѕСЂ СѓСЂРѕРІРЅСЏ РІС‹Р·РѕРІР°
     text = (
-        "Выберите уровень вызова для челленджа:\n\n"
-        "⚡️ 50 HC\n⚡️ 100 HC\n⚡️ 500 HC"
+        "Р’С‹Р±РµСЂРёС‚Рµ СѓСЂРѕРІРµРЅСЊ РІС‹Р·РѕРІР° РґР»СЏ С‡РµР»Р»РµРЅРґР¶Р°:\n\n"
+        "вљЎпёЏ 50 HC\nвљЎпёЏ 100 HC\nвљЎпёЏ 500 HC"
     )
     if age_mode == 'under23':
-        text += "\n\nРежим U23: доступны только игроки 23 лет и младше."
+        text += "\n\nР РµР¶РёРј U23: РґРѕСЃС‚СѓРїРЅС‹ С‚РѕР»СЊРєРѕ РёРіСЂРѕРєРё 23 Р»РµС‚ Рё РјР»Р°РґС€Рµ."
     keyboard = [
         [
-            InlineKeyboardButton('⚡️ 50 HC', callback_data='challenge_level_50'),
-            InlineKeyboardButton('⚡️ 100 HC', callback_data='challenge_level_100'),
-            InlineKeyboardButton('⚡️ 500 HC', callback_data='challenge_level_500'),
+            InlineKeyboardButton('вљЎпёЏ 50 HC', callback_data='challenge_level_50'),
+            InlineKeyboardButton('вљЎпёЏ 100 HC', callback_data='challenge_level_100'),
+            InlineKeyboardButton('вљЎпёЏ 500 HC', callback_data='challenge_level_500'),
         ]
     ]
     await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
@@ -1185,7 +1236,7 @@ async def challenge_level_callback(update: Update, context: ContextTypes.DEFAULT
     try:
         cid_guard = context.user_data.get('challenge_id')
         if cid_guard and _challenge_deadline_passed(cid_guard):
-            await query.edit_message_text("Дедлайн челленджа прошёл. Сбор состава закрыт.")
+            await query.edit_message_text("Р”РµРґР»Р°Р№РЅ С‡РµР»Р»РµРЅРґР¶Р° РїСЂРѕС€С‘Р». РЎР±РѕСЂ СЃРѕСЃС‚Р°РІР° Р·Р°РєСЂС‹С‚.")
             return
     except Exception:
         pass
@@ -1193,45 +1244,45 @@ async def challenge_level_callback(update: Update, context: ContextTypes.DEFAULT
     try:
         level_int = int(level)
     except Exception:
-        await query.edit_message_text("Некорректный уровень вызова.")
+        await query.edit_message_text("РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ СѓСЂРѕРІРµРЅСЊ РІС‹Р·РѕРІР°.")
         return
     user = update.effective_user
     user_row = db.get_user_by_id(user.id)
     balance = user_row[3] if user_row else 0
     if balance < level_int:
         text = (
-            f"Недостаточно HC для уровня {level_int} HC.\n"
-            f"Текущий баланс: {balance} HC.\n\n"
-            "Выберите доступный уровень вызова:"
+            f"РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ HC РґР»СЏ СѓСЂРѕРІРЅСЏ {level_int} HC.\n"
+            f"РўРµРєСѓС‰РёР№ Р±Р°Р»Р°РЅСЃ: {balance} HC.\n\n"
+            "Р’С‹Р±РµСЂРёС‚Рµ РґРѕСЃС‚СѓРїРЅС‹Р№ СѓСЂРѕРІРµРЅСЊ РІС‹Р·РѕРІР°:"
         )
         keyboard = [
             [
-                InlineKeyboardButton('⚡️ 50 HC', callback_data='challenge_level_50'),
-                InlineKeyboardButton('⚡️ 100 HC', callback_data='challenge_level_100'),
-                InlineKeyboardButton('⚡️ 500 HC', callback_data='challenge_level_500'),
+                InlineKeyboardButton('вљЎпёЏ 50 HC', callback_data='challenge_level_50'),
+                InlineKeyboardButton('вљЎпёЏ 100 HC', callback_data='challenge_level_100'),
+                InlineKeyboardButton('вљЎпёЏ 500 HC', callback_data='challenge_level_500'),
             ]
         ]
         await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
         return
-    # Баланс достаточен — списываем и создаём заявку
+    # Р‘Р°Р»Р°РЅСЃ РґРѕСЃС‚Р°С‚РѕС‡РµРЅ вЂ” СЃРїРёСЃС‹РІР°РµРј Рё СЃРѕР·РґР°С‘Рј Р·Р°СЏРІРєСѓ
     cid = context.user_data.get('challenge_id')
     if not cid:
-        await query.edit_message_text("Ошибка: нет выбранного челленджа. Откройте заново через /challenge.")
+        await query.edit_message_text("РћС€РёР±РєР°: РЅРµС‚ РІС‹Р±СЂР°РЅРЅРѕРіРѕ С‡РµР»Р»РµРЅРґР¶Р°. РћС‚РєСЂРѕР№С‚Рµ Р·Р°РЅРѕРІРѕ С‡РµСЂРµР· /challenge.")
         return
     ok = db.create_challenge_entry_and_charge(cid, user.id, level_int)
     if not ok:
-        await query.edit_message_text("Не удалось создать заявку: возможно, запись уже существует или недостаточно HC.")
+        await query.edit_message_text("РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕР·РґР°С‚СЊ Р·Р°СЏРІРєСѓ: РІРѕР·РјРѕР¶РЅРѕ, Р·Р°РїРёСЃСЊ СѓР¶Рµ СЃСѓС‰РµСЃС‚РІСѓРµС‚ РёР»Рё РЅРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ HC.")
         return
     context.user_data['challenge_level'] = level_int
-    context.user_data['challenge_remaining_positions'] = ['нападающий', 'защитник', 'вратарь']
-    # Показать выбор позиции
+    context.user_data['challenge_remaining_positions'] = ['РЅР°РїР°РґР°СЋС‰РёР№', 'Р·Р°С‰РёС‚РЅРёРє', 'РІСЂР°С‚Р°СЂСЊ']
+    # РџРѕРєР°Р·Р°С‚СЊ РІС‹Р±РѕСЂ РїРѕР·РёС†РёРё
     buttons = [
-        [InlineKeyboardButton('нападающий', callback_data='challenge_pick_pos_нападающий')],
-        [InlineKeyboardButton('защитник', callback_data='challenge_pick_pos_защитник')],
-        [InlineKeyboardButton('вратарь', callback_data='challenge_pick_pos_вратарь')],
+        [InlineKeyboardButton('РЅР°РїР°РґР°СЋС‰РёР№', callback_data='challenge_pick_pos_РЅР°РїР°РґР°СЋС‰РёР№')],
+        [InlineKeyboardButton('Р·Р°С‰РёС‚РЅРёРє', callback_data='challenge_pick_pos_Р·Р°С‰РёС‚РЅРёРє')],
+        [InlineKeyboardButton('РІСЂР°С‚Р°СЂСЊ', callback_data='challenge_pick_pos_РІСЂР°С‚Р°СЂСЊ')],
     ]
     await query.edit_message_text(
-        f"Уровень вызова выбран: {level_int} HC. С вашего баланса списано {level_int} HC.\nВыберите позицию:",
+        f"РЈСЂРѕРІРµРЅСЊ РІС‹Р·РѕРІР° РІС‹Р±СЂР°РЅ: {level_int} HC. РЎ РІР°С€РµРіРѕ Р±Р°Р»Р°РЅСЃР° СЃРїРёСЃР°РЅРѕ {level_int} HC.\nР’С‹Р±РµСЂРёС‚Рµ РїРѕР·РёС†РёСЋ:",
         reply_markup=InlineKeyboardMarkup(buttons)
     )
 
@@ -1243,18 +1294,18 @@ async def challenge_pick_pos_callback(update: Update, context: ContextTypes.DEFA
     try:
         cid_guard = context.user_data.get('challenge_id')
         if cid_guard and _challenge_deadline_passed(cid_guard):
-            await query.edit_message_text("Дедлайн челленджа прошёл. Выбор игроков закрыт.")
+            await query.edit_message_text("Р”РµРґР»Р°Р№РЅ С‡РµР»Р»РµРЅРґР¶Р° РїСЂРѕС€С‘Р». Р’С‹Р±РѕСЂ РёРіСЂРѕРєРѕРІ Р·Р°РєСЂС‹С‚.")
             return
     except Exception:
         pass
     pos = query.data.replace('challenge_pick_pos_', '')
-    remaining = context.user_data.get('challenge_remaining_positions', ['нападающий', 'защитник', 'вратарь'])
+    remaining = context.user_data.get('challenge_remaining_positions', ['РЅР°РїР°РґР°СЋС‰РёР№', 'Р·Р°С‰РёС‚РЅРёРє', 'РІСЂР°С‚Р°СЂСЊ'])
     if pos not in remaining:
-        await query.edit_message_text("Эта позиция уже выбрана. Выберите другую.")
+        await query.edit_message_text("Р­С‚Р° РїРѕР·РёС†РёСЏ СѓР¶Рµ РІС‹Р±СЂР°РЅР°. Р’С‹Р±РµСЂРёС‚Рµ РґСЂСѓРіСѓСЋ.")
         return
     context.user_data['challenge_current_pos'] = pos
     context.user_data['challenge_expect_team'] = True
-    await query.edit_message_text(f"Вы выбрали позицию: {pos}. Теперь введите название команды сообщением.")
+    await query.edit_message_text(f"Р’С‹ РІС‹Р±СЂР°Р»Рё РїРѕР·РёС†РёСЋ: {pos}. РўРµРїРµСЂСЊ РІРІРµРґРёС‚Рµ РЅР°Р·РІР°РЅРёРµ РєРѕРјР°РЅРґС‹ СЃРѕРѕР±С‰РµРЅРёРµРј.")
 
 
 async def challenge_team_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1262,36 +1313,35 @@ async def challenge_team_input(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         cid_guard = context.user_data.get('challenge_id')
         if cid_guard and _challenge_deadline_passed(cid_guard):
-            await update.effective_message.reply_text("Дедлайн челленджа прошёл. Выбор игроков закрыт.")
+            await update.effective_message.reply_text("Р”РµРґР»Р°Р№РЅ С‡РµР»Р»РµРЅРґР¶Р° РїСЂРѕС€С‘Р». Р’С‹Р±РѕСЂ РёРіСЂРѕРєРѕРІ Р·Р°РєСЂС‹С‚.")
             return
     except Exception:
         pass
-    # Обрабатываем текст названия команды только если ожидаем
+    # РћР±СЂР°Р±Р°С‚С‹РІР°РµРј С‚РµРєСЃС‚ РЅР°Р·РІР°РЅРёСЏ РєРѕРјР°РЅРґС‹ С‚РѕР»СЊРєРѕ РµСЃР»Рё РѕР¶РёРґР°РµРј
     if not context.user_data.get('challenge_expect_team'):
         return
     team_text = (update.message.text or '').strip()
     context.user_data['challenge_expect_team'] = False
     context.user_data['challenge_team_query'] = team_text
     pos = context.user_data.get('challenge_current_pos')
-    # Список игроков по позиции и названию команды
+    # РЎРїРёСЃРѕРє РёРіСЂРѕРєРѕРІ РїРѕ РїРѕР·РёС†РёРё Рё РЅР°Р·РІР°РЅРёСЋ РєРѕРјР°РЅРґС‹
     from db import get_all_players
     all_players = get_all_players()
-    team_lower = team_text.lower()
     age_mode = context.user_data.get('challenge_age_mode', 'default')
     filtered = [
         p
         for p in all_players
         if (p[2] or '').lower() == pos
-        and team_lower in str(p[3] or '').lower()
+        and _team_matches(p[3], team_text)
         and _challenge_player_allowed(p, age_mode)
     ]
     if not filtered:
-        await update.message.reply_text("Игроки не найдены по текущим условиям. Уточните название команды.")
+        await update.message.reply_text("РРіСЂРѕРєРё РЅРµ РЅР°Р№РґРµРЅС‹ РїРѕ С‚РµРєСѓС‰РёРј СѓСЃР»РѕРІРёСЏРј. РЈС‚РѕС‡РЅРёС‚Рµ РЅР°Р·РІР°РЅРёРµ РєРѕРјР°РЅРґС‹.")
         if age_mode == 'under23':
-            await update.message.reply_text('Режим U23 допускает только игроков 23 лет и младше.')
-        remaining = context.user_data.get('challenge_remaining_positions', ['нападающий', 'защитник', 'вратарь'])
+            await update.message.reply_text('Р РµР¶РёРј U23 РґРѕРїСѓСЃРєР°РµС‚ С‚РѕР»СЊРєРѕ РёРіСЂРѕРєРѕРІ 23 Р»РµС‚ Рё РјР»Р°РґС€Рµ.')
+        remaining = context.user_data.get('challenge_remaining_positions', ['РЅР°РїР°РґР°СЋС‰РёР№', 'Р·Р°С‰РёС‚РЅРёРє', 'РІСЂР°С‚Р°СЂСЊ'])
         btns = [[InlineKeyboardButton(x, callback_data=f"challenge_pick_pos_{x}")] for x in remaining]
-        await update.message.reply_text("Выберите позицию:", reply_markup=InlineKeyboardMarkup(btns))
+        await update.message.reply_text("Р’С‹Р±РµСЂРёС‚Рµ РїРѕР·РёС†РёСЋ:", reply_markup=InlineKeyboardMarkup(btns))
         return
     kb = []
     for p in filtered:
@@ -1302,7 +1352,7 @@ async def challenge_team_input(update: Update, context: ContextTypes.DEFAULT_TYP
             except Exception:
                 label += ' - age?'
         kb.append([InlineKeyboardButton(label, callback_data=f"challenge_pick_player_{p[0]}")])
-    await update.message.reply_text("Выберите игрока:", reply_markup=InlineKeyboardMarkup(kb))
+    await update.message.reply_text("Р’С‹Р±РµСЂРёС‚Рµ РёРіСЂРѕРєР°:", reply_markup=InlineKeyboardMarkup(kb))
 
 
 async def challenge_pick_player_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1312,51 +1362,51 @@ async def challenge_pick_player_callback(update: Update, context: ContextTypes.D
     try:
         cid_guard = context.user_data.get('challenge_id')
         if cid_guard and _challenge_deadline_passed(cid_guard):
-            await query.edit_message_text("Дедлайн челленджа прошёл. Выбор игроков закрыт.")
+            await query.edit_message_text("Р”РµРґР»Р°Р№РЅ С‡РµР»Р»РµРЅРґР¶Р° РїСЂРѕС€С‘Р». Р’С‹Р±РѕСЂ РёРіСЂРѕРєРѕРІ Р·Р°РєСЂС‹С‚.")
             return
     except Exception:
         pass
     try:
         pid = int(query.data.replace('challenge_pick_player_', ''))
     except Exception:
-        await query.edit_message_text("Некорректный выбор игрока.")
+        await query.edit_message_text("РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РІС‹Р±РѕСЂ РёРіСЂРѕРєР°.")
         return
     cid = context.user_data.get('challenge_id')
     pos = context.user_data.get('challenge_current_pos')
     if not cid or not pos:
-        await query.edit_message_text("Контекст выбора утерян. Начните заново: /challenge")
+        await query.edit_message_text("РљРѕРЅС‚РµРєСЃС‚ РІС‹Р±РѕСЂР° СѓС‚РµСЂСЏРЅ. РќР°С‡РЅРёС‚Рµ Р·Р°РЅРѕРІРѕ: /challenge")
         return
-    # Сохраняем пик
+    # РЎРѕС…СЂР°РЅСЏРµРј РїРёРє
     age_mode = context.user_data.get('challenge_age_mode', 'default')
     player_row = db.get_player_by_id(pid)
     if not player_row or not _challenge_player_allowed(player_row, age_mode):
-        await query.edit_message_text('Этот игрок недоступен в выбранном режиме челленджа.')
+        await query.edit_message_text('Р­С‚РѕС‚ РёРіСЂРѕРє РЅРµРґРѕСЃС‚СѓРїРµРЅ РІ РІС‹Р±СЂР°РЅРЅРѕРј СЂРµР¶РёРјРµ С‡РµР»Р»РµРЅРґР¶Р°.')
         return
     try:
         db.challenge_set_pick(cid, update.effective_user.id, pos, pid)
         picked_name = f"{player_row[1]} ({player_row[3]})"
-        await query.edit_message_text(f"Вы выбрали: {picked_name}")
+        await query.edit_message_text(f"Р’С‹ РІС‹Р±СЂР°Р»Рё: {picked_name}")
     except Exception as e:
-        await query.edit_message_text(f"Не удалось сохранить выбор: {e}")
+        await query.edit_message_text(f"РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ РІС‹Р±РѕСЂ: {e}")
         return
-    # Обновляем список оставшихся позиций
-    remaining = context.user_data.get('challenge_remaining_positions', ['нападающий', 'защитник', 'вратарь'])
+    # РћР±РЅРѕРІР»СЏРµРј СЃРїРёСЃРѕРє РѕСЃС‚Р°РІС€РёС…СЃСЏ РїРѕР·РёС†РёР№
+    remaining = context.user_data.get('challenge_remaining_positions', ['РЅР°РїР°РґР°СЋС‰РёР№', 'Р·Р°С‰РёС‚РЅРёРє', 'РІСЂР°С‚Р°СЂСЊ'])
     try:
         remaining.remove(pos)
     except ValueError:
         pass
     context.user_data['challenge_remaining_positions'] = remaining
     if remaining:
-        # Показать оставшиеся позиции
+        # РџРѕРєР°Р·Р°С‚СЊ РѕСЃС‚Р°РІС€РёРµСЃСЏ РїРѕР·РёС†РёРё
         btns = [[InlineKeyboardButton(x, callback_data=f"challenge_pick_pos_{x}")] for x in remaining]
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Выберите следующую позицию:", reply_markup=InlineKeyboardMarkup(btns))
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="Р’С‹Р±РµСЂРёС‚Рµ СЃР»РµРґСѓСЋС‰СѓСЋ РїРѕР·РёС†РёСЋ:", reply_markup=InlineKeyboardMarkup(btns))
         return
-    # Все три позиции выбраны — финализация
+    # Р’СЃРµ С‚СЂРё РїРѕР·РёС†РёРё РІС‹Р±СЂР°РЅС‹ вЂ” С„РёРЅР°Р»РёР·Р°С†РёСЏ
     try:
         db.challenge_finalize(cid, update.effective_user.id)
     except Exception:
         pass
-    # Сводка
+    # РЎРІРѕРґРєР°
     try:
         fwd_id = db.challenge_get_entry(cid, update.effective_user.id)[2]
         d_id = db.challenge_get_entry(cid, update.effective_user.id)[3]
@@ -1369,51 +1419,27 @@ async def challenge_pick_player_callback(update: Update, context: ContextTypes.D
         picked_line = f"{fmt(fwd)} - {fmt(d)} - {fmt(g)}"
     except Exception:
         picked_line = "-"
-    # Найдём дедлайн и ставку
+    # РќР°Р№РґС‘Рј РґРµРґР»Р°Р№РЅ Рё СЃС‚Р°РІРєСѓ
     ch = None
     try:
         ch = db.get_challenge_by_id(cid)
     except Exception:
         ch = None
-    # Форматируем дату подведения итогов (используем конец челленджа ch[3])
+    # Р¤РѕСЂРјР°С‚РёСЂСѓРµРј РґР°С‚Сѓ РїРѕРґРІРµРґРµРЅРёСЏ РёС‚РѕРіРѕРІ (РёСЃРїРѕР»СЊР·СѓРµРј РєРѕРЅРµС† С‡РµР»Р»РµРЅРґР¶Р° ch[3])
     def iso_to_msk_text(dt_str: str) -> str:
-        import datetime as _dt
-        months = [
-            "января", "февраля", "марта", "апреля", "мая", "июня",
-            "июля", "августа", "сентября", "октября", "ноября", "декабря"
-        ]
-        if not dt_str:
-            return "—"
-        try:
-            dt = _dt.datetime.fromisoformat(str(dt_str))
-        except Exception:
-            return str(dt_str)
-        # считаем, что хранится UTC
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=_dt.timezone.utc)
-        else:
-            dt = dt.astimezone(_dt.timezone.utc)
-        try:
-            from zoneinfo import ZoneInfo
-            msk = dt.astimezone(ZoneInfo("Europe/Moscow"))
-        except Exception:
-            msk = dt.astimezone(_dt.timezone(_dt.timedelta(hours=3)))
-        day = msk.day
-        month_name = months[msk.month - 1]
-        time_part = msk.strftime("%H:%M")
-        return f"{day} {month_name} в {time_part} (мск)"
+        return _format_msk_datetime(dt_str)
 
     end_iso = ch[3] if ch else ""
     end_text = iso_to_msk_text(end_iso)
     stake = context.user_data.get('challenge_level')
     txt = (
         f"{picked_line}\n"
-        f"Подведение итогов: {end_text}\n"
-        f"Ваш уровень вызова: {stake} HC"
+        f"РџРѕРґРІРµРґРµРЅРёРµ РёС‚РѕРіРѕРІ: {end_text}\n"
+        f"Р’Р°С€ СѓСЂРѕРІРµРЅСЊ РІС‹Р·РѕРІР°: {stake} HC"
     )
     buttons = [
-        [InlineKeyboardButton('Отменить', callback_data='challenge_cancel')],
-        [InlineKeyboardButton('Пересобрать', callback_data='challenge_reshuffle')],
+        [InlineKeyboardButton('РћС‚РјРµРЅРёС‚СЊ', callback_data='challenge_cancel')],
+        [InlineKeyboardButton('РџРµСЂРµСЃРѕР±СЂР°С‚СЊ', callback_data='challenge_reshuffle')],
     ]
     await context.bot.send_message(chat_id=update.effective_chat.id, text=txt, reply_markup=InlineKeyboardMarkup(buttons))
 
@@ -1423,18 +1449,18 @@ async def challenge_cancel_callback(update: Update, context: ContextTypes.DEFAUL
     await query.answer()
     cid = context.user_data.get('challenge_id')
     if not cid:
-        await query.edit_message_text("Отмена недоступна: нет активной записи.")
+        await query.edit_message_text("РћС‚РјРµРЅР° РЅРµРґРѕСЃС‚СѓРїРЅР°: РЅРµС‚ Р°РєС‚РёРІРЅРѕР№ Р·Р°РїРёСЃРё.")
         return
     refunded = db.challenge_cancel_and_refund(cid, update.effective_user.id)
     if refunded:
-        # На всякий случай очистим пики
+        # РќР° РІСЃСЏРєРёР№ СЃР»СѓС‡Р°Р№ РѕС‡РёСЃС‚РёРј РїРёРєРё
         try:
             db.challenge_reset_picks(cid, update.effective_user.id)
         except Exception:
             pass
-        await query.edit_message_text("Заявка отменена, состав очищен, HC возвращены на баланс.")
+        await query.edit_message_text("Р—Р°СЏРІРєР° РѕС‚РјРµРЅРµРЅР°, СЃРѕСЃС‚Р°РІ РѕС‡РёС‰РµРЅ, HC РІРѕР·РІСЂР°С‰РµРЅС‹ РЅР° Р±Р°Р»Р°РЅСЃ.")
     else:
-        await query.edit_message_text("Заявка уже завершена или отсутствует. Возврат невозможен.")
+        await query.edit_message_text("Р—Р°СЏРІРєР° СѓР¶Рµ Р·Р°РІРµСЂС€РµРЅР° РёР»Рё РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚. Р’РѕР·РІСЂР°С‚ РЅРµРІРѕР·РјРѕР¶РµРЅ.")
 
 
 async def challenge_reshuffle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1444,65 +1470,65 @@ async def challenge_reshuffle_callback(update: Update, context: ContextTypes.DEF
     try:
         cid_guard = context.user_data.get('challenge_id')
         if cid_guard and _challenge_deadline_passed(cid_guard):
-            await query.edit_message_text("Дедлайн челленджа прошёл. Пересборка недоступна.")
+            await query.edit_message_text("Р”РµРґР»Р°Р№РЅ С‡РµР»Р»РµРЅРґР¶Р° РїСЂРѕС€С‘Р». РџРµСЂРµСЃР±РѕСЂРєР° РЅРµРґРѕСЃС‚СѓРїРЅР°.")
             return
     except Exception:
         pass
     cid = context.user_data.get('challenge_id')
     if not cid:
-        await query.edit_message_text("Пересборка недоступна: нет активной записи.")
+        await query.edit_message_text("РџРµСЂРµСЃР±РѕСЂРєР° РЅРµРґРѕСЃС‚СѓРїРЅР°: РЅРµС‚ Р°РєС‚РёРІРЅРѕР№ Р·Р°РїРёСЃРё.")
         return
     try:
         db.challenge_reset_picks(cid, update.effective_user.id)
-        context.user_data['challenge_remaining_positions'] = ['нападающий', 'защитник', 'вратарь']
+        context.user_data['challenge_remaining_positions'] = ['РЅР°РїР°РґР°СЋС‰РёР№', 'Р·Р°С‰РёС‚РЅРёРє', 'РІСЂР°С‚Р°СЂСЊ']
         btns = [[InlineKeyboardButton(x, callback_data=f"challenge_pick_pos_{x}")] for x in context.user_data['challenge_remaining_positions']]
-        await query.edit_message_text("Сброс выполнен. Выберите позицию:", reply_markup=InlineKeyboardMarkup(btns))
+        await query.edit_message_text("РЎР±СЂРѕСЃ РІС‹РїРѕР»РЅРµРЅ. Р’С‹Р±РµСЂРёС‚Рµ РїРѕР·РёС†РёСЋ:", reply_markup=InlineKeyboardMarkup(btns))
     except Exception as e:
-        await query.edit_message_text(f"Не удалось пересобрать: {e}")
+        await query.edit_message_text(f"РќРµ СѓРґР°Р»РѕСЃСЊ РїРµСЂРµСЃРѕР±СЂР°С‚СЊ: {e}")
 
 
 TOUR_START, TOUR_FORWARD_1, TOUR_FORWARD_2, TOUR_FORWARD_3, TOUR_DEFENDER_1, TOUR_DEFENDER_2, TOUR_GOALIE, TOUR_CAPTAIN, PREMIUM_TEAM, PREMIUM_POSITION = range(10)
 
 async def tour_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Получаем объект сообщения для ответа (универсально для Update и CallbackQuery)
+    # РџРѕР»СѓС‡Р°РµРј РѕР±СЉРµРєС‚ СЃРѕРѕР±С‰РµРЅРёСЏ РґР»СЏ РѕС‚РІРµС‚Р° (СѓРЅРёРІРµСЂСЃР°Р»СЊРЅРѕ РґР»СЏ Update Рё CallbackQuery)
     message = getattr(update, "effective_message", None)
     if message is None and hasattr(update, "message"):
         message = update.message
     elif message is None and hasattr(update, "callback_query"):
         message = update.callback_query.message
 
-    # Проверяем активную подписку
+    # РџСЂРѕРІРµСЂСЏРµРј Р°РєС‚РёРІРЅСѓСЋ РїРѕРґРїРёСЃРєСѓ
     try:
         from db import is_subscription_active
         user = update.effective_user
         if not is_subscription_active(user.id):
             await message.reply_text(
-                "Подписка не активна. Оформите или продлите подписку командой /subscribe, затем повторите попытку."
+                "РџРѕРґРїРёСЃРєР° РЅРµ Р°РєС‚РёРІРЅР°. РћС„РѕСЂРјРёС‚Рµ РёР»Рё РїСЂРѕРґР»РёС‚Рµ РїРѕРґРїРёСЃРєСѓ РєРѕРјР°РЅРґРѕР№ /subscribe, Р·Р°С‚РµРј РїРѕРІС‚РѕСЂРёС‚Рµ РїРѕРїС‹С‚РєСѓ."
             )
             return ConversationHandler.END
     except Exception:
-        # При ошибке проверки не блокируем, но даём подсказку
+        # РџСЂРё РѕС€РёР±РєРµ РїСЂРѕРІРµСЂРєРё РЅРµ Р±Р»РѕРєРёСЂСѓРµРј, РЅРѕ РґР°С‘Рј РїРѕРґСЃРєР°Р·РєСѓ
         try:
-            await message.reply_text("Не удалось проверить подписку. Если доступ ограничен, используйте /subscribe.")
+            await message.reply_text("РќРµ СѓРґР°Р»РѕСЃСЊ РїСЂРѕРІРµСЂРёС‚СЊ РїРѕРґРїРёСЃРєСѓ. Р•СЃР»Рё РґРѕСЃС‚СѓРї РѕРіСЂР°РЅРёС‡РµРЅ, РёСЃРїРѕР»СЊР·СѓР№С‚Рµ /subscribe.")
         except Exception:
             pass
 
-    # --- Определяем активный тур ---
+    # --- РћРїСЂРµРґРµР»СЏРµРј Р°РєС‚РёРІРЅС‹Р№ С‚СѓСЂ ---
     from db import get_active_tour
     active_tour = get_active_tour()
     if not active_tour:
-        await message.reply_text("Нет активного тура для сбора состава. Обратитесь к администратору.")
+        await message.reply_text("РќРµС‚ Р°РєС‚РёРІРЅРѕРіРѕ С‚СѓСЂР° РґР»СЏ СЃР±РѕСЂР° СЃРѕСЃС‚Р°РІР°. РћР±СЂР°С‚РёС‚РµСЃСЊ Рє Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂСѓ.")
         return ConversationHandler.END
 async def tour_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     from telegram import InlineKeyboardMarkup, InlineKeyboardButton
-    # Получаем объект сообщения для ответа (универсально для Update и CallbackQuery)
+    # РџРѕР»СѓС‡Р°РµРј РѕР±СЉРµРєС‚ СЃРѕРѕР±С‰РµРЅРёСЏ РґР»СЏ РѕС‚РІРµС‚Р° (СѓРЅРёРІРµСЂСЃР°Р»СЊРЅРѕ РґР»СЏ Update Рё CallbackQuery)
     message = getattr(update, "effective_message", None)
     if message is None and hasattr(update, "message"):
         message = update.message
     elif message is None and hasattr(update, "callback_query"):
         message = update.callback_query.message
 
-    # --- Определяем активный тур ---
+    # --- РћРїСЂРµРґРµР»СЏРµРј Р°РєС‚РёРІРЅС‹Р№ С‚СѓСЂ ---
     from db import (
         get_active_tour,
         get_user_tour_roster,
@@ -1512,26 +1538,26 @@ async def tour_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     active_tour = get_active_tour()
     if not active_tour:
-        await message.reply_text("Нет активного тура для сбора состава. Обратитесь к администратору.")
+        await message.reply_text("РќРµС‚ Р°РєС‚РёРІРЅРѕРіРѕ С‚СѓСЂР° РґР»СЏ СЃР±РѕСЂР° СЃРѕСЃС‚Р°РІР°. РћР±СЂР°С‚РёС‚РµСЃСЊ Рє Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂСѓ.")
         return ConversationHandler.END
     context.user_data['active_tour_id'] = active_tour['id']
     # Guard: stop if deadline already passed
     deadline_dt = parse_tour_deadline_datetime(active_tour.get('deadline'))
     if deadline_dt and get_moscow_now() >= deadline_dt:
-        await message.reply_text('Дедлайн тура уже прошёл. Сбор и изменения состава закрыты.')
+        await message.reply_text('Р”РµРґР»Р°Р№РЅ С‚СѓСЂР° СѓР¶Рµ РїСЂРѕС€С‘Р». РЎР±РѕСЂ Рё РёР·РјРµРЅРµРЅРёСЏ СЃРѕСЃС‚Р°РІР° Р·Р°РєСЂС‹С‚С‹.')
         return ConversationHandler.END
 
     user_id = update.effective_user.id
     tour_id = active_tour['id']
     user_roster = get_user_tour_roster(user_id, tour_id)
     if user_roster and user_roster.get('roster'):
-        # Форматируем состав для вывода
+        # Р¤РѕСЂРјР°С‚РёСЂСѓРµРј СЃРѕСЃС‚Р°РІ РґР»СЏ РІС‹РІРѕРґР°
         def format_user_roster_md(roster_data):
             from utils import escape_md
             roster = roster_data['roster']
             captain_id = roster_data.get('captain_id')
             spent = roster_data.get('spent', 0)
-            # Получаем инфу по игрокам
+            # РџРѕР»СѓС‡Р°РµРј РёРЅС„Сѓ РїРѕ РёРіСЂРѕРєР°Рј
             goalie = get_player_by_id(roster.get('goalie'))
             defenders = [get_player_by_id(pid) for pid in roster.get('defenders', [])]
             forwards = [get_player_by_id(pid) for pid in roster.get('forwards', [])]
@@ -1545,32 +1571,32 @@ async def tour_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             for p in [goalie] + defenders + forwards:
                 if p and p[0] == captain_id:
                     captain = fmt(p)
-            cap_str = f"Капитан: {escape_md(captain)}" if captain else "Капитан: -"
+            cap_str = f"РљР°РїРёС‚Р°РЅ: {escape_md(captain)}" if captain else "РљР°РїРёС‚Р°РЅ: -"
             lines = [
-                '*Ваш сохранённый состав:*',
+                '*Р’Р°С€ СЃРѕС…СЂР°РЅС‘РЅРЅС‹Р№ СЃРѕСЃС‚Р°РІ:*',
                 '',
                 g_str,
                 d_str,
                 f_str,
                 '',
                 cap_str,
-                f'Потрачено: *{escape_md(str(spent))}* HC'
+                f'РџРѕС‚СЂР°С‡РµРЅРѕ: *{escape_md(str(spent))}* HC'
             ]
             return '\n'.join(lines)
 
         text = format_user_roster_md(user_roster)
-        keyboard = [[InlineKeyboardButton('Пересобрать состав', callback_data='restart_tour')]]
+        keyboard = [[InlineKeyboardButton('РџРµСЂРµСЃРѕР±СЂР°С‚СЊ СЃРѕСЃС‚Р°РІ', callback_data='restart_tour')]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await message.reply_text(text, reply_markup=reply_markup, parse_mode="MarkdownV2")
         return ConversationHandler.END
 
-    # --- Если состава нет, запускаем обычный сценарий выбора ---
-    # 1. Отправить картинку тура и вводный текст с бюджетом
+    # --- Р•СЃР»Рё СЃРѕСЃС‚Р°РІР° РЅРµС‚, Р·Р°РїСѓСЃРєР°РµРј РѕР±С‹С‡РЅС‹Р№ СЃС†РµРЅР°СЂРёР№ РІС‹Р±РѕСЂР° ---
+    # 1. РћС‚РїСЂР°РІРёС‚СЊ РєР°СЂС‚РёРЅРєСѓ С‚СѓСЂР° Рё РІРІРѕРґРЅС‹Р№ С‚РµРєСЃС‚ СЃ Р±СЋРґР¶РµС‚РѕРј
     budget = db.get_budget() or 0
     roster = db.get_tour_roster_with_player_info()
-    forwards = [p for p in roster if p[3].lower() == 'нападающий']
-    defenders = [p for p in roster if p[3].lower() == 'защитник']
-    goalies = [p for p in roster if p[3].lower() == 'вратарь']
+    forwards = [p for p in roster if p[3].lower() == 'РЅР°РїР°РґР°СЋС‰РёР№']
+    defenders = [p for p in roster if p[3].lower() == 'Р·Р°С‰РёС‚РЅРёРє']
+    goalies = [p for p in roster if p[3].lower() == 'РІСЂР°С‚Р°СЂСЊ']
     context.user_data['tour_budget'] = budget
     context.user_data['tour_roster'] = roster
     context.user_data['tour_selected'] = {
@@ -1581,7 +1607,7 @@ async def tour_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         'spent': 0
     }
     context.user_data['tour_selected'] = {'forwards': [], 'defenders': [], 'goalie': None, 'captain': None, 'spent': 0}
-    # Отправить картинку (если есть)
+    # РћС‚РїСЂР°РІРёС‚СЊ РєР°СЂС‚РёРЅРєСѓ (РµСЃР»Рё РµСЃС‚СЊ)
     try:
         tour_img_path = None
         tour_img_txt = os.path.join(os.getcwd(), 'latest_tour.txt')
@@ -1601,48 +1627,48 @@ async def tour_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             with open(tour_img_path, 'rb') as img:
                 await update.message.reply_photo(photo=InputFile(img))
     except Exception as e:
-        logger.error(f'Ошибка при отправке изображения тура: {e}')
-    # Вводный текст
-    # Формируем строку дедлайна
+        logger.error(f'РћС€РёР±РєР° РїСЂРё РѕС‚РїСЂР°РІРєРµ РёР·РѕР±СЂР°Р¶РµРЅРёСЏ С‚СѓСЂР°: {e}')
+    # Р’РІРѕРґРЅС‹Р№ С‚РµРєСЃС‚
+    # Р¤РѕСЂРјРёСЂСѓРµРј СЃС‚СЂРѕРєСѓ РґРµРґР»Р°Р№РЅР°
     deadline = active_tour.get('deadline', '')
     deadline_str = str(deadline).replace('.', '\\.')
-    # Формируем красивый текст с MarkdownV2
-    intro = rf"""*Список игроков на текущий тур\!* Выбери к себе в состав:
-🔸3 нападающих
-🔸2 защитников
-🔸1 вратаря
+    # Р¤РѕСЂРјРёСЂСѓРµРј РєСЂР°СЃРёРІС‹Р№ С‚РµРєСЃС‚ СЃ MarkdownV2
+    intro = rf"""*РЎРїРёСЃРѕРє РёРіСЂРѕРєРѕРІ РЅР° С‚РµРєСѓС‰РёР№ С‚СѓСЂ\!* Р’С‹Р±РµСЂРё Рє СЃРµР±Рµ РІ СЃРѕСЃС‚Р°РІ:
+рџ”ё3 РЅР°РїР°РґР°СЋС‰РёС…
+рџ”ё2 Р·Р°С‰РёС‚РЅРёРєРѕРІ
+рџ”ё1 РІСЂР°С‚Р°СЂСЏ
 
-Назначь одного полевого игрока из состава капитаном \(его очки умножим на х1\.5\)
+РќР°Р·РЅР°С‡СЊ РѕРґРЅРѕРіРѕ РїРѕР»РµРІРѕРіРѕ РёРіСЂРѕРєР° РёР· СЃРѕСЃС‚Р°РІР° РєР°РїРёС‚Р°РЅРѕРј \(РµРіРѕ РѕС‡РєРё СѓРјРЅРѕР¶РёРј РЅР° С…1\.5\)
 
-*Ваш бюджет: {budget}*
+*Р’Р°С€ Р±СЋРґР¶РµС‚: {budget}*
 
-Принимаем составы до: {deadline_str}"""
+РџСЂРёРЅРёРјР°РµРј СЃРѕСЃС‚Р°РІС‹ РґРѕ: {deadline_str}"""
 
-    # Если у пользователя активная подписка — добавим блок про премиум
+    # Р•СЃР»Рё Сѓ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ Р°РєС‚РёРІРЅР°СЏ РїРѕРґРїРёСЃРєР° вЂ” РґРѕР±Р°РІРёРј Р±Р»РѕРє РїСЂРѕ РїСЂРµРјРёСѓРј
     try:
         from db import is_subscription_active
         if is_subscription_active(update.effective_user.id):
-            premium_line = "\n\n💎  Премиум: у тебя доступен персональный бонус — \\+1 игрок в пул \\(" \
-                           "+ доступно: 1/1 \\) Выбирай с умом!"
-            # Исправим строку на корректную без конкатенации для читаемости
-            premium_line = "\n\n💎  Премиум: у тебя доступен персональный бонус — \\+1 игрок в пул \\(" \
-                           "доступно: 1/1\\) Выбирай с умом\\!"
+            premium_line = "\n\nрџ’Ћ  РџСЂРµРјРёСѓРј: Сѓ С‚РµР±СЏ РґРѕСЃС‚СѓРїРµРЅ РїРµСЂСЃРѕРЅР°Р»СЊРЅС‹Р№ Р±РѕРЅСѓСЃ вЂ” \\+1 РёРіСЂРѕРє РІ РїСѓР» \\(" \
+                           "+ РґРѕСЃС‚СѓРїРЅРѕ: 1/1 \\) Р’С‹Р±РёСЂР°Р№ СЃ СѓРјРѕРј!"
+            # РСЃРїСЂР°РІРёРј СЃС‚СЂРѕРєСѓ РЅР° РєРѕСЂСЂРµРєС‚РЅСѓСЋ Р±РµР· РєРѕРЅРєР°С‚РµРЅР°С†РёРё РґР»СЏ С‡РёС‚Р°РµРјРѕСЃС‚Рё
+            premium_line = "\n\nрџ’Ћ  РџСЂРµРјРёСѓРј: Сѓ С‚РµР±СЏ РґРѕСЃС‚СѓРїРµРЅ РїРµСЂСЃРѕРЅР°Р»СЊРЅС‹Р№ Р±РѕРЅСѓСЃ вЂ” \\+1 РёРіСЂРѕРє РІ РїСѓР» \\(" \
+                           "РґРѕСЃС‚СѓРїРЅРѕ: 1/1\\) Р’С‹Р±РёСЂР°Р№ СЃ СѓРјРѕРј\\!"
             intro = intro + premium_line
     except Exception:
         pass
 
     await message.reply_text(intro, parse_mode="MarkdownV2")
-    # Для премиум-пользователей — показать кнопку активации бонуса
+    # Р”Р»СЏ РїСЂРµРјРёСѓРј-РїРѕР»СЊР·РѕРІР°С‚РµР»РµР№ вЂ” РїРѕРєР°Р·Р°С‚СЊ РєРЅРѕРїРєСѓ Р°РєС‚РёРІР°С†РёРё Р±РѕРЅСѓСЃР°
     try:
         from db import is_subscription_active
         if is_subscription_active(update.effective_user.id):
             print("[DEBUG] tour_start: user has active subscription, showing premium button")
             kb = InlineKeyboardMarkup(
-                [[InlineKeyboardButton('Добавить игрока в пул', callback_data='premium_add_pool')]]
+                [[InlineKeyboardButton('Р”РѕР±Р°РІРёС‚СЊ РёРіСЂРѕРєР° РІ РїСѓР»', callback_data='premium_add_pool')]]
             )
-            sent = await message.reply_text('💎 Премиум-опция', reply_markup=kb)
+            sent = await message.reply_text('рџ’Ћ РџСЂРµРјРёСѓРј-РѕРїС†РёСЏ', reply_markup=kb)
             try:
-                # Запомним для диагностики id сообщения с премиум-кнопкой
+                # Р—Р°РїРѕРјРЅРёРј РґР»СЏ РґРёР°РіРЅРѕСЃС‚РёРєРё id СЃРѕРѕР±С‰РµРЅРёСЏ СЃ РїСЂРµРјРёСѓРј-РєРЅРѕРїРєРѕР№
                 context.user_data['premium_button_chat_id'] = sent.chat_id
                 context.user_data['premium_button_message_id'] = sent.message_id
                 print(f"[DEBUG] tour_start: premium button message_id={sent.message_id}")
@@ -1650,12 +1676,12 @@ async def tour_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 print(f"[WARN] tour_start: failed to store premium button ids: {e}")
     except Exception:
         pass
-    # Сразу показываем выбор первого нападающего!
+    # РЎСЂР°Р·Сѓ РїРѕРєР°Р·С‹РІР°РµРј РІС‹Р±РѕСЂ РїРµСЂРІРѕРіРѕ РЅР°РїР°РґР°СЋС‰РµРіРѕ!
     return await tour_forward_1(update, context)
 
 
 async def premium_add_pool_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Обработка нажатия премиум-кнопки: фиксируем флаг в user_data
+    # РћР±СЂР°Р±РѕС‚РєР° РЅР°Р¶Р°С‚РёСЏ РїСЂРµРјРёСѓРј-РєРЅРѕРїРєРё: С„РёРєСЃРёСЂСѓРµРј С„Р»Р°Рі РІ user_data
     query = update.callback_query
     try:
         print(f"[DEBUG] premium_add_pool_callback: received callback data={query.data}")
@@ -1666,38 +1692,38 @@ async def premium_add_pool_callback(update: Update, context: ContextTypes.DEFAUL
         from db import is_subscription_active
         if not is_subscription_active(update.effective_user.id):
             print("[DEBUG] premium_add_pool_callback: subscription inactive")
-            await query.message.reply_text("Премиум недоступен. Оформите /subscribe, чтобы активировать бонус.")
+            await query.message.reply_text("РџСЂРµРјРёСѓРј РЅРµРґРѕСЃС‚СѓРїРµРЅ. РћС„РѕСЂРјРёС‚Рµ /subscribe, С‡С‚РѕР±С‹ Р°РєС‚РёРІРёСЂРѕРІР°С‚СЊ Р±РѕРЅСѓСЃ.")
             return TOUR_FORWARD_1
     except Exception:
         print("[WARN] premium_add_pool_callback: failed to check subscription")
-    # Установим флаги премиум-режима: добавление в пул (без автодобавления в состав)
+    # РЈСЃС‚Р°РЅРѕРІРёРј С„Р»Р°РіРё РїСЂРµРјРёСѓРј-СЂРµР¶РёРјР°: РґРѕР±Р°РІР»РµРЅРёРµ РІ РїСѓР» (Р±РµР· Р°РІС‚РѕРґРѕР±Р°РІР»РµРЅРёСЏ РІ СЃРѕСЃС‚Р°РІ)
     context.user_data['premium_extra_available'] = True
     context.user_data['premium_mode'] = 'add_to_pool'
     print("[DEBUG] premium_add_pool_callback: premium_extra_available=True set")
-    # Удалим предыдущее сообщение с выбором игроков, если сохранено
+    # РЈРґР°Р»РёРј РїСЂРµРґС‹РґСѓС‰РµРµ СЃРѕРѕР±С‰РµРЅРёРµ СЃ РІС‹Р±РѕСЂРѕРј РёРіСЂРѕРєРѕРІ, РµСЃР»Рё СЃРѕС…СЂР°РЅРµРЅРѕ
     try:
         chat_id = context.user_data.get('last_choice_chat_id')
         msg_id = context.user_data.get('last_choice_message_id')
         if chat_id and msg_id:
             await context.bot.delete_message(chat_id=chat_id, message_id=msg_id)
             print(f"[DEBUG] premium_add_pool_callback: deleted last choice message id={msg_id}")
-            # Очистим сохранённые значения
+            # РћС‡РёСЃС‚РёРј СЃРѕС…СЂР°РЅС‘РЅРЅС‹Рµ Р·РЅР°С‡РµРЅРёСЏ
             context.user_data.pop('last_choice_chat_id', None)
             context.user_data.pop('last_choice_message_id', None)
     except Exception:
         print("[WARN] premium_add_pool_callback: failed to delete last choice message")
-    # Также удалим сообщение с самой премиум-кнопкой
+    # РўР°РєР¶Рµ СѓРґР°Р»РёРј СЃРѕРѕР±С‰РµРЅРёРµ СЃ СЃР°РјРѕР№ РїСЂРµРјРёСѓРј-РєРЅРѕРїРєРѕР№
     try:
         await context.bot.delete_message(chat_id=query.message.chat_id, message_id=query.message.message_id)
         print(f"[DEBUG] premium_add_pool_callback: deleted premium button message id={query.message.message_id}")
     except Exception:
         print("[WARN] premium_add_pool_callback: failed to delete premium button message")
-    await query.message.reply_text("💎 Персональный бонус активирован: +1 игрок в пул.\n\nНапишите команду игрока")
+    await query.message.reply_text("рџ’Ћ РџРµСЂСЃРѕРЅР°Р»СЊРЅС‹Р№ Р±РѕРЅСѓСЃ Р°РєС‚РёРІРёСЂРѕРІР°РЅ: +1 РёРіСЂРѕРє РІ РїСѓР».\n\nРќР°РїРёС€РёС‚Рµ РєРѕРјР°РЅРґСѓ РёРіСЂРѕРєР°")
     return PREMIUM_TEAM
 
 
 async def premium_team_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Получаем текст команды и просим выбрать позицию
+    # РџРѕР»СѓС‡Р°РµРј С‚РµРєСЃС‚ РєРѕРјР°РЅРґС‹ Рё РїСЂРѕСЃРёРј РІС‹Р±СЂР°С‚СЊ РїРѕР·РёС†РёСЋ
     team_text = update.message.text.strip()
     context.user_data['premium_team_query'] = team_text
     try:
@@ -1706,11 +1732,11 @@ async def premium_team_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         pass
     from telegram import InlineKeyboardMarkup, InlineKeyboardButton
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton('нападающий', callback_data='premium_pos_нападающий')],
-        [InlineKeyboardButton('защитник', callback_data='premium_pos_защитник')],
-        [InlineKeyboardButton('вратарь', callback_data='premium_pos_вратарь')],
+        [InlineKeyboardButton('РЅР°РїР°РґР°СЋС‰РёР№', callback_data='premium_pos_РЅР°РїР°РґР°СЋС‰РёР№')],
+        [InlineKeyboardButton('Р·Р°С‰РёС‚РЅРёРє', callback_data='premium_pos_Р·Р°С‰РёС‚РЅРёРє')],
+        [InlineKeyboardButton('РІСЂР°С‚Р°СЂСЊ', callback_data='premium_pos_РІСЂР°С‚Р°СЂСЊ')],
     ])
-    await update.message.reply_text('Выберите позицию игрока', reply_markup=kb)
+    await update.message.reply_text('Р’С‹Р±РµСЂРёС‚Рµ РїРѕР·РёС†РёСЋ РёРіСЂРѕРєР°', reply_markup=kb)
     return PREMIUM_POSITION
 
 
@@ -1721,61 +1747,56 @@ async def premium_position_selected(update: Update, context: ContextTypes.DEFAUL
     pos = data.replace('premium_pos_', '')
     context.user_data['premium_position'] = pos
     print(f"[DEBUG] premium_position_selected: pos={pos}")
-    # Покажем список игроков, отфильтрованных по команде и позиции (ИЗ ВСЕЙ БАЗЫ ИГРОКОВ)
+    # РџРѕРєР°Р¶РµРј СЃРїРёСЃРѕРє РёРіСЂРѕРєРѕРІ, РѕС‚С„РёР»СЊС‚СЂРѕРІР°РЅРЅС‹С… РїРѕ РєРѕРјР°РЅРґРµ Рё РїРѕР·РёС†РёРё (РР— Р’РЎР•Р™ Р‘РђР—Р« РР“Р РћРљРћР’)
     try:
-        team_text = (context.user_data.get('premium_team_query') or '').strip().lower()
+        team_text = (context.user_data.get('premium_team_query') or '').strip()
         from db import get_all_players
         all_players = get_all_players()  # (id, name, position, club, nation, age, price)
         budget = context.user_data.get('tour_budget', 0)
         spent = context.user_data.get('tour_selected', {}).get('spent', 0)
         left = max(0, budget - spent)
-        # Исключения по уже выбранным
+        # РСЃРєР»СЋС‡РµРЅРёСЏ РїРѕ СѓР¶Рµ РІС‹Р±СЂР°РЅРЅС‹Рј
         selected = context.user_data.get('tour_selected', {})
         exclude_ids = []
         next_state = TOUR_FORWARD_1
-        if pos == 'нападающий':
+        if pos == 'РЅР°РїР°РґР°СЋС‰РёР№':
             exclude_ids = selected.get('forwards', [])
             next_state = TOUR_FORWARD_1
-        elif pos == 'защитник':
+        elif pos == 'Р·Р°С‰РёС‚РЅРёРє':
             exclude_ids = selected.get('defenders', [])
-            # Выберем подходящее состояние в зависимости от уже выбранных
+            # Р’С‹Р±РµСЂРµРј РїРѕРґС…РѕРґСЏС‰РµРµ СЃРѕСЃС‚РѕСЏРЅРёРµ РІ Р·Р°РІРёСЃРёРјРѕСЃС‚Рё РѕС‚ СѓР¶Рµ РІС‹Р±СЂР°РЅРЅС‹С…
             next_state = TOUR_DEFENDER_1 if len(exclude_ids) == 0 else TOUR_DEFENDER_2
-        elif pos == 'вратарь':
+        elif pos == 'РІСЂР°С‚Р°СЂСЊ':
             gid = selected.get('goalie')
             exclude_ids = [gid] if gid else []
             next_state = TOUR_GOALIE
-        # Фильтрация по позиции, команде, бюджету и исключениям
-        def team_match(t):
-            try:
-                return team_text in str(t or '').lower()
-            except Exception:
-                return False
-        # Исключим игроков, уже включённых в туровый ростер
+        # Р¤РёР»СЊС‚СЂР°С†РёСЏ РїРѕ РїРѕР·РёС†РёРё, РєРѕРјР°РЅРґРµ, Р±СЋРґР¶РµС‚Сѓ Рё РёСЃРєР»СЋС‡РµРЅРёСЏРј
+        # РСЃРєР»СЋС‡РёРј РёРіСЂРѕРєРѕРІ, СѓР¶Рµ РІРєР»СЋС‡С‘РЅРЅС‹С… РІ С‚СѓСЂРѕРІС‹Р№ СЂРѕСЃС‚РµСЂ
         tour_roster = context.user_data.get('tour_roster', [])
-        tour_ids = set([tr[1] for tr in tour_roster])  # p.id из турового списка
-        # Индексы в players: 0-id,1-name,2-position,3-club,6-price
+        tour_ids = set([tr[1] for tr in tour_roster])  # p.id РёР· С‚СѓСЂРѕРІРѕРіРѕ СЃРїРёСЃРєР°
+        # РРЅРґРµРєСЃС‹ РІ players: 0-id,1-name,2-position,3-club,6-price
         filtered = [
             p for p in all_players
-            if p[2].lower() == pos
+            if (p[2] or '').lower() == pos
             and p[0] not in exclude_ids
             and p[0] not in tour_ids
             and (p[6] or 0) <= left
-            and team_match(p[3])
+            and _team_matches(p[3], team_text)
         ]
         print(f"[DEBUG] premium_position_selected: team='{team_text}', found={len(filtered)} players in DB (excluding tour roster), left={left}")
         if not filtered:
-            await query.message.reply_text("По заданным фильтрам игроков не найдено. Измените команду или позицию.")
+            await query.message.reply_text("РџРѕ Р·Р°РґР°РЅРЅС‹Рј С„РёР»СЊС‚СЂР°Рј РёРіСЂРѕРєРѕРІ РЅРµ РЅР°Р№РґРµРЅРѕ. РР·РјРµРЅРёС‚Рµ РєРѕРјР°РЅРґСѓ РёР»Рё РїРѕР·РёС†РёСЋ.")
             return next_state
-        # Построим клавиатуру
+        # РџРѕСЃС‚СЂРѕРёРј РєР»Р°РІРёР°С‚СѓСЂСѓ
         from telegram import InlineKeyboardMarkup, InlineKeyboardButton
         keyboard = []
         for p in filtered:
-            btn_text = f"{p[1]} — {p[6]} HC"
+            btn_text = f"{p[1]} вЂ” {p[6]} HC"
             keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"pick_{p[0]}_{pos}")])
         reply_markup = InlineKeyboardMarkup(keyboard)
-        text = f"Найденные игроки ({pos}, команда содержит: '{team_text}') — осталось HC: {left}"
+        text = f"РќР°Р№РґРµРЅРЅС‹Рµ РёРіСЂРѕРєРё ({pos}, РєРѕРјР°РЅРґР° СЃРѕРґРµСЂР¶РёС‚: '{team_text}') вЂ” РѕСЃС‚Р°Р»РѕСЃСЊ HC: {left}"
         sent = await query.message.reply_text(text, reply_markup=reply_markup)
-        # Сохраним, чтобы мочь удалить далее при необходимости
+        # РЎРѕС…СЂР°РЅРёРј, С‡С‚РѕР±С‹ РјРѕС‡СЊ СѓРґР°Р»РёС‚СЊ РґР°Р»РµРµ РїСЂРё РЅРµРѕР±С…РѕРґРёРјРѕСЃС‚Рё
         try:
             context.user_data['last_choice_chat_id'] = sent.chat_id
             context.user_data['last_choice_message_id'] = sent.message_id
@@ -1784,42 +1805,42 @@ async def premium_position_selected(update: Update, context: ContextTypes.DEFAUL
         return next_state
     except Exception as e:
         print(f"[ERROR] premium_position_selected building list: {e}")
-        await query.message.reply_text(f"Ошибка построения списка: {e}")
+        await query.message.reply_text(f"РћС€РёР±РєР° РїРѕСЃС‚СЂРѕРµРЅРёСЏ СЃРїРёСЃРєР°: {e}")
         return TOUR_FORWARD_1
 
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton
 
 async def send_player_choice(update, context, position, exclude_ids, next_state, budget):
     from telegram import InlineKeyboardMarkup, InlineKeyboardButton
-    # Универсально получаем message для reply_text
+    # РЈРЅРёРІРµСЂСЃР°Р»СЊРЅРѕ РїРѕР»СѓС‡Р°РµРј message РґР»СЏ reply_text
     message = getattr(update, "effective_message", None)
     if message is None and hasattr(update, "message"):
         message = update.message
     elif message is None and hasattr(update, "callback_query"):
         message = update.callback_query.message
-    # Получаем актуальный ростер
+    # РџРѕР»СѓС‡Р°РµРј Р°РєС‚СѓР°Р»СЊРЅС‹Р№ СЂРѕСЃС‚РµСЂ
     roster = context.user_data['tour_roster']
-    # Фильтруем по позиции и исключениям
+    # Р¤РёР»СЊС‚СЂСѓРµРј РїРѕ РїРѕР·РёС†РёРё Рё РёСЃРєР»СЋС‡РµРЅРёСЏРј
     players = [p for p in roster if p[3].lower() == position and p[1] not in exclude_ids and p[7] <= budget]
     if not players:
-        # Проверка: если не хватает HC для обязательного выбора
+        # РџСЂРѕРІРµСЂРєР°: РµСЃР»Рё РЅРµ С…РІР°С‚Р°РµС‚ HC РґР»СЏ РѕР±СЏР·Р°С‚РµР»СЊРЅРѕРіРѕ РІС‹Р±РѕСЂР°
         text = (
-            '🚨 Вы привысили потолок зарплат. Пересоберите состав, чтобы вписаться в лимит.'
+            'рџљЁ Р’С‹ РїСЂРёРІС‹СЃРёР»Рё РїРѕС‚РѕР»РѕРє Р·Р°СЂРїР»Р°С‚. РџРµСЂРµСЃРѕР±РµСЂРёС‚Рµ СЃРѕСЃС‚Р°РІ, С‡С‚РѕР±С‹ РІРїРёСЃР°С‚СЊСЃСЏ РІ Р»РёРјРёС‚.'
         )
         keyboard = [
-            [InlineKeyboardButton('Пересобрать состав', callback_data='restart_tour')]
+            [InlineKeyboardButton('РџРµСЂРµСЃРѕР±СЂР°С‚СЊ СЃРѕСЃС‚Р°РІ', callback_data='restart_tour')]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await message.reply_text(text, reply_markup=reply_markup)
         return ConversationHandler.END
     keyboard = []
     for p in players:
-        btn_text = f"{p[2]} — {p[7]} HC"
+        btn_text = f"{p[2]} вЂ” {p[7]} HC"
         keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"pick_{p[1]}_{position}")])
     reply_markup = InlineKeyboardMarkup(keyboard)
-    text = f"Выберите {position} (осталось HC: {budget})"
+    text = f"Р’С‹Р±РµСЂРёС‚Рµ {position} (РѕСЃС‚Р°Р»РѕСЃСЊ HC: {budget})"
     sent_msg = await message.reply_text(text, reply_markup=reply_markup)
-    # Запомним последнее сообщение с выбором, чтобы мочь удалить при активации премиум-режима
+    # Р—Р°РїРѕРјРЅРёРј РїРѕСЃР»РµРґРЅРµРµ СЃРѕРѕР±С‰РµРЅРёРµ СЃ РІС‹Р±РѕСЂРѕРј, С‡С‚РѕР±С‹ РјРѕС‡СЊ СѓРґР°Р»РёС‚СЊ РїСЂРё Р°РєС‚РёРІР°С†РёРё РїСЂРµРјРёСѓРј-СЂРµР¶РёРјР°
     try:
         context.user_data['last_choice_chat_id'] = sent_msg.chat_id
         context.user_data['last_choice_message_id'] = sent_msg.message_id
@@ -1828,112 +1849,112 @@ async def send_player_choice(update, context, position, exclude_ids, next_state,
     return next_state
     keyboard = []
     for p in players:
-        btn_text = f"{p[2]} — {p[7]} HC"
+        btn_text = f"{p[2]} вЂ” {p[7]} HC"
         keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"pick_{p[1]}_{position}")])
     reply_markup = InlineKeyboardMarkup(keyboard)
-    text = f"Выберите {position} (осталось HC: {budget})"
+    text = f"Р’С‹Р±РµСЂРёС‚Рµ {position} (РѕСЃС‚Р°Р»РѕСЃСЊ HC: {budget})"
     await message.reply_text(text, reply_markup=reply_markup)
     return next_state
 
 async def tour_forward_1(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if _tour_deadline_passed(context):
-        await update.effective_message.reply_text("Дедлайн тура уже прошёл. Сбор и изменения состава закрыты.")
+        await update.effective_message.reply_text("Р”РµРґР»Р°Р№РЅ С‚СѓСЂР° СѓР¶Рµ РїСЂРѕС€С‘Р». РЎР±РѕСЂ Рё РёР·РјРµРЅРµРЅРёСЏ СЃРѕСЃС‚Р°РІР° Р·Р°РєСЂС‹С‚С‹.")
         return ConversationHandler.END
     budget = context.user_data['tour_budget']
     picked = context.user_data['tour_selected']['forwards']
-    return await send_player_choice(update, context, 'нападающий', picked, TOUR_FORWARD_2, budget)
+    return await send_player_choice(update, context, 'РЅР°РїР°РґР°СЋС‰РёР№', picked, TOUR_FORWARD_2, budget)
 
 
 async def tour_forward_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if _tour_deadline_passed(context):
-        await update.effective_message.reply_text("Дедлайн тура уже прошёл. Состав больше менять нельзя.")
+        await update.effective_message.reply_text("Р”РµРґР»Р°Р№РЅ С‚СѓСЂР° СѓР¶Рµ РїСЂРѕС€С‘Р». РЎРѕСЃС‚Р°РІ Р±РѕР»СЊС€Рµ РјРµРЅСЏС‚СЊ РЅРµР»СЊР·СЏ.")
         return ConversationHandler.END
     try:
         query = update.callback_query
         await query.answer()
         data = query.data
         print(f"Callback data: {data}", flush=True)
-        # Ожидается формат pick_<player_id>_нападающий
-        if not data.startswith('pick_') or '_нападающий' not in data:
-            await query.edit_message_text('Некорректный выбор.')
+        # РћР¶РёРґР°РµС‚СЃСЏ С„РѕСЂРјР°С‚ pick_<player_id>_РЅР°РїР°РґР°СЋС‰РёР№
+        if not data.startswith('pick_') or '_РЅР°РїР°РґР°СЋС‰РёР№' not in data:
+            await query.edit_message_text('РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РІС‹Р±РѕСЂ.')
             return TOUR_FORWARD_1
         pid = int(data.split('_')[1])
-        # Получаем игрока по id
+        # РџРѕР»СѓС‡Р°РµРј РёРіСЂРѕРєР° РїРѕ id
         roster = context.user_data['tour_roster']
         player = next((p for p in roster if p[1] == pid), None)
         added_personal = False
         if not player:
-            # Fallback: ищем в общей БД игроков
+            # Fallback: РёС‰РµРј РІ РѕР±С‰РµР№ Р‘Р” РёРіСЂРѕРєРѕРІ
             try:
                 pdb = db.get_player_by_id(pid)
                 if pdb:
-                    # Преобразуем к формату: (tr.cost, p.id, p.name, p.position, p.club, p.nation, p.age, p.price)
+                    # РџСЂРµРѕР±СЂР°Р·СѓРµРј Рє С„РѕСЂРјР°С‚Сѓ: (tr.cost, p.id, p.name, p.position, p.club, p.nation, p.age, p.price)
                     player = (pdb[6], pdb[0], pdb[1], pdb[2], pdb[3], pdb[4], pdb[5], pdb[6])
-                    # Добавим этого игрока в персональный туровый список пользователя, если ещё нет
+                    # Р”РѕР±Р°РІРёРј СЌС‚РѕРіРѕ РёРіСЂРѕРєР° РІ РїРµСЂСЃРѕРЅР°Р»СЊРЅС‹Р№ С‚СѓСЂРѕРІС‹Р№ СЃРїРёСЃРѕРє РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ, РµСЃР»Рё РµС‰С‘ РЅРµС‚
                     try:
                         if not any(p_[1] == pdb[0] for p_ in roster):
                             context.user_data['tour_roster'].append(player)
                         added_personal = True
-                        # Пометим использование премиум-бонуса
+                        # РџРѕРјРµС‚РёРј РёСЃРїРѕР»СЊР·РѕРІР°РЅРёРµ РїСЂРµРјРёСѓРј-Р±РѕРЅСѓСЃР°
                         context.user_data['premium_extra_available'] = False
                     except Exception:
                         pass
                 else:
-                    await query.edit_message_text('Игрок не найден.')
+                    await query.edit_message_text('РРіСЂРѕРє РЅРµ РЅР°Р№РґРµРЅ.')
                     return TOUR_FORWARD_1
             except Exception:
-                await query.edit_message_text('Игрок не найден.')
+                await query.edit_message_text('РРіСЂРѕРє РЅРµ РЅР°Р№РґРµРЅ.')
                 return TOUR_FORWARD_1
-        # Если активен режим добавления в пул — не добавляем в состав, а только расширяем пул
+        # Р•СЃР»Рё Р°РєС‚РёРІРµРЅ СЂРµР¶РёРј РґРѕР±Р°РІР»РµРЅРёСЏ РІ РїСѓР» вЂ” РЅРµ РґРѕР±Р°РІР»СЏРµРј РІ СЃРѕСЃС‚Р°РІ, Р° С‚РѕР»СЊРєРѕ СЂР°СЃС€РёСЂСЏРµРј РїСѓР»
         if context.user_data.get('premium_mode') == 'add_to_pool':
             try:
-                # Убедимся, что игрок есть в персональном пуле
+                # РЈР±РµРґРёРјСЃСЏ, С‡С‚Рѕ РёРіСЂРѕРє РµСЃС‚СЊ РІ РїРµСЂСЃРѕРЅР°Р»СЊРЅРѕРј РїСѓР»Рµ
                 roster = context.user_data['tour_roster']
                 if not any(p_[1] == player[1] for p_ in roster):
                     context.user_data['tour_roster'].append(player)
-                # Выключаем режим и сжигаем бонус
+                # Р’С‹РєР»СЋС‡Р°РµРј СЂРµР¶РёРј Рё СЃР¶РёРіР°РµРј Р±РѕРЅСѓСЃ
                 context.user_data['premium_mode'] = None
                 context.user_data['premium_extra_available'] = False
-                # Покажем обычный выбор нападающих с учётом расширенного пула
+                # РџРѕРєР°Р¶РµРј РѕР±С‹С‡РЅС‹Р№ РІС‹Р±РѕСЂ РЅР°РїР°РґР°СЋС‰РёС… СЃ СѓС‡С‘С‚РѕРј СЂР°СЃС€РёСЂРµРЅРЅРѕРіРѕ РїСѓР»Р°
                 budget = context.user_data['tour_budget']
                 spent = context.user_data['tour_selected']['spent']
                 left = budget - spent
                 picked = context.user_data['tour_selected']['forwards']
-                await query.edit_message_text(f"Добавлен в ваш пул: {player[2]} ({player[4]}). Теперь выберите нападающего.")
+                await query.edit_message_text(f"Р”РѕР±Р°РІР»РµРЅ РІ РІР°С€ РїСѓР»: {player[2]} ({player[4]}). РўРµРїРµСЂСЊ РІС‹Р±РµСЂРёС‚Рµ РЅР°РїР°РґР°СЋС‰РµРіРѕ.")
                 next_state = TOUR_FORWARD_2 if len(picked) == 0 else TOUR_FORWARD_3
-                return await send_player_choice(update, context, 'нападающий', picked, next_state, left)
+                return await send_player_choice(update, context, 'РЅР°РїР°РґР°СЋС‰РёР№', picked, next_state, left)
             except Exception as e:
-                await query.edit_message_text(f"Ошибка добавления в пул: {e}")
+                await query.edit_message_text(f"РћС€РёР±РєР° РґРѕР±Р°РІР»РµРЅРёСЏ РІ РїСѓР»: {e}")
                 return TOUR_FORWARD_1
-        # Проверяем бюджет
+        # РџСЂРѕРІРµСЂСЏРµРј Р±СЋРґР¶РµС‚
         budget = context.user_data['tour_budget']
         spent = context.user_data['tour_selected']['spent']
         if spent + player[7] > budget:
-            await query.edit_message_text(f'Недостаточно HC для выбора {player[1]}!')
+            await query.edit_message_text(f'РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ HC РґР»СЏ РІС‹Р±РѕСЂР° {player[1]}!')
             return TOUR_FORWARD_1
-        # Сохраняем выбор
+        # РЎРѕС…СЂР°РЅСЏРµРј РІС‹Р±РѕСЂ
         context.user_data['tour_selected']['forwards'].append(pid)
         context.user_data['tour_selected']['spent'] += player[7]
         left = budget - context.user_data['tour_selected']['spent']
         player_name = escape_md(str(player[2]))
         cost = escape_md(str(player[7]))
         left_str = escape_md(str(left))
-        msg = f'Вы выбрали {player_name} \\({cost}\\)\n\n*Оставшийся бюджет: {left_str}*'
+        msg = f'Р’С‹ РІС‹Р±СЂР°Р»Рё {player_name} \\({cost}\\)\n\n*РћСЃС‚Р°РІС€РёР№СЃСЏ Р±СЋРґР¶РµС‚: {left_str}*'
         await query.edit_message_text(msg, parse_mode="MarkdownV2")
         if len(context.user_data['tour_selected']['forwards']) == 1:
-            print("tour_forward_callback SUCCESS: переход к tour_forward_2", flush=True)
+            print("tour_forward_callback SUCCESS: РїРµСЂРµС…РѕРґ Рє tour_forward_2", flush=True)
             return await tour_forward_2(update, context)
         elif len(context.user_data['tour_selected']['forwards']) == 2:
-            print("tour_forward_callback SUCCESS: переход к tour_forward_3", flush=True)
+            print("tour_forward_callback SUCCESS: РїРµСЂРµС…РѕРґ Рє tour_forward_3", flush=True)
             return await tour_forward_3(update, context)
         elif len(context.user_data['tour_selected']['forwards']) == 3:
-            print("tour_forward_callback SUCCESS: переход к tour_defender_1", flush=True)
+            print("tour_forward_callback SUCCESS: РїРµСЂРµС…РѕРґ Рє tour_defender_1", flush=True)
             await tour_defender_1(update, context)
             return TOUR_DEFENDER_1
     except Exception as e:
         print(f"tour_forward_callback ERROR: {e}", flush=True)
         logger.exception("Exception in tour_forward_callback")
-        await query.edit_message_text(f"Ошибка: {e}")
+        await query.edit_message_text(f"РћС€РёР±РєР°: {e}")
         return TOUR_FORWARD_1
     finally:
         print("tour_forward_callback FINISHED", flush=True)
@@ -1941,45 +1962,45 @@ async def tour_forward_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
 async def tour_forward_2(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if _tour_deadline_passed(context):
-        await update.effective_message.reply_text("Дедлайн тура уже прошёл. Сбор и изменения состава закрыты.")
+        await update.effective_message.reply_text("Р”РµРґР»Р°Р№РЅ С‚СѓСЂР° СѓР¶Рµ РїСЂРѕС€С‘Р». РЎР±РѕСЂ Рё РёР·РјРµРЅРµРЅРёСЏ СЃРѕСЃС‚Р°РІР° Р·Р°РєСЂС‹С‚С‹.")
         return ConversationHandler.END
     budget = context.user_data['tour_budget']
     spent = context.user_data['tour_selected']['spent']
     left = budget - spent
     picked = context.user_data['tour_selected']['forwards']
-    return await send_player_choice(update, context, 'нападающий', picked, TOUR_FORWARD_3, left)
+    return await send_player_choice(update, context, 'РЅР°РїР°РґР°СЋС‰РёР№', picked, TOUR_FORWARD_3, left)
 
 
 async def tour_forward_3(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if _tour_deadline_passed(context):
-        await update.effective_message.reply_text("Дедлайн тура уже прошёл. Сбор и изменения состава закрыты.")
+        await update.effective_message.reply_text("Р”РµРґР»Р°Р№РЅ С‚СѓСЂР° СѓР¶Рµ РїСЂРѕС€С‘Р». РЎР±РѕСЂ Рё РёР·РјРµРЅРµРЅРёСЏ СЃРѕСЃС‚Р°РІР° Р·Р°РєСЂС‹С‚С‹.")
         return ConversationHandler.END
     budget = context.user_data['tour_budget']
     spent = context.user_data['tour_selected']['spent']
     left = budget - spent
     picked = context.user_data['tour_selected']['forwards']
-    # Показываем клавиатуру для третьего нападающего, next_state — TOUR_FORWARD_3
-    return await send_player_choice(update, context, 'нападающий', picked, TOUR_FORWARD_3, left)
+    # РџРѕРєР°Р·С‹РІР°РµРј РєР»Р°РІРёР°С‚СѓСЂСѓ РґР»СЏ С‚СЂРµС‚СЊРµРіРѕ РЅР°РїР°РґР°СЋС‰РµРіРѕ, next_state вЂ” TOUR_FORWARD_3
+    return await send_player_choice(update, context, 'РЅР°РїР°РґР°СЋС‰РёР№', picked, TOUR_FORWARD_3, left)
 
 async def tour_defender_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if _tour_deadline_passed(context):
-        await update.effective_message.reply_text("Дедлайн тура уже прошёл. Состав больше менять нельзя.")
+        await update.effective_message.reply_text("Р”РµРґР»Р°Р№РЅ С‚СѓСЂР° СѓР¶Рµ РїСЂРѕС€С‘Р». РЎРѕСЃС‚Р°РІ Р±РѕР»СЊС€Рµ РјРµРЅСЏС‚СЊ РЅРµР»СЊР·СЏ.")
         return ConversationHandler.END
     try:
         query = update.callback_query
         await query.answer()
         data = query.data
         print(f"Callback data: {data}", flush=True)
-        # Ожидается формат pick_<player_id>_защитник
-        if not data.startswith('pick_') or '_защитник' not in data:
-            await query.edit_message_text('Некорректный выбор.')
+        # РћР¶РёРґР°РµС‚СЃСЏ С„РѕСЂРјР°С‚ pick_<player_id>_Р·Р°С‰РёС‚РЅРёРє
+        if not data.startswith('pick_') or '_Р·Р°С‰РёС‚РЅРёРє' not in data:
+            await query.edit_message_text('РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РІС‹Р±РѕСЂ.')
             return TOUR_DEFENDER_1
         pid = int(data.split('_')[1])
         roster = context.user_data['tour_roster']
         player = next((p for p in roster if p[1] == pid), None)
         added_personal = False
         if not player:
-            # Fallback: ищем в общей БД игроков
+            # Fallback: РёС‰РµРј РІ РѕР±С‰РµР№ Р‘Р” РёРіСЂРѕРєРѕРІ
             try:
                 pdb = db.get_player_by_id(pid)
                 if pdb:
@@ -1992,12 +2013,12 @@ async def tour_defender_callback(update: Update, context: ContextTypes.DEFAULT_T
                     except Exception:
                         pass
                 else:
-                    await query.edit_message_text('Игрок не найден.')
+                    await query.edit_message_text('РРіСЂРѕРє РЅРµ РЅР°Р№РґРµРЅ.')
                     return TOUR_DEFENDER_1
             except Exception:
-                await query.edit_message_text('Игрок не найден.')
+                await query.edit_message_text('РРіСЂРѕРє РЅРµ РЅР°Р№РґРµРЅ.')
                 return TOUR_DEFENDER_1
-        # Режим добавления в пул — без автодобавления в состав
+        # Р РµР¶РёРј РґРѕР±Р°РІР»РµРЅРёСЏ РІ РїСѓР» вЂ” Р±РµР· Р°РІС‚РѕРґРѕР±Р°РІР»РµРЅРёСЏ РІ СЃРѕСЃС‚Р°РІ
         if context.user_data.get('premium_mode') == 'add_to_pool':
             try:
                 roster = context.user_data['tour_roster']
@@ -2008,18 +2029,18 @@ async def tour_defender_callback(update: Update, context: ContextTypes.DEFAULT_T
                 budget = context.user_data['tour_budget']
                 spent = context.user_data['tour_selected']['spent']
                 left = budget - spent
-                # После добавления в пул всегда возвращаемся к выбору нападающих
+                # РџРѕСЃР»Рµ РґРѕР±Р°РІР»РµРЅРёСЏ РІ РїСѓР» РІСЃРµРіРґР° РІРѕР·РІСЂР°С‰Р°РµРјСЃСЏ Рє РІС‹Р±РѕСЂСѓ РЅР°РїР°РґР°СЋС‰РёС…
                 forwards_picked = context.user_data['tour_selected']['forwards']
-                await query.edit_message_text(f"Добавлен в ваш пул: {player[2]} ({player[4]}). Теперь выберите нападающего.")
+                await query.edit_message_text(f"Р”РѕР±Р°РІР»РµРЅ РІ РІР°С€ РїСѓР»: {player[2]} ({player[4]}). РўРµРїРµСЂСЊ РІС‹Р±РµСЂРёС‚Рµ РЅР°РїР°РґР°СЋС‰РµРіРѕ.")
                 next_state = TOUR_FORWARD_2 if len(forwards_picked) == 0 else TOUR_FORWARD_3
-                return await send_player_choice(update, context, 'нападающий', forwards_picked, next_state, left)
+                return await send_player_choice(update, context, 'РЅР°РїР°РґР°СЋС‰РёР№', forwards_picked, next_state, left)
             except Exception as e:
-                await query.edit_message_text(f"Ошибка добавления в пул: {e}")
+                await query.edit_message_text(f"РћС€РёР±РєР° РґРѕР±Р°РІР»РµРЅРёСЏ РІ РїСѓР»: {e}")
                 return TOUR_FORWARD_1
         budget = context.user_data['tour_budget']
         spent = context.user_data['tour_selected']['spent']
         if spent + player[7] > budget:
-            await query.edit_message_text(f'Недостаточно HC для выбора {player[1]}!')
+            await query.edit_message_text(f'РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ HC РґР»СЏ РІС‹Р±РѕСЂР° {player[1]}!')
             return TOUR_DEFENDER_1
         context.user_data['tour_selected']['defenders'].append(pid)
         context.user_data['tour_selected']['spent'] += player[7]
@@ -2027,19 +2048,19 @@ async def tour_defender_callback(update: Update, context: ContextTypes.DEFAULT_T
         player_name = escape_md(str(player[2]))
         cost = escape_md(str(player[7]))
         left_str = escape_md(str(left))
-        msg = f'Вы выбрали {player_name} \\({cost}\\)\n\n*Оставшийся бюджет: {left_str}*'
+        msg = f'Р’С‹ РІС‹Р±СЂР°Р»Рё {player_name} \\({cost}\\)\n\n*РћСЃС‚Р°РІС€РёР№СЃСЏ Р±СЋРґР¶РµС‚: {left_str}*'
         await query.edit_message_text(msg, parse_mode="MarkdownV2")
         if len(context.user_data['tour_selected']['defenders']) == 1:
-            print("tour_defender_callback SUCCESS: переход к tour_defender_2", flush=True)
+            print("tour_defender_callback SUCCESS: РїРµСЂРµС…РѕРґ Рє tour_defender_2", flush=True)
             return await tour_defender_2(update, context)
         elif len(context.user_data['tour_selected']['defenders']) == 2:
-            print("tour_defender_callback SUCCESS: переход к tour_goalie", flush=True)
+            print("tour_defender_callback SUCCESS: РїРµСЂРµС…РѕРґ Рє tour_goalie", flush=True)
             await tour_goalie(update, context)
             return TOUR_GOALIE
     except Exception as e:
         print(f"tour_defender_callback ERROR: {e}", flush=True)
         logger.exception("Exception in tour_defender_callback")
-        await query.edit_message_text(f"Ошибка: {e}")
+        await query.edit_message_text(f"РћС€РёР±РєР°: {e}")
         return TOUR_DEFENDER_1
     finally:
         print("tour_defender_callback FINISHED", flush=True)
@@ -2047,44 +2068,44 @@ async def tour_defender_callback(update: Update, context: ContextTypes.DEFAULT_T
 
 async def tour_defender_1(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if _tour_deadline_passed(context):
-        await update.effective_message.reply_text("Дедлайн тура уже прошёл. Сбор и изменения состава закрыты.")
+        await update.effective_message.reply_text("Р”РµРґР»Р°Р№РЅ С‚СѓСЂР° СѓР¶Рµ РїСЂРѕС€С‘Р». РЎР±РѕСЂ Рё РёР·РјРµРЅРµРЅРёСЏ СЃРѕСЃС‚Р°РІР° Р·Р°РєСЂС‹С‚С‹.")
         return ConversationHandler.END
     budget = context.user_data['tour_budget']
     spent = context.user_data['tour_selected']['spent']
     left = budget - spent
     picked = context.user_data['tour_selected']['defenders']
-    return await send_player_choice(update, context, 'защитник', picked, TOUR_DEFENDER_2, left)
+    return await send_player_choice(update, context, 'Р·Р°С‰РёС‚РЅРёРє', picked, TOUR_DEFENDER_2, left)
 
 async def tour_defender_2(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if _tour_deadline_passed(context):
-        await update.effective_message.reply_text("Дедлайн тура уже прошёл. Сбор и изменения состава закрыты.")
+        await update.effective_message.reply_text("Р”РµРґР»Р°Р№РЅ С‚СѓСЂР° СѓР¶Рµ РїСЂРѕС€С‘Р». РЎР±РѕСЂ Рё РёР·РјРµРЅРµРЅРёСЏ СЃРѕСЃС‚Р°РІР° Р·Р°РєСЂС‹С‚С‹.")
         return ConversationHandler.END
     budget = context.user_data['tour_budget']
     spent = context.user_data['tour_selected']['spent']
     left = budget - spent
     picked = context.user_data['tour_selected']['defenders']
-    # Показываем клавиатуру для второго защитника, next_state — TOUR_DEFENDER_2
-    return await send_player_choice(update, context, 'защитник', picked, TOUR_DEFENDER_2, left)
+    # РџРѕРєР°Р·С‹РІР°РµРј РєР»Р°РІРёР°С‚СѓСЂСѓ РґР»СЏ РІС‚РѕСЂРѕРіРѕ Р·Р°С‰РёС‚РЅРёРєР°, next_state вЂ” TOUR_DEFENDER_2
+    return await send_player_choice(update, context, 'Р·Р°С‰РёС‚РЅРёРє', picked, TOUR_DEFENDER_2, left)
 
 async def tour_goalie_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if _tour_deadline_passed(context):
-        await update.effective_message.reply_text("Дедлайн тура уже прошёл. Состав больше менять нельзя.")
+        await update.effective_message.reply_text("Р”РµРґР»Р°Р№РЅ С‚СѓСЂР° СѓР¶Рµ РїСЂРѕС€С‘Р». РЎРѕСЃС‚Р°РІ Р±РѕР»СЊС€Рµ РјРµРЅСЏС‚СЊ РЅРµР»СЊР·СЏ.")
         return ConversationHandler.END
     try:
         query = update.callback_query
         await query.answer()
         data = query.data
         print(f"Callback data: {data}", flush=True)
-        # Ожидается формат pick_<player_id>_вратарь
-        if not data.startswith('pick_') or '_вратарь' not in data:
-            await query.edit_message_text('Некорректный выбор.')
+        # РћР¶РёРґР°РµС‚СЃСЏ С„РѕСЂРјР°С‚ pick_<player_id>_РІСЂР°С‚Р°СЂСЊ
+        if not data.startswith('pick_') or '_РІСЂР°С‚Р°СЂСЊ' not in data:
+            await query.edit_message_text('РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РІС‹Р±РѕСЂ.')
             return TOUR_GOALIE
         pid = int(data.split('_')[1])
         roster = context.user_data['tour_roster']
         player = next((p for p in roster if p[1] == pid), None)
         added_personal = False
         if not player:
-            # Fallback: ищем в общей БД игроков
+            # Fallback: РёС‰РµРј РІ РѕР±С‰РµР№ Р‘Р” РёРіСЂРѕРєРѕРІ
             try:
                 pdb = db.get_player_by_id(pid)
                 if pdb:
@@ -2097,12 +2118,12 @@ async def tour_goalie_callback(update: Update, context: ContextTypes.DEFAULT_TYP
                     except Exception:
                         pass
                 else:
-                    await query.edit_message_text('Игрок не найден.')
+                    await query.edit_message_text('РРіСЂРѕРє РЅРµ РЅР°Р№РґРµРЅ.')
                     return TOUR_GOALIE
             except Exception:
-                await query.edit_message_text('Игрок не найден.')
+                await query.edit_message_text('РРіСЂРѕРє РЅРµ РЅР°Р№РґРµРЅ.')
                 return TOUR_GOALIE
-        # Режим добавления в пул — без автодобавления в состав
+        # Р РµР¶РёРј РґРѕР±Р°РІР»РµРЅРёСЏ РІ РїСѓР» вЂ” Р±РµР· Р°РІС‚РѕРґРѕР±Р°РІР»РµРЅРёСЏ РІ СЃРѕСЃС‚Р°РІ
         if context.user_data.get('premium_mode') == 'add_to_pool':
             try:
                 roster = context.user_data['tour_roster']
@@ -2113,18 +2134,18 @@ async def tour_goalie_callback(update: Update, context: ContextTypes.DEFAULT_TYP
                 budget = context.user_data['tour_budget']
                 spent = context.user_data['tour_selected']['spent']
                 left = budget - spent
-                # После добавления в пул всегда возвращаемся к выбору нападающих
+                # РџРѕСЃР»Рµ РґРѕР±Р°РІР»РµРЅРёСЏ РІ РїСѓР» РІСЃРµРіРґР° РІРѕР·РІСЂР°С‰Р°РµРјСЃСЏ Рє РІС‹Р±РѕСЂСѓ РЅР°РїР°РґР°СЋС‰РёС…
                 forwards_picked = context.user_data['tour_selected']['forwards']
-                await query.edit_message_text(f"Добавлен в ваш пул: {player[2]} ({player[4]}). Теперь выберите нападающего.")
+                await query.edit_message_text(f"Р”РѕР±Р°РІР»РµРЅ РІ РІР°С€ РїСѓР»: {player[2]} ({player[4]}). РўРµРїРµСЂСЊ РІС‹Р±РµСЂРёС‚Рµ РЅР°РїР°РґР°СЋС‰РµРіРѕ.")
                 next_state = TOUR_FORWARD_2 if len(forwards_picked) == 0 else TOUR_FORWARD_3
-                return await send_player_choice(update, context, 'нападающий', forwards_picked, next_state, left)
+                return await send_player_choice(update, context, 'РЅР°РїР°РґР°СЋС‰РёР№', forwards_picked, next_state, left)
             except Exception as e:
-                await query.edit_message_text(f"Ошибка добавления в пул: {e}")
+                await query.edit_message_text(f"РћС€РёР±РєР° РґРѕР±Р°РІР»РµРЅРёСЏ РІ РїСѓР»: {e}")
                 return TOUR_FORWARD_1
         budget = context.user_data['tour_budget']
         spent = context.user_data['tour_selected']['spent']
         if spent + player[7] > budget:
-            await query.edit_message_text(f'Недостаточно HC для выбора {player[1]}!')
+            await query.edit_message_text(f'РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ HC РґР»СЏ РІС‹Р±РѕСЂР° {player[1]}!')
             return TOUR_GOALIE
         context.user_data['tour_selected']['goalie'] = pid
         context.user_data['tour_selected']['spent'] += player[7]
@@ -2132,14 +2153,14 @@ async def tour_goalie_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         player_name = escape_md(str(player[2]))
         cost = escape_md(str(player[7]))
         left_str = escape_md(str(left))
-        msg = f'Вы выбрали {player_name} \\({cost}\\)\n\n*Оставшийся бюджет: {left_str}*'
+        msg = f'Р’С‹ РІС‹Р±СЂР°Р»Рё {player_name} \\({cost}\\)\n\n*РћСЃС‚Р°РІС€РёР№СЃСЏ Р±СЋРґР¶РµС‚: {left_str}*'
         await query.edit_message_text(msg, parse_mode="MarkdownV2")
-        # Показываем этап выбора капитана
+        # РџРѕРєР°Р·С‹РІР°РµРј СЌС‚Р°Рї РІС‹Р±РѕСЂР° РєР°РїРёС‚Р°РЅР°
         return await tour_captain(update, context)
     except Exception as e:
         print(f"tour_goalie_callback ERROR: {e}", flush=True)
         logger.exception("Exception in tour_goalie_callback")
-        await query.edit_message_text(f"Ошибка: {e}")
+        await query.edit_message_text(f"РћС€РёР±РєР°: {e}")
         return TOUR_GOALIE
     finally:
         print("tour_goalie_callback FINISHED", flush=True)
@@ -2147,24 +2168,24 @@ async def tour_goalie_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def tour_goalie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if _tour_deadline_passed(context):
-        await update.effective_message.reply_text("Дедлайн тура уже прошёл. Сбор и изменения состава закрыты.")
+        await update.effective_message.reply_text("Р”РµРґР»Р°Р№РЅ С‚СѓСЂР° СѓР¶Рµ РїСЂРѕС€С‘Р». РЎР±РѕСЂ Рё РёР·РјРµРЅРµРЅРёСЏ СЃРѕСЃС‚Р°РІР° Р·Р°РєСЂС‹С‚С‹.")
         return ConversationHandler.END
     budget = context.user_data['tour_budget']
     spent = context.user_data['tour_selected']['spent']
     left = budget - spent
     picked = []
-    # Вратарь только один, не нужен exclude кроме уже выбранного
+    # Р’СЂР°С‚Р°СЂСЊ С‚РѕР»СЊРєРѕ РѕРґРёРЅ, РЅРµ РЅСѓР¶РµРЅ exclude РєСЂРѕРјРµ СѓР¶Рµ РІС‹Р±СЂР°РЅРЅРѕРіРѕ
     if context.user_data['tour_selected']['goalie']:
         picked = [context.user_data['tour_selected']['goalie']]
-    return await send_player_choice(update, context, 'вратарь', picked, TOUR_CAPTAIN, left)
+    return await send_player_choice(update, context, 'РІСЂР°С‚Р°СЂСЊ', picked, TOUR_CAPTAIN, left)
 
 
 async def tour_captain(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if _tour_deadline_passed(context):
-        await update.effective_message.reply_text("Дедлайн тура уже прошёл. Состав больше менять нельзя.")
+        await update.effective_message.reply_text("Р”РµРґР»Р°Р№РЅ С‚СѓСЂР° СѓР¶Рµ РїСЂРѕС€С‘Р». РЎРѕСЃС‚Р°РІ Р±РѕР»СЊС€Рµ РјРµРЅСЏС‚СЊ РЅРµР»СЊР·СЏ.")
         return ConversationHandler.END
     from telegram import InlineKeyboardMarkup, InlineKeyboardButton
-    # Универсально получаем message для reply_text
+    # РЈРЅРёРІРµСЂСЃР°Р»СЊРЅРѕ РїРѕР»СѓС‡Р°РµРј message РґР»СЏ reply_text
     message = getattr(update, "effective_message", None)
     if message is None and hasattr(update, "message"):
         message = update.message
@@ -2173,45 +2194,45 @@ async def tour_captain(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     selected = context.user_data['tour_selected']
     roster = context.user_data['tour_roster']
-    # Собираем id полевых игроков
+    # РЎРѕР±РёСЂР°РµРј id РїРѕР»РµРІС‹С… РёРіСЂРѕРєРѕРІ
     field_ids = selected['forwards'] + selected['defenders']
-    # Получаем инфу по игрокам
+    # РџРѕР»СѓС‡Р°РµРј РёРЅС„Сѓ РїРѕ РёРіСЂРѕРєР°Рј
     candidates = [p for p in roster if p[1] in field_ids]
     keyboard = [
         [InlineKeyboardButton(f"{p[2]} ({p[3]})", callback_data=f"pick_captain_{p[1]}")]
         for p in candidates
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    text = "Назначь одного полевого игрока из состава капитаном. Его итоговые очки умножим на 1.5"
+    text = "РќР°Р·РЅР°С‡СЊ РѕРґРЅРѕРіРѕ РїРѕР»РµРІРѕРіРѕ РёРіСЂРѕРєР° РёР· СЃРѕСЃС‚Р°РІР° РєР°РїРёС‚Р°РЅРѕРј. Р•РіРѕ РёС‚РѕРіРѕРІС‹Рµ РѕС‡РєРё СѓРјРЅРѕР¶РёРј РЅР° 1.5"
     await message.reply_text(text, reply_markup=reply_markup)
     return TOUR_CAPTAIN
 
-# --- Обработчик выбора капитана ---
+# --- РћР±СЂР°Р±РѕС‚С‡РёРє РІС‹Р±РѕСЂР° РєР°РїРёС‚Р°РЅР° ---
 async def tour_captain_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if _tour_deadline_passed(context):
-        await update.effective_message.reply_text("Дедлайн тура уже прошёл. Состав больше менять нельзя.")
+        await update.effective_message.reply_text("Р”РµРґР»Р°Р№РЅ С‚СѓСЂР° СѓР¶Рµ РїСЂРѕС€С‘Р». РЎРѕСЃС‚Р°РІ Р±РѕР»СЊС€Рµ РјРµРЅСЏС‚СЊ РЅРµР»СЊР·СЏ.")
         return ConversationHandler.END
     from telegram import InlineKeyboardMarkup, InlineKeyboardButton
     query = update.callback_query
     await query.answer()
     data = query.data
     if not data.startswith('pick_captain_'):
-        await query.edit_message_text('Некорректный выбор капитана.')
+        await query.edit_message_text('РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РІС‹Р±РѕСЂ РєР°РїРёС‚Р°РЅР°.')
         return TOUR_CAPTAIN
     captain_id = int(data.replace('pick_captain_', ''))
     selected = context.user_data['tour_selected']
     roster = context.user_data['tour_roster']
     field_ids = selected['forwards'] + selected['defenders']
     if captain_id not in field_ids:
-        await query.edit_message_text('Капитан должен быть полевым игроком из вашего состава!')
+        await query.edit_message_text('РљР°РїРёС‚Р°РЅ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РїРѕР»РµРІС‹Рј РёРіСЂРѕРєРѕРј РёР· РІР°С€РµРіРѕ СЃРѕСЃС‚Р°РІР°!')
         return TOUR_CAPTAIN
     context.user_data['tour_selected']['captain'] = captain_id
-    # Формируем красивое итоговое сообщение с кастомным эмодзи
+    # Р¤РѕСЂРјРёСЂСѓРµРј РєСЂР°СЃРёРІРѕРµ РёС‚РѕРіРѕРІРѕРµ СЃРѕРѕР±С‰РµРЅРёРµ СЃ РєР°СЃС‚РѕРјРЅС‹Рј СЌРјРѕРґР·Рё
     # def custom_emoji_entity(emoji_id, offset):
     #     return MessageEntity(
     #         type=MessageEntityType.CUSTOM_EMOJI,
     #         offset=offset,
-    #         length=1,  # ASCII-символ
+    #         length=1,  # ASCII-СЃРёРјРІРѕР»
     #         custom_emoji_id=str(emoji_id)
     #     )
 
@@ -2221,19 +2242,19 @@ async def tour_captain_callback(update: Update, context: ContextTypes.DEFAULT_TY
             return str(pid)
         base = f"{p[2]} ({p[4]})"
         if captain:
-            return f"🏅 {base}"
+            return f"рџЏ… {base}"
         return base
 
     def format_final_roster_md(goalie, defenders, forwards, captain, spent, budget):
         lines = [
-            '*Ваш итоговый состав:*',
+            '*Р’Р°С€ РёС‚РѕРіРѕРІС‹Р№ СЃРѕСЃС‚Р°РІ:*',
             '',
             escape_md(goalie),
             escape_md(defenders),
             escape_md(forwards),
             '',
-            f'Капитан: {escape_md(captain)}',
-            f'Потрачено: *{escape_md(str(spent))}*/*{escape_md(str(budget))}*'
+            f'РљР°РїРёС‚Р°РЅ: {escape_md(captain)}',
+            f'РџРѕС‚СЂР°С‡РµРЅРѕ: *{escape_md(str(spent))}*/*{escape_md(str(budget))}*'
         ]
         return '\n'.join(lines)
 
@@ -2258,12 +2279,12 @@ async def tour_captain_callback(update: Update, context: ContextTypes.DEFAULT_TY
     from db import save_user_tour_roster
     # Final guard before saving
     if _tour_deadline_passed(context):
-        await update.effective_message.reply_text("Дедлайн тура уже прошёл. Состав больше менять нельзя.")
+        await update.effective_message.reply_text("Р”РµРґР»Р°Р№РЅ С‚СѓСЂР° СѓР¶Рµ РїСЂРѕС€С‘Р». РЎРѕСЃС‚Р°РІ Р±РѕР»СЊС€Рµ РјРµРЅСЏС‚СЊ РЅРµР»СЊР·СЏ.")
         return ConversationHandler.END
     save_user_tour_roster(user_id, tour_id, roster_dict, captain_id, spent)
 
     text = format_final_roster_md(goalie_str, defenders_str, forwards_str, captain_str, spent, budget)
-    keyboard = [[InlineKeyboardButton('Пересобрать состав', callback_data='restart_tour')]]
+    keyboard = [[InlineKeyboardButton('РџРµСЂРµСЃРѕР±СЂР°С‚СЊ СЃРѕСЃС‚Р°РІ', callback_data='restart_tour')]]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await query.edit_message_text(
@@ -2279,20 +2300,20 @@ async def restart_tour_callback(update: Update, context: ContextTypes.DEFAULT_TY
     query = update.callback_query
     await query.answer()
     if _tour_deadline_passed(context):
-        await query.edit_message_text("Дедлайн тура уже прошёл. Сбор и изменения состава закрыты.")
+        await query.edit_message_text("Р”РµРґР»Р°Р№РЅ С‚СѓСЂР° СѓР¶Рµ РїСЂРѕС€С‘Р». РЎР±РѕСЂ Рё РёР·РјРµРЅРµРЅРёСЏ СЃРѕСЃС‚Р°РІР° Р·Р°РєСЂС‹С‚С‹.")
         return ConversationHandler.END
     user_id = query.from_user.id
     active_tour = get_active_tour()
     if active_tour:
         tour_id = active_tour['id']
         clear_user_tour_roster(user_id, tour_id)
-    # Запускаем процесс выбора состава заново через /tour (ConversationHandler entry_point)
+    # Р—Р°РїСѓСЃРєР°РµРј РїСЂРѕС†РµСЃСЃ РІС‹Р±РѕСЂР° СЃРѕСЃС‚Р°РІР° Р·Р°РЅРѕРІРѕ С‡РµСЂРµР· /tour (ConversationHandler entry_point)
     await context.bot.send_message(chat_id=query.message.chat_id, text="/tour")
     return ConversationHandler.END
 
 async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     from db import get_budget
-    # Универсально получаем message для reply_text
+    # РЈРЅРёРІРµСЂСЃР°Р»СЊРЅРѕ РїРѕР»СѓС‡Р°РµРј message РґР»СЏ reply_text
     message = getattr(update, "effective_message", None)
     if message is None and hasattr(update, "message"):
         message = update.message
@@ -2300,19 +2321,19 @@ async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         message = update.callback_query.message
     budget = get_budget()
     budget_str = str(budget).replace("-", r"\-") if budget is not None else 'N/A'
-    text = rf"""*Правила игры:*
+    text = rf"""*РџСЂР°РІРёР»Р° РёРіСЂС‹:*
 
-Соберите свою команду из 6 игроков \(3 нападающих, 2 защитника, 1 вратарь\) с ограниченным бюджетом\. У каждого игрока своя стоимость \- 10, 30, 40 или 50 единиц\.
+РЎРѕР±РµСЂРёС‚Рµ СЃРІРѕСЋ РєРѕРјР°РЅРґСѓ РёР· 6 РёРіСЂРѕРєРѕРІ \(3 РЅР°РїР°РґР°СЋС‰РёС…, 2 Р·Р°С‰РёС‚РЅРёРєР°, 1 РІСЂР°С‚Р°СЂСЊ\) СЃ РѕРіСЂР°РЅРёС‡РµРЅРЅС‹Рј Р±СЋРґР¶РµС‚РѕРј\. РЈ РєР°Р¶РґРѕРіРѕ РёРіСЂРѕРєР° СЃРІРѕСЏ СЃС‚РѕРёРјРѕСЃС‚СЊ \- 10, 30, 40 РёР»Рё 50 РµРґРёРЅРёС†\.
 
-⚡️ Назначь одного полевого игрока из состава капитаном
+вљЎпёЏ РќР°Р·РЅР°С‡СЊ РѕРґРЅРѕРіРѕ РїРѕР»РµРІРѕРіРѕ РёРіСЂРѕРєР° РёР· СЃРѕСЃС‚Р°РІР° РєР°РїРёС‚Р°РЅРѕРј
 
-*Ваш бюджет: {budget_str}*
+*Р’Р°С€ Р±СЋРґР¶РµС‚: {budget_str}*
 
-Собрать состав \- /tour"""
+РЎРѕР±СЂР°С‚СЊ СЃРѕСЃС‚Р°РІ \- /tour"""
     await message.reply_text(text, parse_mode="MarkdownV2")
 
 async def hc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # Универсально получаем message для reply_text
+    # РЈРЅРёРІРµСЂСЃР°Р»СЊРЅРѕ РїРѕР»СѓС‡Р°РµРј message РґР»СЏ reply_text
     message = getattr(update, "effective_message", None)
     if message is None and hasattr(update, "message"):
         message = update.message
@@ -2322,11 +2343,11 @@ async def hc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     data = db.get_user_by_id(user.id)
     if data:
-        await message.reply_text(f'💰 Твой баланс: {data[3]} HC')
+        await message.reply_text(f'рџ’° РўРІРѕР№ Р±Р°Р»Р°РЅСЃ: {data[3]} HC')
     else:
         await message.reply_text(
-            '🚫 Тебя еще нет в списке генменеджеров Фентези Драфт КХЛ\n\n'
-            'Зарегистрируйся через /start — и вперёд к сборке состава!'
+            'рџљ« РўРµР±СЏ РµС‰Рµ РЅРµС‚ РІ СЃРїРёСЃРєРµ РіРµРЅРјРµРЅРµРґР¶РµСЂРѕРІ Р¤РµРЅС‚РµР·Рё Р”СЂР°С„С‚ РљРҐР›\n\n'
+            'Р—Р°СЂРµРіРёСЃС‚СЂРёСЂСѓР№СЃСЏ С‡РµСЂРµР· /start вЂ” Рё РІРїРµСЂС‘Рґ Рє СЃР±РѕСЂРєРµ СЃРѕСЃС‚Р°РІР°!'
         )
 
 
@@ -2334,7 +2355,7 @@ async def _maybe_notify_referral_limit(context, referrer_id: int) -> None:
     try:
         summary = db.check_referral_limit_state(referrer_id)
     except Exception as exc:
-        logger.warning('Не удалось проверить лимит рефералов для %s: %s', referrer_id, exc)
+        logger.warning('РќРµ СѓРґР°Р»РѕСЃСЊ РїСЂРѕРІРµСЂРёС‚СЊ Р»РёРјРёС‚ СЂРµС„РµСЂР°Р»РѕРІ РґР»СЏ %s: %s', referrer_id, exc)
         return
     if not summary.get('notify'):
         return
@@ -2349,19 +2370,19 @@ async def _maybe_notify_referral_limit(context, referrer_id: int) -> None:
     if name:
         label = f"{label} ({name})"
     lines = [
-        f"Пользователь {label} достиг лимита {db.REFERRAL_ACCOUNT_LIMIT} приглашённых.",
+        f"РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ {label} РґРѕСЃС‚РёРі Р»РёРјРёС‚Р° {db.REFERRAL_ACCOUNT_LIMIT} РїСЂРёРіР»Р°С€С‘РЅРЅС‹С….",
         '',
-        'Приглашённые пользователи:'
+        'РџСЂРёРіР»Р°С€С‘РЅРЅС‹Рµ РїРѕР»СЊР·РѕРІР°С‚РµР»Рё:'
     ]
     status_map = {
-        'pending': 'в ожидании',
-        'rewarded': 'бонус начислен',
-        'pending_admin': 'ожидает проверки',
-        'limit_total': 'лимит достигнут',
-        'limit_month': 'месячный лимит',
-        'limit_day': 'дневной лимит',
-        'disabled': 'отключено',
-        'denied': 'отклонён'
+        'pending': 'РІ РѕР¶РёРґР°РЅРёРё',
+        'rewarded': 'Р±РѕРЅСѓСЃ РЅР°С‡РёСЃР»РµРЅ',
+        'pending_admin': 'РѕР¶РёРґР°РµС‚ РїСЂРѕРІРµСЂРєРё',
+        'limit_total': 'Р»РёРјРёС‚ РґРѕСЃС‚РёРіРЅСѓС‚',
+        'limit_month': 'РјРµСЃСЏС‡РЅС‹Р№ Р»РёРјРёС‚',
+        'limit_day': 'РґРЅРµРІРЅРѕР№ Р»РёРјРёС‚',
+        'disabled': 'РѕС‚РєР»СЋС‡РµРЅРѕ',
+        'denied': 'РѕС‚РєР»РѕРЅС‘РЅ'
     }
     for item in referrals[:50]:
         invited_label = f"@{item.get('username')}" if item.get('username') else f"id {item.get('user_id')}"
@@ -2369,19 +2390,19 @@ async def _maybe_notify_referral_limit(context, referrer_id: int) -> None:
         if invited_name:
             invited_label = f"{invited_label} ({invited_name})"
         status = (item.get('status') or '').lower()
-        status_text = status_map.get(status, status or '—')
-        lines.append(f"• {invited_label} — {status_text}")
+        status_text = status_map.get(status, status or 'вЂ”')
+        lines.append(f"вЂў {invited_label} вЂ” {status_text}")
     if len(referrals) > 50:
-        lines.append(f"… и ещё {len(referrals) - 50}")
+        lines.append(f"вЂ¦ Рё РµС‰С‘ {len(referrals) - 50}")
     lines.append('')
-    lines.append('Сделать ограничение (отключить реферальную ссылку)?')
+    lines.append('РЎРґРµР»Р°С‚СЊ РѕРіСЂР°РЅРёС‡РµРЅРёРµ (РѕС‚РєР»СЋС‡РёС‚СЊ СЂРµС„РµСЂР°Р»СЊРЅСѓСЋ СЃСЃС‹Р»РєСѓ)?')
     keyboard = InlineKeyboardMarkup([
         [
-            InlineKeyboardButton('Да', callback_data=f'ref_limit:{referrer_id}:yes'),
-            InlineKeyboardButton('Нет', callback_data=f'ref_limit:{referrer_id}:no'),
+            InlineKeyboardButton('Р”Р°', callback_data=f'ref_limit:{referrer_id}:yes'),
+            InlineKeyboardButton('РќРµС‚', callback_data=f'ref_limit:{referrer_id}:no'),
         ]
     ])
     try:
         await context.bot.send_message(chat_id=ADMIN_ID, text='\n'.join(lines), reply_markup=keyboard)
     except Exception as exc:
-        logger.warning('Не удалось отправить уведомление админу о лимите рефералов: %s', exc)
+        logger.warning('РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РїСЂР°РІРёС‚СЊ СѓРІРµРґРѕРјР»РµРЅРёРµ Р°РґРјРёРЅСѓ Рѕ Р»РёРјРёС‚Рµ СЂРµС„РµСЂР°Р»РѕРІ: %s', exc)
