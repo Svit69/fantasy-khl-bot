@@ -585,7 +585,7 @@ async def tours(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     for r in rows:
         # r: (id, name, start, deadline, end, status, winners)
         tid, name, start, deadline, end, status, winners = r
-        lines.append(f"вЂў #{tid} вЂ” {name} [{status}]")
+        lines.append(f"- #{tid}: {name} [{status}]")
         buttons.append([InlineKeyboardButton(f"РћС‚РєСЂС‹С‚СЊ #{tid}", callback_data=f"tour_open_{tid}")])
     await update.message.reply_text("\n".join(lines), reply_markup=InlineKeyboardMarkup(buttons))
 
