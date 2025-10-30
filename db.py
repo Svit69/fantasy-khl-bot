@@ -1,6 +1,7 @@
 import sqlite3
 from contextlib import closing
 import datetime
+import logging
 try:
     from zoneinfo import ZoneInfo
 except Exception:
@@ -8,6 +9,9 @@ except Exception:
 
 
 DB_NAME = 'fantasy_khl.db'
+
+_PROFILE_UNCHANGED = object()
+logger = logging.getLogger(__name__)
 
 # Referral anti-abuse thresholds (configurable)
 REFERRAL_LIMIT_24H = 5
@@ -50,6 +54,44 @@ def get_pending_payments():
 
 
 DB_NAME = 'fantasy_khl.db'
+
+
+def _apply_user_profile_updates(conn, telegram_id, *, username=_PROFILE_UNCHANGED, name=_PROFILE_UNCHANGED, existing_row=None):
+    if username is _PROFILE_UNCHANGED and name is _PROFILE_UNCHANGED:
+        return False
+    row = existing_row
+    if row is None:
+        row = conn.execute(
+            'SELECT username, name FROM users WHERE telegram_id = ?',
+            (telegram_id,)
+        ).fetchone()
+    if not row:
+        return False
+    try:
+        current_username = row['username']
+    except Exception:
+        current_username = row[0] if len(row) > 0 else None
+    try:
+        current_name = row['name']
+    except Exception:
+        current_name = row[1] if len(row) > 1 else None
+
+    updates = []
+    params = []
+    if username is not _PROFILE_UNCHANGED and username != current_username:
+        updates.append('username = ?')
+        params.append(username)
+    if name is not _PROFILE_UNCHANGED and name != current_name:
+        updates.append('name = ?')
+        params.append(name)
+    if not updates:
+        return False
+    params.append(telegram_id)
+    conn.execute(
+        f'UPDATE users SET {", ".join(updates)} WHERE telegram_id = ?',
+        tuple(params)
+    )
+    return True
 
 def init_db():
     with closing(sqlite3.connect(DB_NAME)) as conn:
@@ -262,14 +304,78 @@ def init_db():
 def register_user(telegram_id, username, name):
     with closing(sqlite3.connect(DB_NAME)) as conn:
         with conn:
-            user = conn.execute('SELECT * FROM users WHERE telegram_id = ?', (telegram_id,)).fetchone()
-            if not user:
+            row = conn.execute(
+                'SELECT username, name FROM users WHERE telegram_id = ?',
+                (telegram_id,)
+            ).fetchone()
+            if not row:
                 conn.execute(
                     'INSERT INTO users (telegram_id, username, name, hc_balance) VALUES (?, ?, ?, 0)',
                     (telegram_id, username, name)
                 )
                 return True
+            updated = _apply_user_profile_updates(
+                conn,
+                telegram_id,
+                username=username,
+                name=name,
+                existing_row=row
+            )
+            if updated:
+                try:
+                    logger.debug(
+                        "Refreshed profile for user %s (username=%s, name=%s)",
+                        telegram_id,
+                        username,
+                        name,
+                    )
+                except Exception:
+                    pass
             return False
+
+
+def update_user_profile(telegram_id, *, username=_PROFILE_UNCHANGED, name=_PROFILE_UNCHANGED):
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            return _apply_user_profile_updates(
+                conn,
+                telegram_id,
+                username=username,
+                name=name
+            )
+
+
+def rename_username(old_username, new_username):
+    cleaned_old = (old_username or '').lstrip('@')
+    cleaned_new = (new_username or '').lstrip('@') if new_username is not None else None
+    if not cleaned_old:
+        return False
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        with conn:
+            row = conn.execute(
+                'SELECT telegram_id, username, name FROM users WHERE LOWER(username) = LOWER(?)',
+                (cleaned_old.lower(),)
+            ).fetchone()
+            if not row:
+                return False
+            telegram_id = row[0]
+            updated = _apply_user_profile_updates(
+                conn,
+                telegram_id,
+                username=cleaned_new,
+                existing_row=(row[1], row[2])
+            )
+            if updated:
+                try:
+                    logger.info(
+                        "Username updated for user_id=%s: %s -> %s",
+                        telegram_id,
+                        row[1],
+                        cleaned_new,
+                    )
+                except Exception:
+                    pass
+            return updated
 
 def get_user_by_username(username):
     with closing(sqlite3.connect(DB_NAME)) as conn:

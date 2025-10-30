@@ -28,6 +28,7 @@ from handlers.user_handlers import start, hc, IMAGES_DIR, \
     challenge_pick_pos_callback, challenge_team_input, challenge_pick_player_callback, \
     challenge_cancel_callback, challenge_reshuffle_callback, \
     tours, tour_open_callback, tour_build_callback
+from handlers.user_handlers import sync_user_profile
 from handlers.user_handlers import shop, shop_item_callback
 from handlers.user_handlers import subscribe_stars, precheckout_callback, successful_payment_handler
 from handlers.admin_handlers import addhc2 as addhc, send_results, show_users, list_active_subscribers
@@ -618,6 +619,7 @@ if __name__ == '__main__':
     )
 
     # Регистрация обработчиков
+    app.add_handler(MessageHandler(filters.ALL, sync_user_profile, block=False), group=-1)
     app.add_handler(CommandHandler('start', start))
     
     # Регистрация ConversationHandler для добавления игрока
@@ -1180,6 +1182,7 @@ if __name__ == '__main__':
     # await здесь нельзя, переносим в post_init
 
     # Запуск приложения
+    app.add_handler(MessageHandler(filters.ALL, sync_user_profile, block=False), group=-1)
     app.add_handler(CommandHandler('start', start))
     # Убрано: отдельная регистрация /tour для сборки. Теперь /tour показывает список туров.
     app.add_handler(CommandHandler('hc', hc))

@@ -122,6 +122,20 @@ def _is_user_blocked_safe(user_id: int) -> bool:
         return False
 
 
+async def sync_user_profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Ensure we keep usernames/names in sync for every update."""
+    user = getattr(update, 'effective_user', None)
+    if user is None or getattr(user, 'is_bot', False):
+        return
+    try:
+        db.register_user(user.id, user.username, user.full_name)
+    except Exception as exc:
+        try:
+            logger.warning("Unable to sync profile for %s: %s", user.id, exc)
+        except Exception:
+            pass
+
+
 # --- Time guards: block actions after deadlines ---
 def _tour_deadline_passed(context) -> bool:
     try:
