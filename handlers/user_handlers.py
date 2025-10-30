@@ -580,14 +580,14 @@ async def tours(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("РќРµС‚ Р°РєС‚РёРІРЅС‹С… С‚СѓСЂРѕРІ. Р—Р°РіР»СЏРЅРёС‚Рµ РїРѕР·Р¶Рµ!")
         return
     # Р¤РѕСЂРјРёСЂСѓРµРј СЃРїРёСЃРѕРє Рё РєРЅРѕРїРєРё
-    lines = ["*Р”РѕСЃС‚СѓРїРЅС‹Рµ С‚СѓСЂС‹:*"]
+    lines = ["Доступные туры:"]
     buttons = []
     for r in rows:
         # r: (id, name, start, deadline, end, status, winners)
         tid, name, start, deadline, end, status, winners = r
         lines.append(f"вЂў #{tid} вЂ” {name} [{status}]")
         buttons.append([InlineKeyboardButton(f"РћС‚РєСЂС‹С‚СЊ #{tid}", callback_data=f"tour_open_{tid}")])
-    await update.message.reply_text("\n".join(lines), reply_markup=InlineKeyboardMarkup(buttons), parse_mode='Markdown')
+    await update.message.reply_text("\n".join(lines), reply_markup=InlineKeyboardMarkup(buttons))
 
 
 async def tour_open_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
