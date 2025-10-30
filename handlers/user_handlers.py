@@ -123,7 +123,7 @@ def _is_user_blocked_safe(user_id: int) -> bool:
 
 
 async def sync_user_profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Ensure we keep usernames/names in sync for every update."""
+    """Синхронизируем username и имя пользователя на каждом апдейте."""
     user = getattr(update, 'effective_user', None)
     if user is None or getattr(user, 'is_bot', False):
         return

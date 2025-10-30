@@ -27,8 +27,7 @@ from handlers.user_handlers import start, hc, IMAGES_DIR, \
     challenge_open_callback, challenge_info_callback, challenge_build_callback, \
     challenge_pick_pos_callback, challenge_team_input, challenge_pick_player_callback, \
     challenge_cancel_callback, challenge_reshuffle_callback, \
-    tours, tour_open_callback, tour_build_callback
-from handlers.user_handlers import sync_user_profile
+    tours, tour_open_callback, tour_build_callback, sync_user_profile
 from handlers.user_handlers import shop, shop_item_callback
 from handlers.user_handlers import subscribe_stars, precheckout_callback, successful_payment_handler
 from handlers.admin_handlers import addhc2 as addhc, send_results, show_users, list_active_subscribers
