@@ -1144,14 +1144,26 @@ async def set_tour_roster_process(update, context):
 async def get_tour_roster(update, context):
     if not await admin_only(update, context):
         return
-    roster = db.get_tour_roster_with_player_info()
-    if not roster:
-        await update.message.reply_text("РЎРѕСЃС‚Р°РІ РЅР° С‚СѓСЂ РЅРµ Р·Р°РґР°РЅ.")
+    args = getattr(context, 'args', []) or []
+    tour_id = None
+    if args and str(args[0]).isdigit():
+        tour_id = int(args[0])
+    else:
+        active = db.get_active_tour()
+        if active:
+            tour_id = active.get('id')
+    if not tour_id:
+        await update.message.reply_text("Активный тур не найден. Укажите id: /get_tour_roster <id>")
         return
-    msg = "РЎРѕСЃС‚Р°РІ РЅР° С‚СѓСЂ:\n"
+    roster = db.get_tour_roster_with_player_info(tour_id)
+    if not roster:
+        await update.message.reply_text(f"Состав на тур {tour_id} не задан.")
+        return
+    msg = f"Состав на тур {tour_id}:\n"
     for cost, pid, name, pos, club, nation, age, price in roster:
         msg += f"{cost}: {pid}. {name} | {pos} | {club} | {nation} | {age} лет | {price} HC\n"
     await update.message.reply_text(msg)
+
 
 # --- РЎРїРёСЃРѕРє РїРѕР»СЊР·РѕРІР°С‚РµР»РµР№ Рё РїРѕРґРїРёСЃРѕРє ---
 async def show_users(update, context):
@@ -3044,4 +3056,3 @@ async def referral_limit_decision_callback(update: Update, context: ContextTypes
         await query.edit_message_text(response)
     except Exception:
         await context.bot.send_message(chat_id=update.effective_chat.id, text=response)
-

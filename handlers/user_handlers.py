@@ -5,7 +5,7 @@ from telegram.ext import ContextTypes, ConversationHandler
 from config import ADMIN_ID
 import db
 import os
-from utils import is_admin, IMAGES_DIR, logger, CHALLENGE_IMAGE_PATH_FILE
+from utils import is_admin, IMAGES_DIR, logger, CHALLENGE_IMAGE_PATH_FILE, TOUR_IMAGE_PATH_FILE
 import datetime
 
 def _is_user_blocked_safe(user_id: int) -> bool:
@@ -1567,7 +1567,10 @@ async def tour_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # --- Если состава нет, запускаем обычный сценарий выбора ---
     # 1. Отправить картинку тура и вводный текст с бюджетом
     budget = db.get_budget() or 0
-    roster = db.get_tour_roster_with_player_info()
+    roster = db.get_tour_roster_with_player_info(tour_id)
+    if not roster:
+        await message.reply_text('Состав на активный тур пока не загружен. Обратитесь к администратору.')
+        return ConversationHandler.END
     forwards = [p for p in roster if p[3].lower() == 'нападающий']
     defenders = [p for p in roster if p[3].lower() == 'защитник']
     goalies = [p for p in roster if p[3].lower() == 'вратарь']
@@ -1582,26 +1585,45 @@ async def tour_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
     context.user_data['tour_selected'] = {'forwards': [], 'defenders': [], 'goalie': None, 'captain': None, 'spent': 0}
     # Отправить картинку (если есть)
+    # --- отправка афиши тура ---
     try:
-        tour_img_path = None
-        tour_img_txt = os.path.join(os.getcwd(), 'latest_tour.txt')
-        if os.path.exists(tour_img_txt):
-            with open(tour_img_txt, 'r') as f:
-                fname = f.read().strip()
-                if fname:
-                    fpath = os.path.join(IMAGES_DIR, fname)
-                    if os.path.exists(fpath):
-                        tour_img_path = fpath
-        if not tour_img_path:
-            # fallback: last by name
+        tour_img_sent = False
+        image_file_id = ((active_tour.get('image_file_id') or '').strip() if isinstance(active_tour, dict) else '')
+        image_filename = ((active_tour.get('image_filename') or '').strip() if isinstance(active_tour, dict) else '')
+        if image_file_id:
+            try:
+                await message.reply_photo(photo=image_file_id)
+                tour_img_sent = True
+            except Exception:
+                logger.warning('Не удалось отправить фото тура по file_id', exc_info=True)
+        candidate_paths = []
+        if image_filename:
+            candidate_paths.append(os.path.join(IMAGES_DIR, image_filename))
+        legacy_txt = os.path.join(os.getcwd(), TOUR_IMAGE_PATH_FILE)
+        if os.path.exists(legacy_txt):
+            try:
+                with open(legacy_txt, 'r', encoding='utf-8') as f:
+                    legacy_name = f.read().strip()
+                    if legacy_name:
+                        candidate_paths.append(os.path.join(IMAGES_DIR, legacy_name))
+            except Exception:
+                logger.warning('Не удалось прочитать TOUR_IMAGE_PATH_FILE', exc_info=True)
+        if not candidate_paths:
             files = [f for f in os.listdir(IMAGES_DIR) if f.lower().endswith((".jpg", ".jpeg", ".png"))]
             if files:
-                tour_img_path = os.path.join(IMAGES_DIR, sorted(files)[-1])
-        if tour_img_path:
-            with open(tour_img_path, 'rb') as img:
-                await update.message.reply_photo(photo=InputFile(img))
+                candidate_paths.append(os.path.join(IMAGES_DIR, sorted(files)[-1]))
+        if not tour_img_sent:
+            for path_candidate in candidate_paths:
+                if not path_candidate:
+                    continue
+                if os.path.exists(path_candidate):
+                    with open(path_candidate, 'rb') as img:
+                        await message.reply_photo(photo=InputFile(img))
+                    tour_img_sent = True
+                    break
     except Exception as e:
-        logger.error(f'Ошибка при отправке изображения тура: {e}')
+        logger.error(f'Ошибка при отправке картинки тура: {e}')
+
     # Вводный текст
     # Формируем строку дедлайна
     deadline = active_tour.get('deadline', '')
@@ -2385,3 +2407,4 @@ async def _maybe_notify_referral_limit(context, referrer_id: int) -> None:
         await context.bot.send_message(chat_id=ADMIN_ID, text='\n'.join(lines), reply_markup=keyboard)
     except Exception as exc:
         logger.warning('Не удалось отправить уведомление админу о лимите рефералов: %s', exc)
+

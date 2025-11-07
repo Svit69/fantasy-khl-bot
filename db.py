@@ -707,14 +707,36 @@ def get_budget():
         return row[0] if row else None
 
 def get_tour_roster_with_player_info(tour_num=1):
+    """Return roster (cost + player info) for the given tour.
+
+    Uses the modern tour_players table first, but falls back to the legacy
+    tour_roster table to remain backward compatible with older data.
+    """
+    if tour_num is None:
+        tour_num = 1
     with closing(sqlite3.connect(DB_NAME)) as conn:
-        return conn.execute('''
+        rows = conn.execute(
+            '''
+            SELECT tp.cost, p.id, p.name, p.position, p.club, p.nation, p.age, p.price
+            FROM tour_players tp
+            JOIN players p ON tp.player_id = p.id
+            WHERE tp.tour_id = ?
+            ORDER BY tp.cost DESC, tp.id ASC
+            ''',
+            (tour_num,)
+        ).fetchall()
+        if rows:
+            return rows
+        return conn.execute(
+            '''
             SELECT tr.cost, p.id, p.name, p.position, p.club, p.nation, p.age, p.price
             FROM tour_roster tr
             JOIN players p ON tr.player_id = p.id
             WHERE tr.tour_num = ?
             ORDER BY tr.cost DESC, tr.id ASC
-        ''', (tour_num,)).fetchall()
+            ''',
+            (tour_num,)
+        ).fetchall()
 
 def remove_player(player_id):
     with closing(sqlite3.connect(DB_NAME)) as conn:
