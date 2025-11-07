@@ -807,7 +807,7 @@ async def delete_tour_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(user.id):
         await update.message.reply_text("РљРѕРјР°РЅРґР° РґРѕСЃС‚СѓРїРЅР° С‚РѕР»СЊРєРѕ Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂСѓ.")
         return ConversationHandler.END
-    await update.message.reply_text("Р’РІРµРґРёС‚Рµ РїР°СЂРѕР»СЊ РґР»СЏ СѓРґР°Р»РµРЅРёСЏ РўРЈР Рђ РїРѕ id:")
+    await update.message.reply_text("Введите пароль для удаления тура по id:")
     return DEL_TOUR_WAIT_PASSWORD
 
 async def delete_tour_password(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2956,7 +2956,7 @@ async def addhc2(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     # Expect two arguments: identifier (@username or user_id) and amount
     if len(context.args) != 2 or not context.args[1].isdigit():
-        await update.message.reply_text('РСЃРїРѕР»СЊР·РѕРІР°РЅРёРµ: /addhc @username 100 РёР»Рё /addhc user_id 100')
+        await update.message.reply_text("Использование: /addhc @username 100 или /addhc user_id 100")
         return
     identifier = (context.args[0] or '').strip()
     amount = int(context.args[1])
@@ -2979,7 +2979,7 @@ async def addhc2(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 resolved_username = user[1] or ''
 
     if not user:
-        await update.message.reply_text('РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ.')
+        await update.message.reply_text('Пользователь не найден.')
         return
 
     db.update_hc_balance(user[0], amount)
@@ -2989,14 +2989,14 @@ async def addhc2(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         await context.bot.send_message(
             chat_id=user[0],
-            text=f'Р’Р°Рј РЅР°С‡РёСЃР»РµРЅРѕ {amount} HC!\nРўРµРєСѓС‰РёР№ Р±Р°Р»Р°РЅСЃ: {new_balance} HC'
+            text=f'Вам начислено {amount} HC!\nТекущий баланс: {new_balance} HC'
         )
     except Exception:
         pass
 
     # Reply to admin with more details
     target_label = f"@{resolved_username}" if resolved_username else f"id {user[0]}"
-    await update.message.reply_text(f'РќР°С‡РёСЃР»РµРЅРѕ {target_label} {amount} HC.')
+    await update.message.reply_text(f'Начислено {target_label} {amount} HC.')
 
 
 async def referral_limit_decision_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
