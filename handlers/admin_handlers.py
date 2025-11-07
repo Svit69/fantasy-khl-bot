@@ -805,7 +805,7 @@ DEL_TOUR_WAIT_ID = 10031
 async def delete_tour_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     if not is_admin(user.id):
-        await update.message.reply_text("РљРѕРјР°РЅРґР° РґРѕСЃС‚СѓРїРЅР° С‚РѕР»СЊРєРѕ Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂСѓ.")
+        await update.message.reply_text("Команда доступна только администратору.")
         return ConversationHandler.END
     await update.message.reply_text("Введите пароль для удаления тура по id:")
     return DEL_TOUR_WAIT_PASSWORD
@@ -814,9 +814,9 @@ async def delete_tour_password(update: Update, context: ContextTypes.DEFAULT_TYP
     pw = (update.message.text or '').strip()
     checker = _get_purge_password_checker()
     if not checker(pw):
-        await update.message.reply_text("РќРµРІРµСЂРЅС‹Р№ РїР°СЂРѕР»СЊ. РћС‚РјРµРЅР°.")
+        await update.message.reply_text("Неверный пароль. Отмена.")
         return ConversationHandler.END
-    await update.message.reply_text("Р’РІРµРґРёС‚Рµ id С‚СѓСЂР° (С†РµР»РѕРµ С‡РёСЃР»Рѕ):")
+    await update.message.reply_text("Введите id тура (целое число):")
     return DEL_TOUR_WAIT_ID
 
 async def delete_tour_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
