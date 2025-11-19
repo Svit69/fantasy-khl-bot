@@ -11,6 +11,7 @@ import asyncio
 import datetime
 import re
 import uuid
+from dataclasses import dataclass
 from typing import Dict, Iterable, List, Tuple
 
 def _is_user_blocked_safe(user_id: int) -> bool:
@@ -1931,6 +1932,7 @@ TOUR_NAME, TOUR_START, TOUR_DEADLINE, TOUR_END, TOUR_CONFIRM = range(100, 105)
 # --- Р•Р”РРќР«Р™ РџРђРљР•РўРќР«Р™ Р”РРђР›РћР“ РЎРћР—Р”РђРќРРЇ РўРЈР Рђ ---
 # Р­С‚Р°РїС‹: РёРјСЏ -> РґР°С‚Р° СЃС‚Р°СЂС‚Р° -> РґРµРґР»Р°Р№РЅ -> РѕРєРѕРЅС‡Р°РЅРёРµ -> С„РѕС‚Рѕ -> СЂРѕСЃС‚РµСЂ -> С„РёРЅР°Р»
 CT_NAME, CT_START, CT_DEADLINE, CT_END, CT_IMAGE, CT_ROSTER = range(200, 206)
+BULK_HC_WAIT_INPUT = 350
 
 async def create_tour_full_start(update, context):
     if not await admin_only(update, context):
@@ -3010,6 +3012,184 @@ async def addhc2(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # Reply to admin with more details
     target_label = f"@{resolved_username}" if resolved_username else f"id {user[0]}"
     await update.message.reply_text(f'Начислено {target_label} {amount} HC.')
+
+
+@dataclass
+class BulkHcEntry:
+    line_no: int
+    identifier: str
+    amount: int
+
+
+def _parse_bulk_hc_lines(raw_text: str) -> Tuple[List[BulkHcEntry], List[str]]:
+    entries: List[BulkHcEntry] = []
+    errors: List[str] = []
+    for idx, raw_line in enumerate(raw_text.splitlines(), start=1):
+        line = raw_line.strip()
+        if not line:
+            continue
+        if ':' not in line:
+            errors.append(f"{idx}: отсутствует разделитель ':'")
+            continue
+        identifier_part, amount_part = line.split(':', 1)
+        identifier = identifier_part.strip()
+        if not identifier:
+            errors.append(f"{idx}: не указан пользователь")
+            continue
+        amount_text = amount_part.replace(' ', '').strip()
+        try:
+            amount = int(amount_text)
+        except Exception:
+            errors.append(f"{idx}: не удалось интерпретировать количество HC («{amount_part.strip()}»)")
+            continue
+        if amount <= 0:
+            errors.append(f"{idx}: количество HC должно быть положительным")
+            continue
+        entries.append(BulkHcEntry(idx, identifier, amount))
+    return entries, errors
+
+
+def _chunk_long_text(text: str, limit: int = 3500) -> List[str]:
+    if len(text) <= limit:
+        return [text]
+    return [text[i:i + limit] for i in range(0, len(text), limit)]
+
+
+def _cleanup_identifier(value: str) -> str:
+    result = (value or '').strip()
+    if not result:
+        return ''
+    result = re.sub(r'^https?://t(?:elegram)?\.me/', '', result, flags=re.IGNORECASE)
+    return result.strip()
+
+
+def _resolve_bulk_hc_user(identifier: str):
+    cleaned = _cleanup_identifier(identifier)
+    if not cleaned:
+        return None, '', "не указан пользователь"
+    if cleaned.startswith('@'):
+        username_candidate = cleaned[1:].strip()
+    else:
+        username_candidate = None
+    digits_only = cleaned.replace(' ', '')
+    user_row = None
+    label = cleaned
+
+    def _fetch_by_username(username: str):
+        if not username:
+            return None
+        row = db.get_user_by_username(username)
+        if not row:
+            row = db.get_user_by_username_insensitive(username)
+        return row
+
+    numeric_candidate = digits_only
+    if cleaned.lower().startswith('id'):
+        numeric_candidate = re.sub(r'\D', '', cleaned[2:])
+
+    if numeric_candidate and numeric_candidate.isdigit() and (digits_only.isdigit() or cleaned.lower().startswith('id')):
+        user_id = int(numeric_candidate)
+        user_row = db.get_user_by_id(user_id)
+        label = f"id {user_id}"
+        if user_row:
+            return user_row, label, None
+        return None, label, "пользователь не найден"
+
+    if username_candidate or any(ch.isalpha() for ch in cleaned):
+        username = (username_candidate or cleaned).lstrip('@')
+        user_row = _fetch_by_username(username)
+        label = f"@{username}" if username else cleaned
+        if user_row:
+            return user_row, label, None
+        return None, label, "пользователь не найден"
+
+    if digits_only.isdigit():
+        user_id = int(digits_only)
+        user_row = db.get_user_by_id(user_id)
+        label = f"id {user_id}"
+        if user_row:
+            return user_row, label, None
+        return None, label, "пользователь не найден"
+
+    return None, cleaned, "пользователь не найден"
+
+
+async def bulk_hc_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await admin_only(update, context):
+        return ConversationHandler.END
+    prompt = (
+        "Отправь список строк вида «@nickname: 50» или «123456789: 40».\n"
+        "Каждая запись на новой строке, один пользователь — одна строка.\n"
+        "Для отмены отправь /cancel."
+    )
+    await update.message.reply_text(prompt)
+    return BULK_HC_WAIT_INPUT
+
+
+async def bulk_hc_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await admin_only(update, context):
+        return ConversationHandler.END
+    raw_text = (update.message.text or '').strip()
+    if not raw_text:
+        await update.message.reply_text("Пустое сообщение. Используй формат «@nickname: 50».")
+        return BULK_HC_WAIT_INPUT
+
+    entries, parse_errors = _parse_bulk_hc_lines(raw_text)
+    success_lines: List[str] = []
+    error_lines: List[str] = list(parse_errors)
+
+    for entry in entries:
+        user_row, display_label, resolve_error = _resolve_bulk_hc_user(entry.identifier)
+        if not user_row:
+            reason = resolve_error or "пользователь не найден"
+            label = display_label or entry.identifier
+            error_lines.append(f"{entry.line_no}: {label} — {reason}")
+            continue
+        try:
+            db.update_hc_balance(user_row[0], entry.amount)
+            refreshed = db.get_user_by_id(user_row[0])
+            new_balance = refreshed[3] if refreshed else '—'
+        except Exception as exc:
+            error_lines.append(f"{entry.line_no}: {display_label} — ошибка начисления ({exc})")
+            continue
+
+        notified = True
+        try:
+            await context.bot.send_message(
+                chat_id=user_row[0],
+                text=f'Вам начислено {entry.amount} HC!\nТекущий баланс: {new_balance} HC'
+            )
+        except Exception:
+            notified = False
+        note = "" if notified else " (не удалось уведомить)"
+        success_lines.append(f"{entry.line_no}: {display_label} → +{entry.amount} HC (баланс {new_balance}){note}")
+
+    if not entries and not parse_errors:
+        await update.message.reply_text("Не удалось распознать ни одной строки. Проверь формат «@username: 50».")
+        return BULK_HC_WAIT_INPUT
+
+    response_parts: List[str] = []
+    if success_lines:
+        response_parts.append("✅ Начислено:\n" + "\n".join(success_lines))
+    if error_lines:
+        response_parts.append("⚠️ Ошибки:\n" + "\n".join(error_lines))
+    if not response_parts:
+        response_parts = ["Нет строк для обработки. Повтори ввод."]
+
+    for chunk in _chunk_long_text("\n\n".join(response_parts)):
+        await update.message.reply_text(chunk)
+
+    if success_lines:
+        return ConversationHandler.END
+    return BULK_HC_WAIT_INPUT
+
+
+async def bulk_hc_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        await update.message.reply_text("Начисление отменено.")
+    except Exception:
+        pass
+    return ConversationHandler.END
 
 
 async def referral_limit_decision_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -79,6 +79,9 @@ from handlers.admin_handlers import (
 from handlers.admin_handlers import (
     purge_tours_start, purge_tours_password, purge_tours_cancel, PURGE_WAIT_PASSWORD
 )
+from handlers.admin_handlers import (
+    bulk_hc_start, bulk_hc_process, bulk_hc_cancel, BULK_HC_WAIT_INPUT
+)
 
 # broadcast to subscribers
 from handlers.admin_handlers import (
@@ -656,6 +659,7 @@ if __name__ == '__main__':
             "• /show_hc_users — пользователи с балансом HC > 0\n"
             "• /list_active_subscribers — активные подписчики и окончание подписки\n"
             "• /addhc — начислить HC пользователю\n"
+            "• /bulk_hc — массовое начисление HC списком вида @user: 50\n"
             "• /broadcast_subscribers — рассылка всем активным подписчикам к указанным дате и времени (админ)\n\n"
             "• /message_user — отправить сообщение одному пользователю по @username или ID (с подтверждением и временем МСК)\n"
             "• /message_users — рассылка по списку пользователей (текст, расписание и картинка)\n"
@@ -901,6 +905,17 @@ if __name__ == '__main__':
         allow_reentry=True
     )
     app.add_handler(send_challenge_image_conv)
+    bulk_hc_conv = ConversationHandler(
+        entry_points=[CommandHandler('bulk_hc', bulk_hc_start)],
+        states={
+            BULK_HC_WAIT_INPUT: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, bulk_hc_process)
+            ],
+        },
+        fallbacks=[CommandHandler('cancel', bulk_hc_cancel)],
+        allow_reentry=True,
+    )
+    app.add_handler(bulk_hc_conv)
     # --- ConversationHandler для /add_image_shop (админ) ---
     add_image_shop_conv = ConversationHandler(
         entry_points=[CommandHandler('add_image_shop', add_image_shop_start)],
