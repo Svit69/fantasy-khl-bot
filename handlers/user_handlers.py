@@ -6,6 +6,7 @@ from config import ADMIN_ID
 import db
 import os
 from utils import is_admin, IMAGES_DIR, logger, CHALLENGE_IMAGE_PATH_FILE, TOUR_IMAGE_PATH_FILE
+from utils.challenge_modes import get_challenge_mode
 import datetime
 
 def _is_user_blocked_safe(user_id: int) -> bool:
@@ -58,13 +59,8 @@ def _challenge_deadline_passed(challenge_id: int) -> bool:
 
 
 def _challenge_player_allowed(player_row, age_mode: str) -> bool:
-    if age_mode != 'under23':
-        return True
-    try:
-        age_value = int(player_row[5])
-    except Exception:
-        return False
-    return age_value <= 23
+    mode_meta = get_challenge_mode(age_mode)
+    return mode_meta.is_player_allowed(player_row)
 
 def escape_md(text):
     # Все спецсимволы MarkdownV2
@@ -1135,6 +1131,7 @@ async def challenge_build_callback(update: Update, context: ContextTypes.DEFAULT
     query = update.callback_query
     await query.answer()
     age_mode = context.user_data.get('challenge_age_mode', 'default')
+    mode_meta = get_challenge_mode(age_mode)
     try:
         cid = int(query.data.replace("challenge_build_", ""))
     except Exception:
@@ -1165,8 +1162,8 @@ async def challenge_build_callback(update: Update, context: ContextTypes.DEFAULT
         "Выберите уровень вызова для челленджа:\n\n"
         "⚡️ 50 HC\n⚡️ 100 HC\n⚡️ 500 HC"
     )
-    if age_mode == 'under23':
-        text += "\n\nРежим U23: доступны только игроки 23 лет и младше."
+    if mode_meta.restriction_hint:
+        text += f"\n\n{mode_meta.restriction_hint}"
     keyboard = [
         [
             InlineKeyboardButton('⚡️ 50 HC', callback_data='challenge_level_50'),
@@ -1278,6 +1275,7 @@ async def challenge_team_input(update: Update, context: ContextTypes.DEFAULT_TYP
     all_players = get_all_players()
     team_lower = team_text.lower()
     age_mode = context.user_data.get('challenge_age_mode', 'default')
+    mode_meta = get_challenge_mode(age_mode)
     filtered = [
         p
         for p in all_players
@@ -1287,8 +1285,8 @@ async def challenge_team_input(update: Update, context: ContextTypes.DEFAULT_TYP
     ]
     if not filtered:
         await update.message.reply_text("Игроки не найдены по текущим условиям. Уточните название команды.")
-        if age_mode == 'under23':
-            await update.message.reply_text('Режим U23 допускает только игроков 23 лет и младше.')
+        if mode_meta.no_player_hint:
+            await update.message.reply_text(mode_meta.no_player_hint)
         remaining = context.user_data.get('challenge_remaining_positions', ['нападающий', 'защитник', 'вратарь'])
         btns = [[InlineKeyboardButton(x, callback_data=f"challenge_pick_pos_{x}")] for x in remaining]
         await update.message.reply_text("Выберите позицию:", reply_markup=InlineKeyboardMarkup(btns))
@@ -1296,11 +1294,13 @@ async def challenge_team_input(update: Update, context: ContextTypes.DEFAULT_TYP
     kb = []
     for p in filtered:
         label = f"{p[1]} ({p[3]})"
-        if age_mode == 'under23':
+        if mode_meta.code == 'under23':
             try:
                 label += f" - {int(p[5])}y"
             except Exception:
                 label += ' - age?'
+        elif mode_meta.code == 'price10':
+            label += " - 10 HC"
         kb.append([InlineKeyboardButton(label, callback_data=f"challenge_pick_player_{p[0]}")])
     await update.message.reply_text("Выберите игрока:", reply_markup=InlineKeyboardMarkup(kb))
 

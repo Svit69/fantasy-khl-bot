@@ -6,6 +6,8 @@ try:
 except Exception:
     ZoneInfo = None
 
+from utils.challenge_modes import normalize_challenge_mode
+
 
 DB_NAME = 'fantasy_khl.db'
 
@@ -572,9 +574,7 @@ def create_challenge(start_date: str, deadline: str, end_date: str, image_filena
     start_value = sd.isoformat() if sd else (start_date or '')
     deadline_value = dl.isoformat() if dl else (deadline or '')
     end_value = ed.isoformat() if ed else (end_date or '')
-    normalized_mode = (age_mode or 'default').strip().lower()
-    if normalized_mode not in ('default', 'under23'):
-        normalized_mode = 'default'
+    normalized_mode = normalize_challenge_mode(age_mode)
     with closing(sqlite3.connect(DB_NAME)) as conn:
         with conn:
             cur = conn.execute(

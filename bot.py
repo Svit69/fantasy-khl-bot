@@ -114,6 +114,9 @@ challenge_input_deadline = _scimg_deadline
 challenge_input_end_date = _scimg_end_date
 send_challenge_image_photo = _scimg_photo
 send_challenge_image_cancel = _scimg_cancel
+from utils.challenge_modes import available_mode_codes
+
+_CHALLENGE_MODE_PATTERN = rf"^challenge_mode_(?:{'|'.join(available_mode_codes())})$"
 
 # Send message to a single user (admin)
 from handlers.admin_handlers import (
@@ -886,7 +889,7 @@ if __name__ == '__main__':
         entry_points=[CommandHandler('send_challenge_image', send_challenge_image_start)],
         states={
             CHALLENGE_MODE: [
-                CallbackQueryHandler(challenge_mode_select, pattern=r"^challenge_mode_(?:default|under23)$"),
+                CallbackQueryHandler(challenge_mode_select, pattern=_CHALLENGE_MODE_PATTERN),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, challenge_mode_select),
             ],
             CHALLENGE_START: [MessageHandler(filters.TEXT & ~filters.COMMAND, challenge_input_start_date)],

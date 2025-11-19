@@ -2,6 +2,7 @@ import datetime
 from telegram import Update
 from telegram.ext import ContextTypes
 import db
+from utils.challenge_modes import get_challenge_mode
 
 
 def _iso_to_msk(dt_str: str) -> datetime.datetime | None:
@@ -56,7 +57,7 @@ async def challenge_info_callback(update: Update, context: ContextTypes.DEFAULT_
     deadline_dt = _iso_to_msk(ch[2])
     end_dt = _iso_to_msk(ch[3])
     age_mode = (ch[7] if len(ch) > 7 else 'default') or 'default'
-    mode_label = 'U23' if age_mode == 'under23' else 'regular'
+    mode_label = get_challenge_mode(age_mode).info_label
 
     txt = (
         f"�������� №{ch[0]}\n"

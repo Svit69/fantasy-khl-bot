@@ -13,6 +13,11 @@ from telegram.ext import ContextTypes, ConversationHandler
 
 import db
 from utils import IMAGES_DIR, CHALLENGE_IMAGE_PATH_FILE
+from utils.challenge_modes import (
+    find_mode_by_text,
+    get_challenge_mode,
+    iter_challenge_modes,
+)
 from handlers.admin_handlers import (
     CHALLENGE_MODE,
     CHALLENGE_START,
@@ -43,6 +48,22 @@ _MSK_TZ = _get_msk_timezone()
 _INPUT_EXAMPLE = "10.09.2025 12:00"
 _CANCEL_KEYBOARD = ReplyKeyboardMarkup([["/cancel"]], resize_keyboard=True)
 _CANCEL_REMOVE = ReplyKeyboardRemove()
+_AVAILABLE_MODES = list(iter_challenge_modes())
+_MODE_BUTTONS = [
+    InlineKeyboardButton(
+        f"{idx}) {mode.button_title}",
+        callback_data=f"challenge_mode_{mode.code}",
+    )
+    for idx, mode in enumerate(_AVAILABLE_MODES, start=1)
+]
+_MODE_KEYBOARD_ROWS = [
+    _MODE_BUTTONS[i : i + 2] for i in range(0, len(_MODE_BUTTONS), 2)
+]
+_MODE_KEYBOARD = InlineKeyboardMarkup(_MODE_KEYBOARD_ROWS)
+_MODE_PROMPT = "Выберите режим челленджа:\n" + "\n".join(
+    f"{idx} — {mode.prompt_line}"
+    for idx, mode in enumerate(_AVAILABLE_MODES, start=1)
+)
 
 
 def _ensure_msk(dt: Optional[datetime.datetime]) -> Optional[datetime.datetime]:
@@ -91,50 +112,42 @@ async def send_challenge_image_start(update: Update, context: ContextTypes.DEFAU
     if not await admin_only(update, context):
         return ConversationHandler.END
     _reset_state(context)
-    keyboard = InlineKeyboardMarkup(
-        [
-            [
-                InlineKeyboardButton("1) Обычный режим", callback_data="challenge_mode_default"),
-                InlineKeyboardButton("2) U23 режим", callback_data="challenge_mode_under23"),
-            ]
-        ]
-    )
-    prompt_text = (
-        "Выберите режим челленджа:\n"
-        "1 — обычный (все игроки)\n"
-        "2 — U23 (только игроки не старше 23 лет)."
-    )
     if update.message:
-        await update.message.reply_text(prompt_text, reply_markup=keyboard)
+        await update.message.reply_text(_MODE_PROMPT, reply_markup=_MODE_KEYBOARD)
     return CHALLENGE_MODE
 
 
 async def challenge_mode_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = getattr(update, "callback_query", None)
-    mode = None
+    mode_obj = None
     if query is not None:
         data = (query.data or "").strip()
         if data == "challenge_mode_default":
-            mode = "default"
+            mode_obj = get_challenge_mode("default")
         elif data == "challenge_mode_under23":
-            mode = "under23"
+            mode_obj = get_challenge_mode("under23")
+        elif data.startswith("challenge_mode_"):
+            code = data.replace("challenge_mode_", "", 1)
+            mode_obj = get_challenge_mode(code)
         await query.answer()
     else:
-        text_value = (update.message.text or "").strip().lower()
-        if text_value in {"1", "обычный", "regular", "default", "standard"}:
-            mode = "default"
-        elif text_value in {"2", "u23", "under23", "23"}:
-            mode = "under23"
-    if mode is None:
-        prompt = "Пожалуйста, выберите режим с помощью кнопок или отправьте 1/2."
+        text_value = (update.message.text or "").strip()
+        if text_value.isdigit():
+            idx = int(text_value) - 1
+            if 0 <= idx < len(_AVAILABLE_MODES):
+                mode_obj = _AVAILABLE_MODES[idx]
+        if mode_obj is None:
+            mode_obj = find_mode_by_text(text_value)
+    if mode_obj is None:
+        prompt = "Пожалуйста, выберите режим с помощью кнопок или отправьте номер варианта."
         if query is not None:
             await query.answer(prompt, show_alert=True)
         elif update.message:
-            await update.message.reply_text(prompt)
+            await update.message.reply_text(prompt, reply_markup=_MODE_KEYBOARD)
         return CHALLENGE_MODE
 
-    context.user_data["challenge_mode"] = mode
-    summary = "Режим: только U23" if mode == "under23" else "Режим: обычный"
+    context.user_data["challenge_mode"] = mode_obj.code
+    summary = mode_obj.summary_label
     next_prompt = f"Укажите дату и время старта в формате {_INPUT_EXAMPLE} (МСК)."
 
     if query is not None:

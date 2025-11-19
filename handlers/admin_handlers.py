@@ -6,6 +6,7 @@ import os
 import json
 import logging
 from utils import is_admin, send_message_to_users, IMAGES_DIR, TOUR_IMAGE_PATH_FILE, CHALLENGE_IMAGE_PATH_FILE, logger
+from utils.challenge_modes import get_challenge_mode
 import asyncio
 import datetime
 import re
@@ -1887,7 +1888,7 @@ async def list_challenges(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             status = r[5] if len(r) > 5 else ''
             image_file_id = r[6] if len(r) > 6 else ''
             age_mode = (r[7] if len(r) > 7 else 'default') or 'default'
-            mode_label = 'U23 only' if age_mode == 'under23' else 'regular'
+            mode_label = get_challenge_mode(age_mode).info_label
             lines.append(
                 "id={id} | {status}\nmode: {mode}\nstart: {start}\ndeadline: {deadline}\nend: {end}\nimage: {image}\n-".format(
                     id=ch_id,
