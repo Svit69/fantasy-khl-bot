@@ -13,6 +13,7 @@ SUBSCRIPTION_STARS = int(os.getenv('SUBSCRIPTION_STARS', '199'))
 IMAGES_DIR = 'images'
 TOUR_IMAGE_PATH_FILE = 'latest_tour.txt'
 CHALLENGE_IMAGE_PATH_FILE = 'latest_challenge.txt'
+SUBSCRIBE_QR_IMAGE_PATH_FILE = 'subscribe_qr.txt'
 logger = logging.getLogger(__name__)
 
 def is_admin(user_id: int) -> bool:

@@ -5,7 +5,15 @@ import db
 import os
 import json
 import logging
-from utils import is_admin, send_message_to_users, IMAGES_DIR, TOUR_IMAGE_PATH_FILE, CHALLENGE_IMAGE_PATH_FILE, logger
+from utils import (
+    is_admin,
+    send_message_to_users,
+    IMAGES_DIR,
+    TOUR_IMAGE_PATH_FILE,
+    CHALLENGE_IMAGE_PATH_FILE,
+    SUBSCRIBE_QR_IMAGE_PATH_FILE,
+    logger,
+)
 from utils.challenge_modes import get_challenge_mode
 import asyncio
 import datetime
@@ -1933,6 +1941,9 @@ TOUR_NAME, TOUR_START, TOUR_DEADLINE, TOUR_END, TOUR_CONFIRM = range(100, 105)
 # Р­С‚Р°РїС‹: РёРјСЏ -> РґР°С‚Р° СЃС‚Р°СЂС‚Р° -> РґРµРґР»Р°Р№РЅ -> РѕРєРѕРЅС‡Р°РЅРёРµ -> С„РѕС‚Рѕ -> СЂРѕСЃС‚РµСЂ -> С„РёРЅР°Р»
 CT_NAME, CT_START, CT_DEADLINE, CT_END, CT_IMAGE, CT_ROSTER = range(200, 206)
 BULK_HC_WAIT_INPUT = 350
+SUB_QR_WAIT_PHOTO = 360
+GIVE_SUB_WAIT_USER, GIVE_SUB_WAIT_MONTHS, GIVE_SUB_WAIT_CONFIRM = range(370, 373)
+BULK_HC_WAIT_INPUT = 350
 
 async def create_tour_full_start(update, context):
     if not await admin_only(update, context):
@@ -3189,6 +3200,182 @@ async def bulk_hc_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Начисление отменено.")
     except Exception:
         pass
+    return ConversationHandler.END
+
+
+async def set_subscribe_qr_start(update, context):
+    if not await admin_only(update, context):
+        return ConversationHandler.END
+    await update.message.reply_text("Отправьте фото QR-кода для оплаты подписки.")
+    return SUB_QR_WAIT_PHOTO
+
+
+async def set_subscribe_qr_photo(update, context):
+    if not await admin_only(update, context):
+        return ConversationHandler.END
+    message = update.message
+    if not message or not message.photo:
+        await update.message.reply_text("Нужно прислать фото с QR-кодом.")
+        return SUB_QR_WAIT_PHOTO
+    try:
+        photo = message.photo[-1]
+        tg_file = await photo.get_file()
+        os.makedirs(IMAGES_DIR, exist_ok=True)
+        filename = f"subscribe_qr_{photo.file_unique_id}.jpg"
+        path = os.path.join(IMAGES_DIR, filename)
+        try:
+            await tg_file.download_to_drive(path)
+        except Exception:
+            await tg_file.download(custom_path=path)
+        with open(SUBSCRIBE_QR_IMAGE_PATH_FILE, "w", encoding="utf-8") as handle:
+            handle.write(filename)
+        await update.message.reply_text(f"QR-код сохранён: {filename}")
+    except Exception as exc:
+        await update.message.reply_text(f"Не удалось сохранить QR: {exc}")
+    return ConversationHandler.END
+
+
+def _resolve_user_identifier(identifier: str):
+    cleaned = _cleanup_identifier(identifier)
+    if not cleaned:
+        return None, '', "пользователь не указан"
+    label = cleaned
+    digits_only = re.sub(r'\D', '', cleaned) if cleaned.lower().startswith('id') else cleaned.replace(' ', '')
+
+    def _fetch_username(username: str):
+        if not username:
+            return None
+        row = db.get_user_by_username(username)
+        if not row:
+            row = db.get_user_by_username_insensitive(username)
+        return row
+
+    if digits_only and digits_only.isdigit():
+        user_id = int(digits_only)
+        row = db.get_user_by_id(user_id)
+        label = f"id {user_id}"
+        if row:
+            return row, label, None
+
+    username_candidate = cleaned
+    if cleaned.lower().startswith('id'):
+        username_candidate = cleaned[2:].lstrip('@')
+    username_candidate = username_candidate.lstrip('@')
+    if username_candidate:
+        row = _fetch_username(username_candidate)
+        label = f"@{username_candidate}"
+        if row:
+            return row, label, None
+    return None, label, "пользователь не найден"
+
+
+async def give_subscription_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await admin_only(update, context):
+        return ConversationHandler.END
+    await update.message.reply_text("Введите @username или id пользователя, которому выдать подписку:")
+    context.user_data.pop('give_sub_target', None)
+    return GIVE_SUB_WAIT_USER
+
+
+async def give_subscription_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await admin_only(update, context):
+        return ConversationHandler.END
+    identifier = (update.message.text or '').strip()
+    user_row, label, err = _resolve_user_identifier(identifier)
+    if not user_row:
+        await update.message.reply_text(f"Не удалось найти пользователя ({err}). Попробуйте ещё раз или /cancel.")
+        return GIVE_SUB_WAIT_USER
+    context.user_data['give_sub_target'] = {'row': user_row, 'label': label}
+    await update.message.reply_text("На сколько месяцев выдать подписку? Введите целое число.")
+    return GIVE_SUB_WAIT_MONTHS
+
+
+def _compute_new_subscription_expiry(user_id: int, months: int):
+    import datetime as _dt
+    base = _dt.datetime.utcnow()
+    try:
+        current = None
+        sub = db.get_subscription(user_id)
+        if sub and sub[1]:
+            try:
+                current = _dt.datetime.fromisoformat(sub[1])
+            except Exception:
+                current = None
+        if current and current > base:
+            base = current
+    except Exception:
+        pass
+    delta_days = max(months, 1) * 31
+    return base + _dt.timedelta(days=delta_days)
+
+
+async def give_subscription_months(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await admin_only(update, context):
+        return ConversationHandler.END
+    try:
+        months = int((update.message.text or '').strip())
+    except Exception:
+        await update.message.reply_text("Введите число месяцев (например, 1, 2, 3).")
+        return GIVE_SUB_WAIT_MONTHS
+    if months <= 0:
+        await update.message.reply_text("Количество месяцев должно быть больше нуля.")
+        return GIVE_SUB_WAIT_MONTHS
+    target = context.user_data.get('give_sub_target')
+    if not target:
+        await update.message.reply_text("Контекст потерян. Начните заново /give_subscription.")
+        return ConversationHandler.END
+    new_expiry = _compute_new_subscription_expiry(target['row'][0], months)
+    preview_dt = new_expiry.astimezone() if new_expiry.tzinfo else new_expiry
+    context.user_data['give_sub_months'] = months
+    context.user_data['give_sub_new_expiry'] = new_expiry
+    keyboard = InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("✅ Подтвердить", callback_data="give_sub_confirm")],
+            [InlineKeyboardButton("❌ Отменить", callback_data="give_sub_cancel")],
+        ]
+    )
+    await update.message.reply_text(
+        f"Выдать подписку пользователю {target['label']} на {months} мес.\n"
+        f"Новая дата окончания: {preview_dt.strftime('%d.%m.%Y %H:%M')} (локальное время).\n"
+        "Подтвердить?",
+        reply_markup=keyboard,
+    )
+    return GIVE_SUB_WAIT_CONFIRM
+
+
+async def give_subscription_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    if not await admin_only(update, context):
+        return ConversationHandler.END
+    data = (query.data or '')
+    if data == "give_sub_cancel":
+        await query.edit_message_text("Выдача подписки отменена.")
+        return ConversationHandler.END
+    target = context.user_data.get('give_sub_target')
+    months = context.user_data.get('give_sub_months')
+    new_expiry = context.user_data.get('give_sub_new_expiry')
+    if not target or not months or not new_expiry:
+        await query.edit_message_text("Контекст потерян. Попробуйте ещё раз /give_subscription.")
+        return ConversationHandler.END
+    try:
+        db.add_or_update_subscription(target['row'][0], new_expiry.isoformat(), f"manual:{update.effective_user.id}")
+        local_dt = new_expiry.astimezone() if new_expiry.tzinfo else new_expiry
+        await query.edit_message_text(
+            f"Подписка пользователю {target['label']} выдана до {local_dt.strftime('%d.%m.%Y %H:%M')}."
+        )
+        try:
+            await context.bot.send_message(
+                chat_id=target['row'][0],
+                text=(
+                    f"Вам выдана подписка на {months} мес.\n"
+                    f"Действует до {local_dt.strftime('%d.%m.%Y %H:%M')}."
+                ),
+            )
+        except Exception:
+            pass
+    except Exception as exc:
+        await query.edit_message_text(f"Не удалось выдать подписку: {exc}")
     return ConversationHandler.END
 
 

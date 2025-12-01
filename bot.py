@@ -29,7 +29,7 @@ from handlers.user_handlers import start, hc, IMAGES_DIR, \
     challenge_cancel_callback, challenge_reshuffle_callback, \
     tours, tour_open_callback, tour_build_callback
 from handlers.user_handlers import shop, shop_item_callback
-from handlers.user_handlers import subscribe_stars, precheckout_callback, successful_payment_handler
+from handlers.user_handlers import subscribe_select_callback, subscribe_stars, precheckout_callback, successful_payment_handler
 from handlers.admin_handlers import addhc2 as addhc, send_results, show_users, list_active_subscribers
 from handlers.admin_handlers import ChannelBonusCommand, ChangePlayerAgeCommand, ChangePlayerPriceCommand, CheckChannelCommand
 from handlers.admin_handlers import list_challenges, delete_challenge_cmd
@@ -81,6 +81,11 @@ from handlers.admin_handlers import (
 )
 from handlers.admin_handlers import (
     bulk_hc_start, bulk_hc_process, bulk_hc_cancel, BULK_HC_WAIT_INPUT
+)
+from handlers.admin_handlers import (
+    set_subscribe_qr_start, set_subscribe_qr_photo, SUB_QR_WAIT_PHOTO,
+    give_subscription_start, give_subscription_user, give_subscription_months,
+    give_subscription_confirm, GIVE_SUB_WAIT_USER, GIVE_SUB_WAIT_MONTHS, GIVE_SUB_WAIT_CONFIRM,
 )
 
 # broadcast to subscribers
@@ -227,6 +232,8 @@ async def on_startup(app):
     ]
     admin_commands.append(BotCommand("message_users", "рассылка по списку пользователей"))
     admin_commands.append(BotCommand("list_active_subscribers", "показать активных подписчиков"))
+    admin_commands.append(BotCommand("set_subscribe_qr", "загрузить QR для подписки"))
+    admin_commands.append(BotCommand("give_subscription", "выдать подписку вручную"))
     admin_commands.append(BotCommand("change_player_price", "изменить стоимость игроков"))
     admin_commands.append(BotCommand("change_player_age", "изменить возраст игроков"))
     admin_commands.append(BotCommand("channel_bonus", "рассылка бонуса за подписку на канал"))
@@ -636,7 +643,8 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('show_users', show_users))  # Только для админа
     app.add_handler(CommandHandler('list_active_subscribers', list_active_subscribers))  # Только для админа
     app.add_handler(CommandHandler('show_hc_users', show_hc_users))  # Только для админа
-    app.add_handler(CommandHandler('subscribe', subscribe_stars))
+    app.add_handler(CommandHandler('subscribe', subscribe))
+    app.add_handler(CallbackQueryHandler(subscribe_select_callback, pattern=r"^subscribe_(?:stars_pay|qr_pay)$"))
     # Telegram Stars payments handlers
     from telegram.ext import PreCheckoutQueryHandler as _PreCheckoutQueryHandler  # local import to avoid top-level churn
     app.add_handler(_PreCheckoutQueryHandler(precheckout_callback))
@@ -660,6 +668,8 @@ if __name__ == '__main__':
             "• /list_active_subscribers — активные подписчики и окончание подписки\n"
             "• /addhc — начислить HC пользователю\n"
             "• /bulk_hc — массовое начисление HC списком вида @user: 50\n"
+            "• /set_subscribe_qr — загрузить QR-код для оплаты подписки\n"
+            "• /give_subscription — выдать подписку вручную\n"
             "• /broadcast_subscribers — рассылка всем активным подписчикам к указанным дате и времени (админ)\n\n"
             "• /message_user — отправить сообщение одному пользователю по @username или ID (с подтверждением и временем МСК)\n"
             "• /message_users — рассылка по списку пользователей (текст, расписание и картинка)\n"
@@ -916,6 +926,26 @@ if __name__ == '__main__':
         allow_reentry=True,
     )
     app.add_handler(bulk_hc_conv)
+    set_subscribe_qr_conv = ConversationHandler(
+        entry_points=[CommandHandler('set_subscribe_qr', set_subscribe_qr_start)],
+        states={
+            SUB_QR_WAIT_PHOTO: [MessageHandler(filters.PHOTO, set_subscribe_qr_photo)],
+        },
+        fallbacks=[CommandHandler('cancel', send_challenge_image_cancel)],
+        allow_reentry=True,
+    )
+    app.add_handler(set_subscribe_qr_conv)
+    give_subscription_conv = ConversationHandler(
+        entry_points=[CommandHandler('give_subscription', give_subscription_start)],
+        states={
+            GIVE_SUB_WAIT_USER: [MessageHandler(filters.TEXT & ~filters.COMMAND, give_subscription_user)],
+            GIVE_SUB_WAIT_MONTHS: [MessageHandler(filters.TEXT & ~filters.COMMAND, give_subscription_months)],
+            GIVE_SUB_WAIT_CONFIRM: [CallbackQueryHandler(give_subscription_confirm, pattern=r"^give_sub_(?:confirm|cancel)$")],
+        },
+        fallbacks=[CommandHandler('cancel', send_challenge_image_cancel)],
+        allow_reentry=True,
+    )
+    app.add_handler(give_subscription_conv)
     # --- ConversationHandler для /add_image_shop (админ) ---
     add_image_shop_conv = ConversationHandler(
         entry_points=[CommandHandler('add_image_shop', add_image_shop_start)],

@@ -5,7 +5,14 @@ from telegram.ext import ContextTypes, ConversationHandler
 from config import ADMIN_ID
 import db
 import os
-from utils import is_admin, IMAGES_DIR, logger, CHALLENGE_IMAGE_PATH_FILE, TOUR_IMAGE_PATH_FILE
+from utils import (
+    is_admin,
+    IMAGES_DIR,
+    logger,
+    CHALLENGE_IMAGE_PATH_FILE,
+    TOUR_IMAGE_PATH_FILE,
+    SUBSCRIBE_QR_IMAGE_PATH_FILE,
+)
 from utils.challenge_modes import get_challenge_mode
 import datetime
 
@@ -263,18 +270,13 @@ async def referral(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    from utils import create_yookassa_payment
     user = update.effective_user
-    payment_url, payment_id = create_yookassa_payment(user.id)
-    # Сохраняем payment_id в БД (можно добавить функцию)
-    # db.save_payment_id(user.id, payment_id)
-    # Проверим статус подписки и дату окончания
     end_line = ""
     try:
         from db import is_subscription_active, get_subscription
         import datetime
         if is_subscription_active(user.id):
-            row = get_subscription(user.id)  # (user_id, paid_until, last_payment_id)
+            row = get_subscription(user.id)
             pu = row[1] if row else None
             dt = None
             try:
@@ -282,32 +284,77 @@ async def subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             except Exception:
                 dt = None
             if dt:
-                # Преобразуем к локальному времени для удобства
                 local_dt = dt.astimezone() if dt.tzinfo else dt
-                end_line = f"\n<b>Подписка активна</b> до: <b>{local_dt.strftime('%d.%m.%Y %H:%M')}</b>"
+                end_line = f"\n<b>Подписка активна до:</b> {local_dt.strftime('%d.%m.%Y %H:%M')}"
     except Exception:
         pass
 
-    benefits = (
-        "\n\n<b>Преимущества подписки:</b>\n"
-        "• Дополнительный игрок в пул на тур\n"
-        "• Повышенные реферальные бонусы\n"
-        "• Приоритетная поддержка\n"
-        "• Новые фичи раньше всех"
-    )
-
     text = (
-        f"💳 <b>Подписка на Fantasy KHL</b>\n\n"
-        f"Стоимость: <b>299 руб/месяц</b>"
-        f"{end_line}\n\n"
-        f"Нажмите кнопку ниже для оплаты через ЮKassa. После успешной оплаты подписка активируется автоматически."
-        f"{benefits}"
+        "Выберите способ оплаты подписки Fantasy KHL:\n"
+        "• 199⭐/месяц (Telegram Stars)\n"
+        "• 259 ₽/месяц (QR перевод)\n"
+        f"{end_line}"
     )
-    keyboard = [[InlineKeyboardButton('Оплатить 299₽ через ЮKassa', url=payment_url)]]
-    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+    keyboard = InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("Оплатить 199⭐ в Telegram", callback_data="subscribe_stars_pay")],
+            [InlineKeyboardButton("Оплатить 259₽ по QR", callback_data="subscribe_qr_pay")],
+        ]
+    )
+    await update.message.reply_text(text, reply_markup=keyboard, parse_mode="HTML")
 
 
 # --- Telegram Stars payments ---
+
+def _get_subscribe_qr_filename() -> str | None:
+    try:
+        with open(SUBSCRIBE_QR_IMAGE_PATH_FILE, "r", encoding="utf-8") as handle:
+            name = (handle.read() or "").strip()
+            return name or None
+    except Exception:
+        return None
+
+
+async def subscribe_select_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    data = (query.data or "").strip()
+    if data == "subscribe_stars_pay":
+        await subscribe_stars(update, context)
+    elif data == "subscribe_qr_pay":
+        await send_subscribe_qr(update, context)
+
+
+async def send_subscribe_qr(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    message = getattr(update, "effective_message", None)
+    qr_filename = _get_subscribe_qr_filename()
+    sent_photo = False
+    if qr_filename:
+        path = os.path.join(IMAGES_DIR, qr_filename)
+        if os.path.exists(path):
+            try:
+                with open(path, "rb") as fp:
+                    await context.bot.send_photo(chat_id=update.effective_chat.id, photo=InputFile(fp, filename=qr_filename))
+                    sent_photo = True
+            except Exception:
+                sent_photo = False
+    instructions = (
+        "1️⃣ Отсканируйте QR-код камерой телефона или приложением банка.\n"
+        "2️⃣ Перейдите в мобильный банк, который откроется автоматически.\n"
+        "3️⃣ Введите сумму платежа: 259 рублей.\n"
+        "4️⃣ В поле \"Примечание к платежу\" укажите свой ник в Телеграме\n"
+        " Например: @nickname\n"
+        "5️⃣ Проверьте имя получателя — должно быть: Олег С.\n"
+        "6️⃣ Подтвердите перевод.\n"
+        "7️⃣ Подписка будет активирована в течение 30 минут после поступления платежа.\n\n"
+        "Если возникли вопросы или вам нужно ускорить активацию — пишите сюда:\n"
+        "📩 @ol_svit"
+    )
+    if message:
+        if not sent_photo:
+            await message.reply_text("QR-код пока не загружен админом. Отправьте @ol_svit.")
+        await message.reply_text(instructions)
+
 
 async def subscribe_stars(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Оформление подписки через Telegram Stars (invoice)."""
